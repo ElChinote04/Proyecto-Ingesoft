@@ -1,0 +1,26 @@
+{
+  "name": "sage-arquitectura",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.21.0"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "dev": "node scripts/dev.js",
+    "test": "npm --prefix backend test",
+    "build": "npm --prefix frontend run build",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose stop",
+    "db:migrate": "npm --prefix backend run db:migrate",
+    "db:seed": "npm --prefix backend run db:seed",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "npm --prefix frontend run lint",
+    "db:generate": "npm --prefix backend run db:generate"
+  },
+  "devDependencies": {
+    "prettier": "3.9.9"
+  }
+}

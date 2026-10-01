@@ -1,5 +1,12 @@
 # Dependencies
 node_modules/
+.tools/
+work/
+test-results/
+playwright-report/
+backend/generated/
+.env.*
+!.env.example
 
 # Environment variables
 .env
