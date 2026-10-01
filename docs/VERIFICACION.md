@@ -1,74 +1,65 @@
 # Verificación de entrega
 
-Fecha: 1 de octubre de 2026. Entorno: Windows x64, Node 24.21.0 local al proyecto, Docker Desktop, PostgreSQL 18.6. Repositorio: Proyecto-Ingesoft, rama de trabajo `feat/prototipo-arquitectura-sage`.
+Fecha: 1 de octubre de 2026. Windows x64, Node 24.21.0 local al proyecto, Docker Desktop y PostgreSQL 18.6. Rama: feat/prototipo-arquitectura-sage.
 
-## Resultados ejecutados
+## Ampliación: recorrido sin seed
 
-| Comprobación                                                        | Resultado observado                                                                                    |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Sage.ps1` | Exit 0; npm ci en raíz/backend/frontend, Docker sano, Prisma generado, migrate deploy y seed correctos |
-| Generación Prisma                                                   | Client 7.10.0 generado                                                                                 |
-| Migración de demo                                                   | `20261001022912_initial_sage` aplicada; sin migraciones pendientes al repetir                          |
-| Creación desde cero                                                 | La misma migración aplicada en una nueva BD PostgreSQL de pruebas                                      |
-| Seed repetido                                                       | 4 roles, 2 cuentas, 5 alumnos/matrículas, 1 sesión; las 5 asistencias previas se conservan             |
-| `npm test`                                                          | 20 pruebas, 20 aprobadas, 0 fallos, 0 omitidas; última ejecución 12.86 s                               |
-| `npm run lint`                                                      | Exit 0, sin errores                                                                                    |
-| `npm run build`                                                     | Exit 0, Vite 8.3.1, 32 módulos, 1.09 s; dist generado                                                  |
-| `node --check`                                                      | Correcto para archivos JS de backend y scripts                                                         |
-| Auditorías npm de raíz/backend/frontend                             | 0 vulnerabilidades reportadas en las tres                                                              |
-| `Start-Sage.ps1`                                                    | Levanta Docker, backend y frontend con el runtime local                                                |
-| Health del servidor iniciado                                        | HTTP 200, status ok, database connected                                                                |
-| Git                                                                 | .env, logs, .tools, node_modules y dist ignorados; diff sin errores de whitespace                      |
+| Comprobación | Resultado observado                                                                                              |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Migraciones  | Inicial y administración aplicadas; datos previos conservados                                                    |
+| Integración  | 38/38 aprobadas: 20 de regresión y 18 administrativas, sin fallos ni omisiones                                   |
+| Inicio vacío | La suite administrativa verifica cero cuentas/roles/años antes de usar HTTP; no importa seed                     |
+| Concurrencia | Dos instalaciones, asignaciones solapadas o ediciones de la misma versión: solo una prospera                     |
+| Permisos     | Docente sin administración; acceso restringido a sus clases; cambios de roles efectivos en la siguiente petición |
+| Revocación   | Desactivar o cambiar contraseña invalida las sesiones anteriores                                                 |
+| Identidad    | Un usuario multirrol y perfiles reutilizados sin duplicar Persona                                                |
+| Matrícula    | Una por estudiante/año; año derivado de la sección, referencias válidas                                          |
+| Horarios     | Cruces de docente, aula y sección rechazados; bloques contiguos admitidos                                        |
+| Sesiones     | Fecha real y día/año coherentes con bloque; horas derivadas; duplicados rechazados                               |
+| Guardado     | Asistencia, versión y auditoría atómicas; nueva lectura recupera estado/observación                              |
+| Logs         | Eventos físicos comprobados; sin contraseñas, hashes, claves ni JWT; suite administrativa sin errores 500        |
+| Frontend     | Lint sin errores; build correcto; formularios comprobados en navegador                                           |
+| SQL          | Script de solo lectura ejecutado con ON_ERROR_STOP; cuatro comprobaciones de incongruencias en cero              |
 
-El frontend produjo un bundle JS de aproximadamente 235.90 kB (73.43 kB gzip), CSS de 8.90 kB (2.55 kB gzip) y fuentes locales. El backend es JavaScript ESM y no necesita build.
+Las dos suites usan bases PostgreSQL aleatorias distintas, ambas migradas desde cero. Los logs se aíslan en backend/logs/tests. La suite anterior conserva la regresión del seed opcional y el error 500 controlado; el recorrido nuevo no depende de ninguno de ellos.
 
-## Cobertura de pruebas de integración
+También se repitió `Setup-Sage.ps1` completo: instalación de los tres lockfiles, auditorías npm sin vulnerabilidades reportadas, Docker healthy, Prisma generado y ninguna migración pendiente. Terminó sin ejecutar seed y conservó las cuentas, las seis matrículas/asistencias y los eventos anteriores. `Start-Sage.ps1` volvió a levantar ambos servidores. Los controles finales de lint, build, formato, sintaxis JS y whitespace de Git terminaron correctamente.
 
-1. Health con consulta real a PostgreSQL.
-2. Login correcto, bcrypt, DTO seguro y cookie HttpOnly/SameSite.
-3. Contraseña incorrecta e identificador inexistente.
-4. Lectura y escritura sin autenticación: 401.
-5. APODERADO autenticado: 403.
-6. Consulta de sesión y rechazo de lectura/escritura de sesiones ajenas.
-7. Padrón de cinco alumnos obtenido de la BD.
-8. Guardado transaccional y evento de auditoría.
-9. Estado no permitido: 400.
-10. Alumno sin matrícula en sección: 400, sin escritura parcial.
-11. Recuperación de estados y observación persistidos.
-12. Duplicados y versión antigua: 409; actualización sin duplicar filas.
-13. Arreglo vacío/incompleto, IDs inválidos, sesión inexistente y propiedades extra.
-14. Dos guardados simultáneos: exactamente uno 200 y otro 409.
-15. Una persona con DOCENTE y APODERADO al mismo tiempo.
-16. Cuenta inactiva y JWT vencido/manipulado.
-17. CORS, JSON inválido y ruta inexistente.
-18. Seed idempotente conserva datos.
-19. Logout revoca cookie y JWT en BD, incluyendo reenvío del token anterior.
-20. Error 500 centralizado, logs físicos y ausencia de secretos en logs.
+## Recorrido ejecutado realmente en navegador
 
-Las pruebas crean y eliminan exclusivamente su propia BD aleatoria; la base demo no se reinicia.
+En la base local existente se conservaron los cinco alumnos y asistencias anteriores. Se creó por formularios un conjunto independiente, sin ejecutar el seed:
 
-## Comprobación manual en navegador
+1. Administrador inicial; cierre del alta pública e inicio de sesión.
+2. Elena Verificación, cuenta docente.verificacion@sage.local con DOCENTE y APODERADO y perfil Docente #2.
+3. Año 2027, grado 4.°, sección V, curso Comunicación y aula V101.
+4. Lucía Verificación (documento VER-EST-01), Estudiante #6 y matrícula #6.
+5. Asignación y bloque #2, viernes 09:00–09:45; sesión #2 para 2027-10-01.
+6. Login docente, selección de su clase y padrón que incorpora automáticamente a Lucía.
+7. TARDANZA y observación; guardado, confirmación y recarga completa del navegador.
+8. Auditoría visible para el administrador y lectura SQL de todos los vínculos.
 
-Se ejecutaron realmente login fallido y correcto, selección de Matemática 3.° B, lectura de los cinco alumnos, selección de los tres estados, guardado y confirmación. Después se abrió **Revisar asistencia** y se recargó: las marcas y la observación permanecieron. También se verificaron el aviso de sesión vencida, logout, login requerido para ruta protegida y pantalla de acceso restringido del apoderado.
+PostgreSQL confirmó Usuario #4, ambos roles, matrícula/año coherentes, sesión versión 1, una asistencia nueva con el docente como creador/modificador y evento ASISTENCIA_GUARDADA #13. Los logs incluyen el mismo guardado y su requestId. Los IDs describen este entorno local; no son constantes de la aplicación.
 
-Se inspeccionó el mensaje largo de credenciales incorrectas en un viewport de 319 px: texto completo, sin tooltip, sin truncado y sin desbordamiento horizontal de la página. La tabla de asistencia permite desplazamiento horizontal cuando el espacio es reducido.
+También se envió un formulario sin roles: mostró “Los datos enviados no son válidos. Selecciona al menos un rol.” completo. En viewport de 360 px no hubo desbordamiento horizontal de la página (ancho del contenido 345 px por scrollbar). El navegador no reportó errores ni advertencias de consola en el recorrido comprobado.
 
-La consulta SQL directa sobre la base demo confirmó:
+Evidencias: [asistencia nueva después de recargar](evidencias/SAGE_flujo_sin_seed.png), [auditoría administrativa](evidencias/SAGE_auditoria_sin_seed.png).
 
-| Alumno          | Estado persistido | Observación       |
-| --------------- | ----------------- | ----------------- |
-| Carlos Mendoza  | PRESENTE          |                   |
-| Lucía Ramos     | TARDANZA          | Llegó a las 08:12 |
-| Diego Torres    | AUSENTE           |                   |
-| Valeria Sánchez | PRESENTE          |                   |
-| Mateo Ruiz      | PRESENTE          |                   |
+## Cobertura automatizada
 
-Se confirmó un evento `ASISTENCIA_GUARDADA` asociado al usuario Ana Torres y la sesión. Ambos archivos físicos `backend/logs/app.log` y `backend/logs/error.log` tienen contenido. El segundo incluye un error controlado de las pruebas; no representa un fallo pendiente del flujo real.
+La suite administrativa verifica instalación protegida y simultánea, cuenta multirrol/perfil, hashing, duplicados sin filas parciales, permisos, catálogos, matrícula, reutilización de identidad ALUMNO, asignación, los tres tipos de cruce por separado, concurrencia, bloques contiguos, fechas, padrón, persistencia/auditoría, retiro/restauración de roles, edición por versión, revocación y ausencia de secretos.
 
-## Alcance y limitaciones reales
+La suite de 20 pruebas previa mantiene health, autenticación/cookies, login fallido, 401/403, propiedad de sesión, padrón, guardado, enums, matrícula ajena, reload por GET, duplicados/versiones, validaciones, guardados simultáneos, múltiples roles, actividad/tokens, CORS/JSON, seed idempotente, logout y error 500 seguro.
 
-Capturas de la comprobación: [asistencia recargada](evidencias/SAGE_asistencia.png), [confirmación](evidencias/SAGE_confirmacion.png), [selección](evidencias/SAGE_sesiones.png) y [error de login completo](evidencias/SAGE_login_error.png).
+## Evidencia de la entrega inicial
 
-No hay bloqueos técnicos conocidos del flujo solicitado. Las verificaciones descritas se ejecutaron localmente, antes de publicar la rama para revisión en GitHub; no constituyen una ejecución de CI remoto. No se ejecutó despliegue AWS/HTTPS. El script de descarga automática de Node está preparado para Windows x64; en otros sistemas se usa Node 24.21.0 ya instalado y `npm run setup`.
+Las capturas originales siguen disponibles: [selección](evidencias/SAGE_sesiones.png), [asistencia](evidencias/SAGE_asistencia.png), [confirmación](evidencias/SAGE_confirmacion.png), [error de login](evidencias/SAGE_login_error.png). Corresponden a la demostración inicial basada en seed.
 
-La reproducción de Figma está adaptada al alcance Login + Asistencia y a los datos reales; no incluye módulos ajenos, enlaces de simulación ni cifras estáticas de los mockups. No se recibió un estándar de programación separado; se siguieron las decisiones explícitas del usuario, ESLint y Prettier.
+En ese recorrido se comprobaron 5 asistencias: Carlos PRESENTE, Lucía TARDANZA, Diego AUSENTE, Valeria PRESENTE, Mateo PRESENTE. Esa información se conservó al aplicar la ampliación. El error.log local contiene errores 500 controlados de pruebas anteriores a la separación de logs; no representan un fallo del nuevo flujo.
+
+## Alcance de la verificación
+
+Verificación local con PostgreSQL real y navegador. No se afirma ejecución de CI remoto ni despliegue AWS/HTTPS. La prueba de base vacía es de integración HTTP; la prueba visual se hizo sobre un conjunto nuevo en la base existente, conservando datos previos.
+
+Catálogos, matrículas, bloques y sesiones admiten altas y consultas, suficientes para este recorrido. Bajas, traslados, reprogramaciones, pagos, notas, justificaciones y recuperación de contraseña quedan fuera. No se recibió un estándar de programación separado; se siguieron las decisiones explícitas, ESLint y Prettier.
+
+Para reproducir el proceso y comprobar cada clic: [Flujo completo](FLUJO_COMPLETO.md) y [consultas SQL](sql/verificar_flujo.sql).

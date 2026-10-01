@@ -38,6 +38,7 @@ model Usuario {
   persona                Persona                @relation(fields: [personaId], references: [id])
   identificador          String                 @unique
   hashContrasena         String
+  version                Int                    @default(0)
   activo                 Boolean                @default(true)
   creadoEn               DateTime               @default(now())
   modificadoEn           DateTime               @updatedAt
@@ -46,6 +47,11 @@ model Usuario {
   eventos                RegistroAuditoria[]
   asistenciasCreadas     AsistenciaEstudiante[] @relation("Creador")
   asistenciasModificadas AsistenciaEstudiante[] @relation("Modificador")
+}
+
+model Instalacion {
+  id           Int      @id
+  completadaEn DateTime @default(now())
 }
 
 model Rol {

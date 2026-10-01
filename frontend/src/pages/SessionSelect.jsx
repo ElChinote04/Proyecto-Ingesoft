@@ -13,7 +13,11 @@ function Selection({ sessions }) {
         No tienes sesiones de clase disponibles.
       </Feedback>
     );
-  const sections = [...new Map(sessions.map((s) => [s.seccion.id, s.seccion])).values()];
+  const sections = [
+    ...new Map(
+      sessions.map((s) => [s.seccion.id, { ...s.seccion, anio: s.anioAcademico }]),
+    ).values(),
+  ];
   const inSection = sessions.filter((s) => s.seccion.id === sectionId);
   const courses = [...new Map(inSection.map((s) => [s.curso.id, s.curso])).values()];
   const candidates = inSection.filter((s) => s.curso.id === courseId);
@@ -32,7 +36,7 @@ function Selection({ sessions }) {
           <select value={sectionId} onChange={(e) => changeSection(Number(e.target.value))}>
             {sections.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.nombre}
+                {s.anio} · {s.nombre}
               </option>
             ))}
           </select>

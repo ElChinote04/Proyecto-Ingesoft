@@ -1,6 +1,6 @@
 # API REST de SAGE
 
-Base local: `http://localhost:3000/api/v1`. JSON UTF-8. El frontend usa `credentials: 'include'`. Las respuestas de negocio contienen `{ "success": true, "data": ... }`; el health check devuelve su estado directamente. Los IDs de los ejemplos corresponden a un seed nuevo; en otras bases se deben tomar los IDs recibidos por GET.
+Base local: `http://localhost:3000/api/v1`. JSON UTF-8. El frontend usa `credentials: 'include'`. Las respuestas de negocio contienen `{ "success": true, "data": ... }`; el health check devuelve su estado directamente. Los IDs son ilustrativos: usa siempre los devueltos por las altas o GET. Los ejemplos de asistencia de la demo antigua siguen siendo válidos, pero el flujo normal crea los datos mediante la administración sin seed.
 
 ## Autenticación y cookies
 
@@ -226,4 +226,99 @@ Todas las respuestas de error tienen la misma envoltura. Ejemplo:
 | 429  | TOO_MANY_ATTEMPTS                                                  | Límite de login por IP                          |
 | 500  | INTERNAL_ERROR                                                     | Error interno, detalles seguros solo en logs    |
 
-No hay Swagger UI expuesta; este documento contiene el contrato de los ocho endpoints del prototipo.
+No hay Swagger UI expuesta. Hay 26 combinaciones método/ruta: ocho originales, dos de instalación y dieciséis administrativas.
+
+## Instalación inicial sin seed
+
+### GET /instalacion
+
+Público. 200 con `data: { requerido: true }` si no hay marcador de instalación ni un usuario con rol ADMINISTRADOR. No devuelve claves ni información de cuentas.
+
+### POST /instalacion
+
+Público, con el mismo límite de intentos del login. Body estricto:
+
+```json
+{
+  "numeroDocumento": "ADMIN-01",
+  "nombres": "María",
+  "apellidos": "Dirección",
+  "identificador": "admin@colegio.local",
+  "contrasena": "UnaClaveDeEjemplo123!",
+  "claveInstalacion": "valor-local-obtenido-con-setup:key"
+}
+```
+
+201 con DTO seguro del usuario. Crea cuatro roles, Persona, Usuario ADMINISTRADOR activo, UsuarioRol, marcador Instalacion y evento de auditoría en una transacción. Rechaza clave inválida (403 INVALID_SETUP_KEY), configuración ausente (503 SETUP_NOT_CONFIGURED) o instalación completada (409 SETUP_COMPLETED). El bloqueo de PostgreSQL impide que dos solicitudes simultáneas creen dos administradores iniciales. La clave no aparece en respuestas, auditoría ni logs.
+
+## Administración
+
+Todas las rutas `/admin/*` requieren cookie válida y rol ADMINISTRADOR. 401 sin autenticación y 403 sin permiso. Las altas devuelven 201; consultas y edición, 200. Todas las mutaciones incorporan auditoría transaccional y logs de éxito tras commit.
+
+### Usuarios
+
+| Método / ruta           | Body y resultado                                                                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /admin/usuarios     | Array de cuentas con id, personaId, identificador, activo, version, numeroDocumento, nombres, apellidos, roles y docenteId; nunca hashes |
+| POST /admin/usuarios    | numeroDocumento, nombres, apellidos, identificador, contrasena, roles y activo opcional (true). Devuelve cuenta segura                   |
+| PUT /admin/usuarios/:id | identificador, roles, activo, version y contrasena opcional. Devuelve cuenta con version incrementada                                    |
+
+Roles admitidos: ADMINISTRADOR, DOCENTE, ALUMNO, APODERADO; de uno a cuatro sin repetidos. Una persona puede tener varios. DOCENTE crea/reutiliza su perfil Docente; ALUMNO crea/reutiliza Estudiante. No asignan clases ni matrícula automáticamente. Al añadir un perfil a una persona existente, documento, nombres y apellidos deben coincidir; se conserva una única cuenta por Persona.
+
+Documento: 1–30 caracteres, trim/mayúsculas. Nombres/apellidos: 1–100, trim. Identificador: 1–200, trim/minúsculas. Contraseña de alta o cambio: mínimo 10 caracteres y máximo 72 bytes UTF-8. Body estricto. Una contraseña vacía no sirve como omisión: para conservarla no envíes el campo.
+
+La edición protege la versión (409 STALE_VERSION), el acceso administrativo propio (409 SELF_LOCKOUT) y al último administrador activo (409 LAST_ADMIN). Identificador duplicado: 409 DUPLICATE_IDENTIFIER. Desactivar/cambiar contraseña revoca SesionAuth; cambiar roles se aplica en la siguiente petición. Los perfiles académicos y el historial se conservan al retirar un rol.
+
+### Catálogos
+
+GET `/admin/catalogos` devuelve `{ anios, grados, secciones, cursos, aulas, docentes }`. Secciones incluyen grado/año; docentes incluye solo perfiles con persona y cuenta activas y rol DOCENTE. Cada docente devuelve id, nombre y codigoDocente.
+
+| Alta                            | Body                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------- |
+| POST /admin/catalogos/anios     | `{ "codigo": "2027" }`, año 1900–2199                                      |
+| POST /admin/catalogos/grados    | `{ "nombre": "4.°" }`, 1–50 caracteres                                     |
+| POST /admin/catalogos/secciones | `{ "nombre": "V", "gradoId": 1, "anioAcademicoId": 1 }`, nombre 1–30       |
+| POST /admin/catalogos/cursos    | `{ "codigo": "COM", "nombre": "Comunicación" }`, código 1–30, nombre 1–100 |
+| POST /admin/catalogos/aulas     | `{ "codigo": "V101" }`, código 1–30                                        |
+
+Códigos de curso/aula y nombre de sección se normalizan a mayúsculas. Duplicados: 409 DUPLICATE_RECORD. Referencias inexistentes: 404 REFERENCE_NOT_FOUND. IDs enteros positivos de 32 bits.
+
+### Alumnos y matrícula
+
+GET `/admin/estudiantes` devuelve estudiantes con identidad, código y sus matrículas (id, seccionId, anioAcademicoId, activo, descripcion).
+
+POST `/admin/estudiantes`: `{ numeroDocumento, nombres, apellidos }`. Devuelve perfil Estudiante con id/personaId/codigoEstudiante. No crea credenciales. Reutiliza una Persona coincidente; perfil repetido: 409 STUDENT_EXISTS; documento de otra identidad: 409 PERSON_MISMATCH.
+
+POST `/admin/matriculas`: `{ estudianteId, seccionId }`. Devuelve matrícula activa; el servidor deriva anioAcademicoId de Seccion. No acepta el año enviado por el cliente. Requiere estudiante/persona activos y sección existente. Una matrícula por estudiante/año, incluso si se elige otra sección: 409 DUPLICATE_ENROLLMENT. Una matrícula nueva incorpora al alumno al padrón de esa sección.
+
+### Horarios, asignaciones y sesiones
+
+GET `/admin/horarios` devuelve `{ bloques, sesiones }`. Los bloques incluyen aula, asignacion.curso, asignacion.docente.persona y asignacion.seccion con grado/año. Las sesiones incluyen fecha ISO, horas, bloqueId, activo y version.
+
+POST `/admin/bloques`:
+
+```json
+{
+  "cursoId": 1,
+  "seccionId": 1,
+  "docenteId": 1,
+  "aulaId": 1,
+  "diaSemana": 5,
+  "horaInicio": "09:00",
+  "horaFin": "09:45"
+}
+```
+
+El docente debe tener perfil, persona/cuenta activas y rol DOCENTE. Día 1=lunes … 7=domingo. Horas HH:mm de 24 horas, inicio anterior al fin. Crea/reutiliza CursoSeccionDocente y crea el bloque; devuelve bloque con relaciones. No genera sesiones automáticamente.
+
+Un solapamiento de docente, aula o sección dentro del mismo año académico devuelve 409 SCHEDULE_CONFLICT con el recurso y horario incompatibles. El intervalo se considera [inicio, fin), por lo que dos bloques contiguos son válidos. La validación y la escritura se serializan con un advisory lock transaccional en PostgreSQL; un rechazo no deja asignaciones parciales.
+
+POST `/admin/sesiones`: `{ "bloqueId": 1, "fecha": "2027-10-01" }`. Devuelve SesionClase con versión 0. El año y día deben coincidir con el bloque; las horas se derivan del bloque. Errores: 400 YEAR_MISMATCH, DAY_MISMATCH, INVALID_TEACHER o VALIDATION_ERROR; 409 DUPLICATE_CLASS para bloque/fecha repetidos. No recibe ni permite sobrescribir docente/horas desde el cliente.
+
+### Auditoría
+
+GET `/admin/auditoria`: últimos 100 eventos, id descendente, con usuario.identificador, fechaHora, tipoEvento, entidadId y detalle JSON. El historial completo permanece en BD. No hay rutas para alterar eventos.
+
+Eventos administrativos: ADMINISTRADOR_INICIAL_CREADO, USUARIO_CREADO, USUARIO_ACTUALIZADO, CATALOGO_CREADO, ESTUDIANTE_REGISTRADO, MATRICULA_REGISTRADA, BLOQUE_ASIGNADO y SESION_CLASE_CREADA. La asistencia conserva ASISTENCIA_GUARDADA. CATALOGO_CREADO indica el tipo en detalle.catalogo; los restantes tipos identifican el dominio del entidadId.
+
+Catálogos, matrículas, bloques y sesiones tienen altas y consultas en este alcance. No se exponen bajas ni reprogramación de registros con historial.

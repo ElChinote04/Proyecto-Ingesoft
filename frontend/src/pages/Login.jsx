@@ -79,6 +79,9 @@ export default function Login() {
               {busy ? 'Ingresando…' : 'Ingresar'}
             </button>
           </div>
+          <a className="caption" href="#/instalacion">
+            Configurar el primer administrador
+          </a>
         </form>
       </section>
     </main>

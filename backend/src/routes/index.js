@@ -6,6 +6,9 @@ import * as health from '../controllers/healthController.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validate, loginSchema, idSchema, asistenciaSchema } from '../validators/schemas.js';
 import { AppError } from '../errors/AppError.js';
+import { adminRouter } from './admin.js';
+import * as admin from '../controllers/adminController.js';
+import { setupSchema } from '../validators/adminSchemas.js';
 export const router = Router();
 const loginLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -22,6 +25,9 @@ const loginLimit = rateLimit({
     ),
 });
 router.get('/health', health.check);
+router.get('/instalacion', admin.status);
+router.post('/instalacion', loginLimit, validate(setupSchema), admin.initialize);
+router.use('/admin', adminRouter);
 router.post('/auth/login', loginLimit, validate(loginSchema), auth.login);
 router.get('/auth/me', requireAuth, auth.me);
 router.post('/auth/logout', requireAuth, auth.logout);

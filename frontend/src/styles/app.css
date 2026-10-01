@@ -642,3 +642,189 @@ td:last-child {
     animation: none;
   }
 }
+.admin-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.admin-content > button {
+  align-self: flex-start;
+}
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.admin-form h2 {
+  margin-bottom: 20px;
+}
+.admin-form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.form-wide {
+  grid-column: 1 / -1;
+}
+.admin-grid .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  min-height: 40px;
+}
+.checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand);
+  margin: 0;
+}
+.admin-form .roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+}
+.roles legend {
+  font-weight: 500;
+  padding-bottom: 8px;
+}
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sidebar nav img {
+  width: 16px;
+  height: 16px;
+}
+.sidebar .nav-item {
+  background: transparent;
+  color: #374151;
+}
+.sidebar .nav-item:hover {
+  background: #f5f3ff;
+}
+.step-card {
+  color: inherit;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.step-card:hover {
+  border-color: #a78bfa;
+}
+.step-card > span {
+  color: var(--brand);
+  font-size: 24px;
+  font-weight: 700;
+}
+.step-card strong,
+a {
+  color: var(--brand);
+}
+.button-link {
+  display: inline-block;
+  padding: 10px 16px;
+  background: var(--brand);
+  color: white;
+  border-radius: 8px;
+  text-decoration: none;
+}
+.catalog-section {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.admin-table td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.admin-table small {
+  display: block;
+  color: var(--muted);
+}
+.admin-table pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  max-width: 420px;
+}
+.schedule-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.schedule-matrix {
+  min-width: 1120px;
+  table-layout: fixed;
+}
+.schedule-matrix th,
+.schedule-matrix td {
+  min-width: 0;
+  width: auto;
+  padding: 12px;
+  vertical-align: top;
+}
+.schedule-matrix th:first-child {
+  width: 76px;
+}
+.schedule-matrix caption {
+  text-align: left;
+  padding: 16px;
+  font-weight: 600;
+}
+.schedule-block {
+  background: #f5f3ff;
+  border-left: 3px solid var(--brand);
+  padding: 10px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+.schedule-block small {
+  color: var(--muted);
+}
+.setup-page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+@media (max-width: 1100px) {
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .admin-grid,
+  .form-grid,
+  .admin-grid .form-grid,
+  .schedule-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar nav {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .card {
+    padding: 20px;
+  }
+}

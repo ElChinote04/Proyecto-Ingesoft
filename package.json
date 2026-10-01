@@ -18,7 +18,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "npm --prefix frontend run lint",
-    "db:generate": "npm --prefix backend run db:generate"
+    "db:generate": "npm --prefix backend run db:generate",
+    "setup:key": "node scripts/setup-key.js"
   },
   "devDependencies": {
     "prettier": "3.9.9"

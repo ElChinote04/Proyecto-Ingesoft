@@ -5,6 +5,7 @@ export const backendRoot = fileURLToPath(new URL('../../', import.meta.url));
 dotenv.config({ path: new URL('../../.env', import.meta.url), quiet: true });
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  INITIAL_SETUP_KEY: z.string().min(32).optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().default('127.0.0.1'),
   DATABASE_URL: z.url(),

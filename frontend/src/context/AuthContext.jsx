@@ -12,7 +12,8 @@ export function AuthProvider({ children }) {
     try {
       setUser(await api('/auth/me'));
     } catch (error) {
-      if (error.status !== 401) setStartupError(error.message);
+      if (error.status === 401) setUser(null);
+      else setStartupError(error.message);
     } finally {
       setLoading(false);
     }
@@ -41,7 +42,7 @@ export function AuthProvider({ children }) {
     const data = await api('/auth/login', { method: 'POST', body: credentials });
     setNotice('');
     setUser(data);
-    window.location.hash = '/sesiones';
+    window.location.hash = data.roles.includes('ADMINISTRADOR') ? '/admin/inicio' : '/sesiones';
   }
   async function logout() {
     try {

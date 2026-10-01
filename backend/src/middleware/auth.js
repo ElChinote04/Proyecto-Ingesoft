@@ -10,6 +10,10 @@ export async function requireAuth(req, _res, next) {
 }
 export const requireRole = (role) => (req, _res, next) => {
   if (!req.user?.roles.includes(role))
-    throw new AppError(403, 'FORBIDDEN', 'Tu usuario no tiene permiso para registrar asistencia.');
+    throw new AppError(
+      403,
+      'FORBIDDEN',
+      'Tu usuario no tiene permiso para realizar esta operación.',
+    );
   next();
 };

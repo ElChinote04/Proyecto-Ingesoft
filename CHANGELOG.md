@@ -1,5 +1,47 @@
 # Registro de cambios
 
+## Administración y recorrido completo sin seed — 2026-10-01
+
+La preparación académica ya no depende del seed. Un administrador puede crear las cuentas, catálogos, alumnos, matrículas, asignaciones y sesiones necesarios para que un docente registre asistencia de principio a fin. Amplía el alcance inicial de US-001/US-014 con gestión de US-002, registro/matrícula de US-005 y asignación/validaciones de US-021/US-022.
+
+### Interfaz y recorrido
+
+- Configuración del primer administrador desde formulario con clave local; inicio con menú según roles.
+- Inicio administrativo con pasos del recorrido. Pantallas de usuarios, catálogos, alumnos/matrículas, horarios/sesiones y auditoría.
+- Alta de usuarios con varios roles; edición de identificador, roles, actividad y contraseña opcional. La interfaz muestra el perfil docente generado.
+- Catálogos de año, grado, sección, curso y aula con alta y listados reales.
+- Registro de alumno independiente de su cuenta de login y matrícula por año/grado/sección.
+- Matriz semanal filtrable por año y sección/docente/aula; asignación manual y creación de sesiones con fecha.
+- Consulta de los últimos 100 eventos de auditoría con detalles expandibles y hora de Lima.
+- Formularios con estados de carga, doble envío deshabilitado, errores completos y confirmación de guardado. Adaptación de las nuevas referencias de Figma al flujo real y multirrol.
+- Selección docente identifica las secciones por año para evitar ambigüedad entre promociones.
+- Restauración de autenticación limpia la cuenta tras 401, incluido cambio de contraseña propia.
+
+### Backend, dominio y consistencia
+
+- Dieciocho nuevas combinaciones método/ruta: dos de instalación y dieciséis administrativas; veintiséis en total.
+- Nuevas capas admin de rutas/controllers/services/repositories y esquemas Zod estrictos, respetando la arquitectura existente.
+- Instalación inicial única, protegida con INITIAL_SETUP_KEY aleatoria y comparación de tiempo constante. Creación transaccional de roles, cuenta y marcador; sin contraseña administradora predefinida.
+- Migración aditiva: Instalacion y Usuario.version; conserva todos los registros anteriores.
+- Perfiles Docente/Estudiante creados o reutilizados según rol. Reutilización de Persona por documento y coincidencia de nombres; una sola cuenta por persona.
+- Matrícula única por estudiante/año, año derivado de la sección. Referencias existentes y personas activas requeridas.
+- Asignación curso/sección/docente y bloque aula/día/horas. Requiere docente con cuenta activa y rol DOCENTE.
+- Prevención de solapamientos de docente, aula y sección dentro del año, permitiendo bloques contiguos. Bloqueo transaccional PostgreSQL antes de leer invariantes y guardar; sin asignaciones parciales en un rechazo.
+- Sesión única por bloque/fecha, año y día coherentes, horas derivadas del bloque. El padrón sigue obteniéndose de matrículas activas.
+- Edición de usuarios con versión, protección del acceso propio y del último administrador activo. Cambio de roles efectivo por petición; desactivación/cambio de contraseña revoca sesiones y conserva perfiles/historial.
+- Todos los cambios administrativos guardan RegistroAuditoria en la misma transacción y emiten log después de commit. Se reutiliza la estrategia existente; sin contraseñas, hashes o claves en auditoría/logs/respuestas.
+
+### Instalación, pruebas y documentación
+
+- Setup aplica migraciones sin ejecutar seed, añade la clave inicial a instalaciones anteriores y conserva configuración/datos. Nuevo comando setup:key para el operador local.
+- Seed anterior permanece opcional e idempotente, conservando la compatibilidad con la demo previa.
+- Dieciocho pruebas nuevas sobre BD vacía sin seed; treinta y ocho en total. Cada suite utiliza una BD efímera y logs aislados. Incluyen instalación/asignación/edición simultáneas, multirrol, permisos, matrícula, fechas, asistencia, revocación y ausencia de secretos.
+- Recorrido comprobado por UI con nuevos datos, contrastado con PostgreSQL, auditoría, logs y recarga. Verificados mensajes en 360 px y consola sin errores durante el recorrido.
+- README, API, arquitectura y verificación actualizados. Nueva guía clic por clic y script SQL de solo lectura con comprobaciones de coherencia.
+- Nuevas evidencias de asistencia recargada y auditoría; las evidencias y datos del recorrido inicial se mantienen.
+
+Las altas y consultas de catálogos, matrículas, bloques y sesiones cubren el recorrido pedido. Sus bajas, traslados y reprogramaciones, así como pagos, calificaciones, justificaciones y recuperación de contraseña, siguen fuera del alcance. No se crea pull request ni se configura despliegue público con esta ampliación.
+
 ## Prototipo de arquitectura — 2026-10-01
 
 Implementación inicial del flujo US-001 (autenticación y permisos) + US-014 (asistencia por sesión), sobre la estructura inicial React/Vite y backend vacío. La documentación detallada está en [README](README.md), [arquitectura](docs/ARQUITECTURA.md), [API](docs/API.md) y [verificación](docs/VERIFICACION.md).

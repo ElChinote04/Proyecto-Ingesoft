@@ -16,12 +16,22 @@ for (const folder of ['', 'backend', 'frontend']) {
   if (!existsSync(file)) {
     let content = readFileSync(`${file}.example`, 'utf8');
     if (folder === 'backend')
-      content = content.replace(
-        'change_this_in_real_environments',
-        randomBytes(48).toString('hex'),
-      );
+      content = content
+        .replace('generate_on_setup', randomBytes(32).toString('hex'))
+        .replace('change_this_in_real_environments', randomBytes(48).toString('hex'));
     writeFileSync(file, content, { mode: 0o600 });
     console.log(`Creado ${folder || 'raíz'}/.env`);
+  }
+  if (folder === 'backend') {
+    let content = readFileSync(file, 'utf8');
+    if (!/^INITIAL_SETUP_KEY=/m.test(content))
+      content += `\nINITIAL_SETUP_KEY=${randomBytes(32).toString('hex')}\n`;
+    else
+      content = content.replace(
+        'INITIAL_SETUP_KEY=generate_on_setup',
+        `INITIAL_SETUP_KEY=${randomBytes(32).toString('hex')}`,
+      );
+    writeFileSync(file, content, { mode: 0o600 });
   }
 }
 if (process.argv.includes('--env-only')) process.exit(0);
@@ -33,6 +43,8 @@ for (const folder of ['', 'backend', 'frontend']) {
   );
 }
 run('docker', ['compose', 'up', '-d', '--wait']);
-for (const script of ['db:generate', 'db:migrate', 'db:seed'])
+for (const script of ['db:generate', 'db:migrate'])
   run(process.execPath, [npmCli, 'run', script], path.join(root, 'backend'));
-console.log('SAGE preparado. Ejecuta npm run dev y abre http://localhost:5173');
+console.log(
+  'SAGE preparado SIN datos demo. Ejecuta npm run setup:key, luego npm run dev y crea el primer administrador desde la pantalla inicial.',
+);

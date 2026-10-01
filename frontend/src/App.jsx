@@ -7,6 +7,8 @@ import Login from './pages/Login';
 import SessionSelect from './pages/SessionSelect';
 import Attendance from './pages/Attendance';
 import Confirmation from './pages/Confirmation';
+import Admin from './pages/Admin';
+import Setup from './pages/Setup';
 import './styles/app.css';
 function Screens() {
   const { user, loading, startupError, restore } = useAuth();
@@ -33,7 +35,12 @@ function Screens() {
         <button onClick={restore}>Volver a intentar</button>
       </div>
     );
-  if (!user) return <Login />;
+  if (!user) return route === '/instalacion' ? <Setup /> : <Login />;
+  if (
+    user.roles.includes('ADMINISTRADOR') &&
+    (route.startsWith('/admin') || !user.roles.includes('DOCENTE'))
+  )
+    return <Admin key={route} page={route.split('/')[2] || 'inicio'} />;
   if (!user.roles.includes('DOCENTE'))
     return (
       <AppLayout step="Acceso">
