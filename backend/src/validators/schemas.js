@@ -9,7 +9,6 @@ export const loginSchema = z
 export const idSchema = z.object({ id: z.coerce.number().int().positive().max(2147483647) });
 export const asistenciaSchema = z
   .object({
-    version: z.number().int().nonnegative(),
     asistencias: z
       .array(
         z

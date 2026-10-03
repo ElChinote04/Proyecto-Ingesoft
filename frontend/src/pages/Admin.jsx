@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api/client';
+import { userFormBody } from '../utils/userForm';
 import { useAdminData } from '../hooks/useAdminData';
 import { useAuth } from '../hooks/useAuth';
 import AppLayout from '../layouts/AppLayout';
@@ -127,17 +128,7 @@ function Users() {
             onCancel={editing ? () => setEditing(null) : undefined}
             reset={!editing}
             onSave={async (form) => {
-              const body = {
-                identificador: form.get('identificador'),
-                roles: form.getAll('roles'),
-                activo: form.has('activo'),
-              };
-              const password = form.get('contrasena');
-              if (password) body.contrasena = password;
-              if (editing) body.version = editing.version;
-              else
-                for (const key of ['numeroDocumento', 'nombres', 'apellidos'])
-                  body[key] = form.get(key);
+              const body = userFormBody(form, Boolean(editing));
               const updated = await api(`/admin/usuarios${editing ? `/${editing.id}` : ''}`, {
                 method: editing ? 'PUT' : 'POST',
                 body,
@@ -230,8 +221,7 @@ function Catalogs() {
       {([c]) => (
         <>
           <p className="muted">
-            Crea primero el año y el grado; luego podrás vincular una sección. Los registros
-            guardados aparecen debajo de cada formulario.
+            Crea primero el año y el grado; luego podrás vincular una sección.
           </p>
           <div className="admin-grid">
             {[
@@ -305,7 +295,7 @@ function Catalogs() {
                 ['Aula'],
                 c.aulas.map((x) => [x.codigo]),
               ],
-            ].map(([type, title, fields, headers, rows]) => (
+            ].map(([type, title, fields]) => (
               <section className="catalog-section" key={type}>
                 <AdminForm
                   title={title}
@@ -320,7 +310,6 @@ function Catalogs() {
                 >
                   {fields}
                 </AdminForm>
-                <Table headers={headers} rows={rows} />
               </section>
             ))}
           </div>
@@ -337,20 +326,6 @@ function Enrollments() {
     <Data resource={resource}>
       {([c, students]) => (
         <>
-          <AdminForm
-            title="Registrar alumno"
-            submit="Registrar alumno"
-            onSave={async (form) => {
-              const student = await api('/admin/estudiantes', {
-                method: 'POST',
-                body: Object.fromEntries(form),
-              });
-              resource.retry();
-              return `Alumno registrado con código ${student.codigoEstudiante}. Selecciónalo en el formulario de matrícula.`;
-            }}
-          >
-            <PersonFields />
-          </AdminForm>
           <AdminForm
             title="Asignar grado y sección"
             submit="Confirmar matrícula"
@@ -590,15 +565,6 @@ function Schedule() {
                 y el docente se toman de la asignación.
               </p>
             </AdminForm>
-            <h2>Sesiones creadas</h2>
-            <Table
-              headers={['ID / Fecha', 'Clase asignada', 'Estado / Versión']}
-              rows={schedule.sesiones.map((s) => [
-                `#${s.id} · ${s.fecha.slice(0, 10)}`,
-                blockLabel(schedule.bloques.find((b) => b.id === s.bloqueId)),
-                `${s.activo ? 'Activa' : 'Inactiva'} · v${s.version}`,
-              ])}
-            />
           </>
         );
       }}

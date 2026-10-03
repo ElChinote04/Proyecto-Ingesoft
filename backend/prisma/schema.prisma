@@ -38,7 +38,6 @@ model Usuario {
   persona                Persona                @relation(fields: [personaId], references: [id])
   identificador          String                 @unique
   hashContrasena         String
-  version                Int                    @default(0)
   activo                 Boolean                @default(true)
   creadoEn               DateTime               @default(now())
   modificadoEn           DateTime               @updatedAt
@@ -186,7 +185,6 @@ model SesionClase {
   horaInicio   String
   horaFin      String
   activo       Boolean                 @default(true)
-  version      Int                     @default(0)
   creadoEn     DateTime                @default(now())
   modificadoEn DateTime                @updatedAt
   asistencias  AsistenciaEstudiante[]

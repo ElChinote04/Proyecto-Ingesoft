@@ -1,6 +1,6 @@
 # API REST de SAGE
 
-Base local: `http://localhost:3000/api/v1`. JSON UTF-8. El frontend usa `credentials: 'include'`. Las respuestas de negocio contienen `{ "success": true, "data": ... }`; el health check devuelve su estado directamente. Los IDs son ilustrativos: usa siempre los devueltos por las altas o GET. Los ejemplos de asistencia de la demo antigua siguen siendo válidos, pero el flujo normal crea los datos mediante la administración sin seed.
+Base local: `http://localhost:3000/api/v1`. JSON UTF-8. El frontend usa `credentials: 'include'`. Las respuestas de negocio contienen `{ "data": ... }`; el health check devuelve su estado directamente. No se envía success: el resultado se expresa mediante el código HTTP; los errores conservan error.code, error.message y requestId. No hay campos version en cuentas ni sesiones. Los IDs son ilustrativos: usa siempre los devueltos por las altas o GET. Los ejemplos de asistencia de la demo antigua siguen siendo válidos, pero el flujo normal crea los datos mediante la administración sin seed.
 
 ## Autenticación y cookies
 
@@ -16,7 +16,6 @@ El login envía `Set-Cookie: sage_session=...; HttpOnly; SameSite=Lax; Path=/api
 
 ```json
 {
-  "success": true,
   "data": {
     "id": 1,
     "identificador": "docente@sage.local",
@@ -38,7 +37,7 @@ Sin body. Requiere cookie válida. 200 con el mismo usuario seguro del login; pe
 Sin body. Requiere cookie válida. Revoca la sesión en PostgreSQL y expira la cookie.
 
 ```json
-{ "success": true, "data": { "message": "Sesión cerrada." } }
+{ "data": { "message": "Sesión cerrada." } }
 ```
 
 Reutilizar el token después devuelve 401. Si la sesión ya venció se responde 401; el frontend vuelve al login igualmente.
@@ -53,7 +52,6 @@ Sin body. 200 con arreglo de sesiones activas asignadas al docente, ordenadas po
 
 ```json
 {
-  "success": true,
   "data": [
     {
       "id": 1,
@@ -64,8 +62,7 @@ Sin body. 200 con arreglo de sesiones activas asignadas al docente, ordenadas po
       "fecha": "2026-10-02",
       "horaInicio": "08:00",
       "horaFin": "08:45",
-      "aula": "A-203",
-      "version": 0
+      "aula": "A-203"
     }
   ]
 }
@@ -81,7 +78,6 @@ Sin body. 200 con `data` igual a un objeto de sesión del ejemplo anterior (sin 
 
 ```json
 {
-  "success": true,
   "data": {
     "sesion": {
       "id": 1,
@@ -92,8 +88,7 @@ Sin body. 200 con `data` igual a un objeto de sesión del ejemplo anterior (sin 
       "fecha": "2026-10-02",
       "horaInicio": "08:00",
       "horaFin": "08:45",
-      "aula": "A-203",
-      "version": 0
+      "aula": "A-203"
     },
     "alumnos": [
       {
@@ -138,13 +133,12 @@ Sin body. 200 con `data` igual a un objeto de sesión del ejemplo anterior (sin 
 
 `estado: null` indica que aún no se registró asistencia. Después de guardar, devuelve el valor persistido y la observación; no se marca PRESENTE automáticamente.
 
-### POST /sesiones/:id/asistencias
+### PUT /sesiones/:id/asistencias
 
-Enviar la versión recibida por el último GET y **todos** los alumnos de su respuesta:
+Enviar **todos** los alumnos del padrón activo, sin contador de edición:
 
 ```json
 {
-  "version": 0,
   "asistencias": [
     { "alumnoId": 1, "estado": "PRESENTE" },
     { "alumnoId": 2, "estado": "TARDANZA", "observacion": "Llegó a las 08:12" },
@@ -155,16 +149,14 @@ Enviar la versión recibida por el último GET y **todos** los alumnos de su res
 }
 ```
 
-Reglas: versión entera no negativa, arreglo de 1 a 500 elementos, IDs enteros positivos, sin duplicados, matrícula activa de la sección, exactamente un registro por alumno. Solo PRESENTE/TARDANZA/AUSENTE. Observación opcional (predeterminada vacía), máximo 300 caracteres tras quitar espacios externos. No admite propiedades adicionales.
+Reglas: arreglo de 1 a 500 elementos, IDs enteros positivos, sin duplicados, matrícula activa de la sección, exactamente un registro por alumno. Solo PRESENTE/TARDANZA/AUSENTE. Observación opcional (predeterminada vacía), máximo 300 caracteres tras quitar espacios externos. No admite propiedades adicionales.
 
 200, ejemplo de primer guardado:
 
 ```json
 {
-  "success": true,
   "data": {
     "fechaHora": "2026-10-01T04:57:00.000Z",
-    "version": 1,
     "sesion": {
       "id": 1,
       "curso": { "id": 1, "nombre": "Matemática" },
@@ -174,8 +166,7 @@ Reglas: versión entera no negativa, arreglo de 1 a 500 elementos, IDs enteros p
       "fecha": "2026-10-02",
       "horaInicio": "08:00",
       "horaFin": "08:45",
-      "aula": "A-203",
-      "version": 1
+      "aula": "A-203"
     },
     "total": 5,
     "resumen": { "PRESENTE": 3, "TARDANZA": 1, "AUSENTE": 1 },
@@ -184,7 +175,7 @@ Reglas: versión entera no negativa, arreglo de 1 a 500 elementos, IDs enteros p
 }
 ```
 
-La fecha/hora es la del evento real de guardado. La operación es transaccional y actualiza filas existentes sin duplicarlas. Otro guardado con versión antigua produce 409; recarga por GET antes de enviar nuevamente. No reintentes automáticamente con otra versión sin revisar los cambios del usuario.
+La fecha/hora es la del evento real de guardado. La operación es transaccional y actualiza filas existentes sin duplicarlas. Repetir PUT conserva una fila por matrícula/sesión. Si dos formularios envían datos distintos, prevalece el último guardado, sin rechazo por versión. Cada solicitud deja su evento de auditoría y log.
 
 ## GET /health
 
@@ -202,7 +193,6 @@ Todas las respuestas de error tienen la misma envoltura. Ejemplo:
 
 ```json
 {
-  "success": false,
   "error": {
     "code": "VALIDATION_ERROR",
     "message": "Los datos enviados no son válidos.",
@@ -221,7 +211,7 @@ Todas las respuestas de error tienen la misma envoltura. Ejemplo:
 | 401  | UNAUTHENTICATED, INVALID_CREDENTIALS, SESSION_EXPIRED              | Cookie ausente, credenciales o sesión inválidas |
 | 403  | FORBIDDEN, NO_TEACHER_PROFILE, SESSION_FORBIDDEN, ORIGIN_FORBIDDEN | Rol, perfil, propiedad u origen no permitidos   |
 | 404  | SESSION_NOT_FOUND, NOT_FOUND                                       | Sesión o ruta inexistente                       |
-| 409  | DUPLICATE_STUDENT, STALE_VERSION, CONFLICT                         | Duplicado o guardado concurrente                |
+| 409  | DUPLICATE_STUDENT, CONFLICT                                        | Registro duplicado                              |
 | 413  | BODY_TOO_LARGE                                                     | JSON mayor de 100 KB                            |
 | 429  | TOO_MANY_ATTEMPTS                                                  | Límite de login por IP                          |
 | 500  | INTERNAL_ERROR                                                     | Error interno, detalles seguros solo en logs    |
@@ -257,17 +247,17 @@ Todas las rutas `/admin/*` requieren cookie válida y rol ADMINISTRADOR. 401 sin
 
 ### Usuarios
 
-| Método / ruta           | Body y resultado                                                                                                                         |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| GET /admin/usuarios     | Array de cuentas con id, personaId, identificador, activo, version, numeroDocumento, nombres, apellidos, roles y docenteId; nunca hashes |
-| POST /admin/usuarios    | numeroDocumento, nombres, apellidos, identificador, contrasena, roles y activo opcional (true). Devuelve cuenta segura                   |
-| PUT /admin/usuarios/:id | identificador, roles, activo, version y contrasena opcional. Devuelve cuenta con version incrementada                                    |
+| Método / ruta           | Body y resultado                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| GET /admin/usuarios     | Array de cuentas con id, personaId, identificador, activo, numeroDocumento, nombres, apellidos, roles y docenteId; nunca hashes |
+| POST /admin/usuarios    | numeroDocumento, nombres, apellidos, identificador, contrasena, roles y activo opcional (true). Devuelve cuenta segura          |
+| PUT /admin/usuarios/:id | identificador, roles y activo obligatorios; contrasena opcional. Devuelve la cuenta actualizada                                 |
 
 Roles admitidos: ADMINISTRADOR, DOCENTE, ALUMNO, APODERADO; de uno a cuatro sin repetidos. Una persona puede tener varios. DOCENTE crea/reutiliza su perfil Docente; ALUMNO crea/reutiliza Estudiante. No asignan clases ni matrícula automáticamente. Al añadir un perfil a una persona existente, documento, nombres y apellidos deben coincidir; se conserva una única cuenta por Persona.
 
 Documento: 1–30 caracteres, trim/mayúsculas. Nombres/apellidos: 1–100, trim. Identificador: 1–200, trim/minúsculas. Contraseña de alta o cambio: mínimo 10 caracteres y máximo 72 bytes UTF-8. Body estricto. Una contraseña vacía no sirve como omisión: para conservarla no envíes el campo.
 
-La edición protege la versión (409 STALE_VERSION), el acceso administrativo propio (409 SELF_LOCKOUT) y al último administrador activo (409 LAST_ADMIN). Identificador duplicado: 409 DUPLICATE_IDENTIFIER. Desactivar/cambiar contraseña revoca SesionAuth; cambiar roles se aplica en la siguiente petición. Los perfiles académicos y el historial se conservan al retirar un rol.
+La edición protege el acceso administrativo propio (409 SELF_LOCKOUT) y al último administrador activo (409 LAST_ADMIN). Identificador duplicado: 409 DUPLICATE_IDENTIFIER. Desactivar/cambiar contraseña revoca SesionAuth; cambiar roles se aplica en la siguiente petición. Los perfiles académicos y el historial se conservan al retirar un rol.
 
 ### Catálogos
 
@@ -293,7 +283,7 @@ POST `/admin/matriculas`: `{ estudianteId, seccionId }`. Devuelve matrícula act
 
 ### Horarios, asignaciones y sesiones
 
-GET `/admin/horarios` devuelve `{ bloques, sesiones }`. Los bloques incluyen aula, asignacion.curso, asignacion.docente.persona y asignacion.seccion con grado/año. Las sesiones incluyen fecha ISO, horas, bloqueId, activo y version.
+GET `/admin/horarios` devuelve `{ bloques, sesiones }`. Los bloques incluyen aula, asignacion.curso, asignacion.docente.persona y asignacion.seccion con grado/año. Las sesiones incluyen fecha ISO, horas, bloqueId y activo.
 
 POST `/admin/bloques`:
 
@@ -313,7 +303,7 @@ El docente debe tener perfil, persona/cuenta activas y rol DOCENTE. Día 1=lunes
 
 Un solapamiento de docente, aula o sección dentro del mismo año académico devuelve 409 SCHEDULE_CONFLICT con el recurso y horario incompatibles. El intervalo se considera [inicio, fin), por lo que dos bloques contiguos son válidos. La validación y la escritura se serializan con un advisory lock transaccional en PostgreSQL; un rechazo no deja asignaciones parciales.
 
-POST `/admin/sesiones`: `{ "bloqueId": 1, "fecha": "2027-10-01" }`. Devuelve SesionClase con versión 0. El año y día deben coincidir con el bloque; las horas se derivan del bloque. Errores: 400 YEAR_MISMATCH, DAY_MISMATCH, INVALID_TEACHER o VALIDATION_ERROR; 409 DUPLICATE_CLASS para bloque/fecha repetidos. No recibe ni permite sobrescribir docente/horas desde el cliente.
+POST `/admin/sesiones`: `{ "bloqueId": 1, "fecha": "2027-10-01" }`. Devuelve la sesión creada sin contador de edición. El año y día deben coincidir con el bloque; las horas se derivan del bloque. Errores: 400 YEAR_MISMATCH, DAY_MISMATCH, INVALID_TEACHER o VALIDATION_ERROR; 409 DUPLICATE_CLASS para bloque/fecha repetidos. No recibe ni permite sobrescribir docente/horas desde el cliente.
 
 ### Auditoría
 

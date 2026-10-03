@@ -12,16 +12,9 @@ export default function Attendance({ id, onSaved }) {
         {result.loading ? <Loading>Cargando alumnos…</Loading> : <ResourceError {...result} />}
       </AppLayout>
     );
-  return (
-    <AttendanceForm
-      key={`${id}-${result.data.sesion.version}`}
-      data={result.data}
-      onSaved={onSaved}
-      reload={result.retry}
-    />
-  );
+  return <AttendanceForm key={id} data={result.data} onSaved={onSaved} />;
 }
-function AttendanceForm({ data, onSaved, reload }) {
+function AttendanceForm({ data, onSaved }) {
   const { sesion, alumnos } = data;
   const [records, setRecords] = useState(() =>
     alumnos.map((a) => ({
@@ -63,8 +56,8 @@ function AttendanceForm({ data, onSaved, reload }) {
     setError(null);
     try {
       const saved = await api(`/sesiones/${sesion.id}/asistencias`, {
-        method: 'POST',
-        body: { version: sesion.version, asistencias: records },
+        method: 'PUT',
+        body: { asistencias: records },
       });
       setDirty(false);
       onSaved(saved);
@@ -103,11 +96,6 @@ function AttendanceForm({ data, onSaved, reload }) {
           {error && (
             <div className="stack">
               <Feedback title="No se pudo guardar">{error.message}</Feedback>
-              {error.status === 409 && (
-                <button type="button" className="secondary" onClick={() => leave(reload)}>
-                  Recargar sesión
-                </button>
-              )}
             </div>
           )}
           {validation && records.some((r) => !r.estado) && (

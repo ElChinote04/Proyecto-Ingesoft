@@ -2,6 +2,7 @@ import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import bcrypt from 'bcrypt';
+import { userFormBody } from '../../frontend/src/utils/userForm.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { app } from '../src/app.js';
@@ -47,14 +48,20 @@ let adminUser,
   session;
 const post = (url, body, status = 201) =>
   admin.post(`${base}/admin/${url}`).send(body).expect(status);
+// Usa el mismo contrato de FormData que la pantalla para probar altas y ediciones.
+function accountForm(values, editing = false) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(values)) {
+    if (key === 'activo') {
+      if (value) form.append(key, 'on');
+    } else if (Array.isArray(value)) value.forEach((item) => form.append(key, item));
+    else form.append(key, String(value));
+  }
+  return userFormBody(form, editing);
+}
 const edit = (u, changes = {}) =>
-  admin.put(`${base}/admin/usuarios/${u.id}`).send({
-    identificador: u.identificador,
-    activo: u.activo,
-    roles: u.roles,
-    version: u.version,
-    ...changes,
-  });
+  admin.put(`${base}/admin/usuarios/${u.id}`).send(accountForm({ ...u, ...changes }, true));
+
 after(async () => {
   await prisma.$disconnect();
   if (!logger.writableEnded)
@@ -95,7 +102,7 @@ test('02 instalación simultánea crea exactamente un administrador y cierra el 
     .expect(200);
 });
 test('03 crea usuario multirrol, perfil docente y contraseña segura', async () => {
-  teacherUser = (await post('usuarios', teacherInput)).body.data;
+  teacherUser = (await post('usuarios', accountForm(teacherInput))).body.data;
   assert.deepEqual(teacherUser.roles.sort(), ['APODERADO', 'DOCENTE']);
   assert.ok(teacherUser.docenteId);
   const stored = await prisma.usuario.findUnique({
@@ -103,6 +110,8 @@ test('03 crea usuario multirrol, perfil docente y contraseña segura', async () 
     include: { roles: true, persona: { include: { docente: true } } },
   });
   assert.equal(stored.roles.length, 2);
+  assert.equal('version' in teacherUser, false);
+  assert.equal('version' in stored, false);
   assert.equal(stored.persona.docente.id, teacherUser.docenteId);
   assert.ok(await bcrypt.compare(password, stored.hashContrasena));
   assert.equal(teacherUser.hashContrasena, undefined);
@@ -273,6 +282,7 @@ test('12 valida fecha/día/año y crea una sola sesión coherente con el bloque'
   assert.equal(session.horaFin, block.horaFin);
   await post('sesiones', { bloqueId: block.id, fecha: '2026-10-02' }, 409);
   assert.equal(await prisma.sesionClase.count(), 1);
+  assert.equal('version' in session, false);
 });
 test('13 el docente ve la sesión asignada y al alumno nuevo en el padrón', async () => {
   const list = (await teacher.get(`${base}/sesiones`).expect(200)).body.data;
@@ -288,10 +298,9 @@ test('13 el docente ve la sesión asignada y al alumno nuevo en el padrón', asy
 });
 test('14 asistencia completa: persistencia, auditoría y nueva lectura sin seed', async () => {
   const body = {
-    version: 0,
     asistencias: [{ alumnoId: student.id, estado: 'TARDANZA', observacion: 'Llegó a las 08:12' }],
   };
-  await teacher.post(`${base}/sesiones/${session.id}/asistencias`).send(body).expect(200);
+  await teacher.put(`${base}/sesiones/${session.id}/asistencias`).send(body).expect(200);
   const stored = await prisma.asistenciaEstudiante.findFirst();
   assert.equal(stored.matriculaId, enrollment.id);
   assert.equal(stored.condicion, 'TARDANZA');
@@ -299,14 +308,14 @@ test('14 asistencia completa: persistencia, auditoría y nueva lectura sin seed'
   assert.equal(stored.modificadoPorId, teacherUser.id);
   const reload = (await teacher.get(`${base}/sesiones/${session.id}/alumnos`).expect(200)).body
     .data;
-  assert.equal(reload.sesion.version, 1);
+  assert.equal('version' in reload.sesion, false);
   assert.equal(reload.alumnos[0].observacion, 'Llegó a las 08:12');
   assert.equal(reload.alumnos[0].estado, 'TARDANZA');
   const audit = await prisma.registroAuditoria.findFirst({
     where: { tipoEvento: 'ASISTENCIA_GUARDADA', entidadId: session.id },
   });
   assert.equal(audit.usuarioId, teacherUser.id);
-  await teacher.post(`${base}/sesiones/${session.id}/asistencias`).send(body).expect(409);
+  await teacher.put(`${base}/sesiones/${session.id}/asistencias`).send(body).expect(200);
   assert.equal(await prisma.asistenciaEstudiante.count(), 1);
 });
 test('15 editar roles conserva la persona y deniega permisos inmediatamente', async () => {
@@ -318,9 +327,9 @@ test('15 editar roles conserva la persona y deniega permisos inmediatamente', as
   await teacher.get(`${base}/sesiones`).expect(200);
   assert.equal(await prisma.docente.count(), 2);
 });
-test('16 edición concurrente protege versión; desactivar revoca sesiones y reactivar conserva historial', async () => {
+test('16 PUT repetido de usuario acepta ambos guardados; desactivar revoca sesiones y reactivar conserva historial', async () => {
   const responses = await Promise.all([1, 2].map(() => edit(teacherUser, { activo: false })));
-  assert.deepEqual(responses.map((r) => r.status).sort(), [200, 409]);
+  assert.deepEqual(responses.map((r) => r.status).sort(), [200, 200]);
   teacherUser = responses.find((r) => r.status === 200).body.data;
   await teacher.get(`${base}/auth/me`).expect(401);
   assert.equal(await prisma.sesionAuth.count({ where: { usuarioId: teacherUser.id } }), 0);
@@ -365,6 +374,31 @@ test('18 auditoría administrativa y logs físicos registran el recorrido sin se
       events.some((e) => e.tipoEvento === event),
       event,
     );
+  // Simula un evento histórico: la API omite el contador sin reescribir evidencia.
+  const legacy = await prisma.registroAuditoria.create({
+    data: {
+      usuarioId: teacherUser.id,
+      tipoEvento: 'ASISTENCIA_GUARDADA',
+      entidadId: session.id,
+      detalle: {
+        version: 7,
+        cambios: [{ alumnoId: student.id, anterior: 'PRESENTE', nuevo: 'TARDANZA' }],
+      },
+    },
+  });
+  for (const route of ['usuarios', 'catalogos', 'estudiantes', 'horarios', 'auditoria']) {
+    const response = await admin.get(`${base}/admin/${route}`).expect(200);
+    assert.equal('success' in response.body, false);
+    assert.doesNotMatch(JSON.stringify(response.body), /"version":/);
+  }
+  const history = (await admin.get(`${base}/admin/auditoria`)).body.data;
+  assert.deepEqual(history.find((e) => e.id === legacy.id).detalle, {
+    cambios: legacy.detalle.cambios,
+  });
+  assert.equal(
+    (await prisma.registroAuditoria.findUnique({ where: { id: legacy.id } })).detalle.version,
+    7,
+  );
   const users = (await admin.get(`${base}/admin/usuarios`).expect(200)).body.data;
   const stored = await prisma.usuario.findUnique({ where: { id: teacherUser.id } });
   await new Promise((resolve) => {

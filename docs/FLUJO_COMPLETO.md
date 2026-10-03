@@ -132,7 +132,7 @@ Prueba un horario solapado para el mismo docente, aula o sección: debe devolver
 
 ## 7. Crear sesión de clase con fecha
 
-En la misma pantalla, **Crear sesión de clase**: selecciona el bloque anterior y fecha **2027-10-01**, que es viernes. Pulsa **Crear sesión**: POST `/admin/sesiones` → 201. Debe aparecer en Sesiones creadas con versión 0.
+En la misma pantalla, **Crear sesión de clase**: selecciona el bloque anterior y fecha **2027-10-01**, que es viernes. Pulsa **Crear sesión**: POST `/admin/sesiones` → 201. Comprueba el registro en GET /admin/horarios y en PostgreSQL; no contiene contador de edición.
 
 No escribes de nuevo docente ni horas: se derivan del bloque. Un jueves, otra anualidad o una fecha imposible devuelve 400. Repetir el mismo bloque y fecha devuelve 409.
 
@@ -150,7 +150,7 @@ El **bloque 5** del SQL debe mostrar a Lucía con matrícula y campos de asisten
 
 Marca **Tardanza**, escribe “Llegó a las 09:12” y pulsa **Guardar asistencia**. Si añadiste más alumnos, marca un estado para cada uno.
 
-**Debes ver:** POST `/sesiones/:id/asistencias` → 200; confirmación con total real, estados, docente y hora de registro. La versión pasa de 0 a 1.
+**Debes ver:** PUT `/sesiones/:id/asistencias` → 200; confirmación con total real, estados, docente y hora de registro. La respuesta contiene el resumen del guardado, sin success ni version.
 
 Comprueba:
 
@@ -161,7 +161,7 @@ Comprueba:
 5. **Auditoría en pantalla:** vuelve al administrador → Auditoría → Actualizar auditoría → Ver detalle del evento.
 6. **Coherencia:** el bloque 7 del SQL debe devolver cero en matrícula/año, asistencia/sección, sesión/bloque y cruces de horarios.
 
-Volver a guardar con la versión vigente actualiza la misma fila y añade un evento; no duplica asistencia. Para comprobar conflicto, abre la misma sesión en dos pestañas del docente antes de guardar: la primera guarda y la segunda recibe 409. Debe recargar y revisar antes de continuar.
+Volver a guardar mediante PUT actualiza la misma fila y añade un evento; no duplica asistencia. Abre la sesión en dos pestañas antes de guardar: guarda PRESENTE en la primera y TARDANZA en la segunda. Ambas deben responder 200; al recargar debe verse TARDANZA. Los IDs de asistencia se conservan y cada guardado añade auditoría. No hay que enviar una versión ni repetir un guardado rechazado por ese motivo.
 
 ## 10. Cierre y comprobación automática
 

@@ -32,7 +32,6 @@ function dto(session) {
     horaInicio: session.horaInicio,
     horaFin: session.horaFin,
     aula: session.bloque.aula.codigo,
-    version: session.version,
   };
 }
 function studentDto(matricula) {
@@ -67,7 +66,7 @@ export async function students(id, user) {
   };
 }
 export async function save(id, input, user, requestId) {
-  const result = await repository.inTransaction(async (db) => {
+  const result = await repository.inTransaction(id, async (db) => {
     const session = await repository.findSession(id, db);
     checkSession(session, user);
     const students = await repository.findStudents(session.bloque.asignacion.seccionId, id, db);
@@ -92,18 +91,12 @@ export async function save(id, input, user, requestId) {
       matriculaId: byId.get(a.alumnoId).id,
       anterior: byId.get(a.alumnoId).asistencias[0]?.condicion ?? null,
     }));
-    const saved = await repository.saveAttendance(db, id, input.version, records, user.id);
-    if (!saved)
-      throw new AppError(
-        409,
-        'STALE_VERSION',
-        'La asistencia cambió desde que abriste la página. Recarga la sesión antes de guardar.',
-      );
+    const saved = await repository.saveAttendance(db, id, records, user.id);
     const resumen = { PRESENTE: 0, TARDANZA: 0, AUSENTE: 0 };
     records.forEach((r) => resumen[r.estado]++);
     return {
       ...saved,
-      sesion: dto({ ...session, version: saved.version }),
+      sesion: dto(session),
       total: records.length,
       resumen,
       registradoPor: user.nombre,

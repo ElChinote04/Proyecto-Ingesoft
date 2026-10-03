@@ -12,7 +12,7 @@
 BEGIN READ ONLY;
 
 \echo '1. Cuenta, persona, roles y perfil docente (sin hashes ni contrasenas)'
-SELECT u.id AS usuario_id, u.identificador, u.activo, u.version,
+SELECT u.id AS usuario_id, u.identificador, u.activo,
        p.id AS persona_id, p.nombres, p.apellidos, d.id AS docente_id,
        string_agg(r.nombre::text, ', ' ORDER BY r.nombre::text) AS roles
 FROM "Usuario" u JOIN "Persona" p ON p.id = u."personaId"
@@ -40,7 +40,7 @@ WHERE p."numeroDocumento" = :'documento' ORDER BY a.codigo;
 \echo '4. Asignacion academica, bloque y sesion del docente'
 SELECT u.identificador, cd.id AS asignacion_id, c.nombre AS curso, a.codigo AS anio,
        g.nombre AS grado, s.nombre AS seccion, b.id AS bloque_id, au.codigo AS aula,
-       b."diaSemana", b."horaInicio", b."horaFin", sc.id AS sesion_id, sc.fecha, sc.version
+       b."diaSemana", b."horaInicio", b."horaFin", sc.id AS sesion_id, sc.fecha
 FROM "Usuario" u JOIN "Docente" d ON d."personaId" = u."personaId"
 JOIN "CursoSeccionDocente" cd ON cd."docenteId" = d.id
 JOIN "Curso" c ON c.id = cd."cursoId" JOIN "Seccion" s ON s.id = cd."seccionId"
@@ -53,7 +53,7 @@ WHERE u.identificador = :'docente' ORDER BY sc.fecha, b."horaInicio";
 SELECT sc.id AS sesion_id, sc.fecha, p.nombres, p.apellidos, m.id AS matricula_id,
        ae.id AS asistencia_id, ae.condicion, ae.observacion,
        creador.identificador AS creado_por, modificador.identificador AS modificado_por,
-       ae."creadoEn", ae."modificadoEn", sc.version
+       ae."creadoEn", ae."modificadoEn"
 FROM "Usuario" u JOIN "Docente" d ON d."personaId" = u."personaId"
 JOIN "CursoSeccionDocente" cd ON cd."docenteId" = d.id
 JOIN "CursoSeccionDocenteAula" b ON b."asignacionId" = cd.id

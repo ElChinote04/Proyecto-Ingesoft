@@ -1,22 +1,30 @@
 # Verificación de entrega
 
-Fecha: 1 de octubre de 2026. Windows x64, Node 24.21.0 local al proyecto, Docker Desktop y PostgreSQL 18.6. Rama: feat/prototipo-arquitectura-sage.
+Última comprobación del refactor: 2 de octubre de 2026. Las evidencias de navegador que siguen son del 1 de octubre y se identifican como históricas. Windows x64, Node 24.21.0 local al proyecto, Docker Desktop y PostgreSQL 18.6. Rama: feat/prototipo-arquitectura-sage.
+
+## Refactor: PUT sin contadores de edición
+
+- 38 pruebas de integración aprobadas sobre PostgreSQL: 20 de API y 18 administrativas. Se utiliza también el constructor de FormData real del frontend para crear cuentas y editarlas con/sin cambio de contraseña.
+- Dos guardados de asistencia válidos responden 200, incluso simultáneos. PUT repetido conserva IDs y no duplica filas; el último padrón completo prevalece. Auditoría registra estados anteriores coherentes.
+- Se comprobó ausencia de success en respuestas normales y errores, y de version en cuentas, sesiones y auditoría expuesta por API. Un evento antiguo conserva su contador en la BD, pero no lo expone por HTTP.
+- Migración aplicada a la base local sage: comparación por conteos y SHA-256 del contenido de las 19 tablas antes/después (excluyendo únicamente las columnas retiradas) idéntica. No se borraron usuarios, matrículas, sesiones, asistencias ni eventos.
+- Lint y build del frontend correctos. Esta revisión no sustituye la evidencia histórica de clics por una nueva prueba de navegador.
 
 ## Ampliación: recorrido sin seed
 
 | Comprobación | Resultado observado                                                                                              |
 | ------------ | ---------------------------------------------------------------------------------------------------------------- |
-| Migraciones  | Inicial y administración aplicadas; datos previos conservados                                                    |
+| Migraciones  | Tres migraciones aplicadas, incluida eliminación de contadores; datos previos conservados                        |
 | Integración  | 38/38 aprobadas: 20 de regresión y 18 administrativas, sin fallos ni omisiones                                   |
 | Inicio vacío | La suite administrativa verifica cero cuentas/roles/años antes de usar HTTP; no importa seed                     |
-| Concurrencia | Dos instalaciones, asignaciones solapadas o ediciones de la misma versión: solo una prospera                     |
+| Concurrencia | Solo una instalación o asignación solapada prospera; dos ediciones válidas mediante PUT se aceptan               |
 | Permisos     | Docente sin administración; acceso restringido a sus clases; cambios de roles efectivos en la siguiente petición |
 | Revocación   | Desactivar o cambiar contraseña invalida las sesiones anteriores                                                 |
 | Identidad    | Un usuario multirrol y perfiles reutilizados sin duplicar Persona                                                |
 | Matrícula    | Una por estudiante/año; año derivado de la sección, referencias válidas                                          |
 | Horarios     | Cruces de docente, aula y sección rechazados; bloques contiguos admitidos                                        |
 | Sesiones     | Fecha real y día/año coherentes con bloque; horas derivadas; duplicados rechazados                               |
-| Guardado     | Asistencia, versión y auditoría atómicas; nueva lectura recupera estado/observación                              |
+| Guardado     | Asistencia y auditoría atómicas; nueva lectura recupera estado/observación                                       |
 | Logs         | Eventos físicos comprobados; sin contraseñas, hashes, claves ni JWT; suite administrativa sin errores 500        |
 | Frontend     | Lint sin errores; build correcto; formularios comprobados en navegador                                           |
 | SQL          | Script de solo lectura ejecutado con ON_ERROR_STOP; cuatro comprobaciones de incongruencias en cero              |
@@ -25,7 +33,7 @@ Las dos suites usan bases PostgreSQL aleatorias distintas, ambas migradas desde 
 
 También se repitió `Setup-Sage.ps1` completo: instalación de los tres lockfiles, auditorías npm sin vulnerabilidades reportadas, Docker healthy, Prisma generado y ninguna migración pendiente. Terminó sin ejecutar seed y conservó las cuentas, las seis matrículas/asistencias y los eventos anteriores. `Start-Sage.ps1` volvió a levantar ambos servidores. Los controles finales de lint, build, formato, sintaxis JS y whitespace de Git terminaron correctamente.
 
-## Recorrido ejecutado realmente en navegador
+## Recorrido histórico ejecutado en navegador (1 de octubre)
 
 En la base local existente se conservaron los cinco alumnos y asistencias anteriores. Se creó por formularios un conjunto independiente, sin ejecutar el seed:
 
@@ -38,7 +46,7 @@ En la base local existente se conservaron los cinco alumnos y asistencias anteri
 7. TARDANZA y observación; guardado, confirmación y recarga completa del navegador.
 8. Auditoría visible para el administrador y lectura SQL de todos los vínculos.
 
-PostgreSQL confirmó Usuario #4, ambos roles, matrícula/año coherentes, sesión versión 1, una asistencia nueva con el docente como creador/modificador y evento ASISTENCIA_GUARDADA #13. Los logs incluyen el mismo guardado y su requestId. Los IDs describen este entorno local; no son constantes de la aplicación.
+PostgreSQL confirmó Usuario #4, ambos roles, matrícula/año coherentes, sesión con asistencia guardada, una asistencia nueva con el docente como creador/modificador y evento ASISTENCIA_GUARDADA #13. Los logs incluyen el mismo guardado y su requestId. Los IDs describen este entorno local; no son constantes de la aplicación.
 
 También se envió un formulario sin roles: mostró “Los datos enviados no son válidos. Selecciona al menos un rol.” completo. En viewport de 360 px no hubo desbordamiento horizontal de la página (ancho del contenido 345 px por scrollbar). El navegador no reportó errores ni advertencias de consola en el recorrido comprobado.
 
@@ -46,9 +54,9 @@ Evidencias: [asistencia nueva después de recargar](evidencias/SAGE_flujo_sin_se
 
 ## Cobertura automatizada
 
-La suite administrativa verifica instalación protegida y simultánea, cuenta multirrol/perfil, hashing, duplicados sin filas parciales, permisos, catálogos, matrícula, reutilización de identidad ALUMNO, asignación, los tres tipos de cruce por separado, concurrencia, bloques contiguos, fechas, padrón, persistencia/auditoría, retiro/restauración de roles, edición por versión, revocación y ausencia de secretos.
+La suite administrativa verifica instalación protegida y simultánea, cuenta multirrol/perfil, hashing, duplicados sin filas parciales, permisos, catálogos, matrícula, reutilización de identidad ALUMNO, asignación, los tres tipos de cruce por separado, concurrencia, bloques contiguos, fechas, padrón, persistencia/auditoría, retiro/restauración de roles, edición mediante PUT, revocación y ausencia de secretos.
 
-La suite de 20 pruebas previa mantiene health, autenticación/cookies, login fallido, 401/403, propiedad de sesión, padrón, guardado, enums, matrícula ajena, reload por GET, duplicados/versiones, validaciones, guardados simultáneos, múltiples roles, actividad/tokens, CORS/JSON, seed idempotente, logout y error 500 seguro.
+La suite de 20 pruebas previa mantiene health, autenticación/cookies, login fallido, 401/403, propiedad de sesión, padrón, guardado, enums, matrícula ajena, reload por GET, duplicados/PUT repetido, validaciones, guardados simultáneos, múltiples roles, actividad/tokens, CORS/JSON, seed idempotente, logout y error 500 seguro.
 
 ## Evidencia de la entrega inicial
 

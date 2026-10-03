@@ -6,12 +6,8 @@ export function errorHandler(error, req, res, _next) {
     known = new AppError(400, 'INVALID_JSON', 'El cuerpo debe ser JSON válido.');
   if (error.type === 'entity.too.large')
     known = new AppError(413, 'BODY_TOO_LARGE', 'La solicitud es demasiado grande.');
-  if (error.code === 'P2002' || error.code === 'P2034')
-    known = new AppError(
-      409,
-      'CONFLICT',
-      'Otro cambio se guardó al mismo tiempo. Recarga la sesión e inténtalo nuevamente.',
-    );
+  if (error.code === 'P2002')
+    known = new AppError(409, 'CONFLICT', 'Ya existe un registro con esos datos.');
   const status = known?.status ?? 500;
   // Nunca registrar body, cookies, URL de BD ni el mensaje libre de un driver.
   logger.log(status >= 500 ? 'error' : 'warn', known?.message ?? 'Error interno de aplicación', {
@@ -28,7 +24,6 @@ export function errorHandler(error, req, res, _next) {
     }),
   });
   res.status(status).json({
-    success: false,
     error: {
       code: known?.code ?? 'INTERNAL_ERROR',
       message: known?.message ?? 'No pudimos completar la operación. Inténtalo nuevamente.',

@@ -28,14 +28,17 @@ export const findStudents = (seccionId, sesionId, db = prisma) =>
     include: { estudiante: { include: { persona: true } }, asistencias: { where: { sesionId } } },
     orderBy: { estudiante: { id: 'asc' } },
   });
-export const inTransaction = (operation) =>
-  prisma.$transaction(operation, { isolationLevel: 'Serializable' });
-export async function saveAttendance(db, sesionId, version, records, userId) {
-  const result = await db.sesionClase.updateMany({
-    where: { id: sesionId, version },
-    data: { version: { increment: 1 } },
-  });
-  if (result.count !== 1) return false;
+// El bloqueo interno ordena guardados completos de la misma sesión.
+// No requiere una versión del cliente ni rechaza formularios abiertos previamente.
+export const inTransaction = (sesionId, operation) =>
+  prisma.$transaction(
+    async (db) => {
+      await db.$queryRaw`SELECT id FROM "SesionClase" WHERE id = ${sesionId} FOR UPDATE`;
+      return operation(db);
+    },
+    { isolationLevel: 'ReadCommitted', timeout: 15000 },
+  );
+export async function saveAttendance(db, sesionId, records, userId) {
   for (const record of records) {
     const data = { condicion: record.estado, observacion: record.observacion };
     await db.asistenciaEstudiante.upsert({
@@ -50,7 +53,6 @@ export async function saveAttendance(db, sesionId, version, records, userId) {
       tipoEvento: 'ASISTENCIA_GUARDADA',
       entidadId: sesionId,
       detalle: {
-        version: version + 1,
         cambios: records.map((r) => ({
           alumnoId: r.alumnoId,
           anterior: r.anterior,
@@ -59,5 +61,5 @@ export async function saveAttendance(db, sesionId, version, records, userId) {
       },
     },
   });
-  return { fechaHora: event.fechaHora, version: version + 1 };
+  return { fechaHora: event.fechaHora };
 }

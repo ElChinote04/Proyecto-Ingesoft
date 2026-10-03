@@ -35,7 +35,7 @@ router.use('/sesiones', requireAuth, requireRole('DOCENTE'));
 router.get('/sesiones', session.list);
 router.get('/sesiones/:id', validate(idSchema, 'params'), session.detail);
 router.get('/sesiones/:id/alumnos', validate(idSchema, 'params'), session.students);
-router.post(
+router.put(
   '/sesiones/:id/asistencias',
   validate(idSchema, 'params'),
   validate(asistenciaSchema),

@@ -61,7 +61,6 @@ export default function Setup() {
           </p>
         </AdminForm>
       )}
-      <a href="#/login">Volver al inicio de sesión</a>
     </main>
   );
 }

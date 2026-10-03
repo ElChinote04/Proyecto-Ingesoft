@@ -4,6 +4,21 @@ Sistema Académico de Gestión Educativa. Permite completar el recorrido **admin
 
 Se cubren US-001, gestión de cuentas y roles de US-002, registro/matrícula de US-005, asistencia de US-014, asignación horaria de US-021 y validación de cruces de US-022 para este recorrido. [Fuentes y límites](docs/ARQUITECTURA.md).
 
+**Para continuar con otro integrante o una nueva IA:** [contexto completo de implementación](docs/CONTEXTO_COMPLETO_PROT_SAGE.md) y [mensaje para iniciar otro chat](docs/INICIO_NUEVO_CHAT.md). Incluyen modelo, API, reglas, configuración, comprobaciones y pendientes reales.
+
+## Actualizar una instalación existente al contrato sin versiones
+
+Detén el servidor anterior con Ctrl+C. Desde la raíz, después de obtener estos cambios:
+
+```powershell
+. .\scripts\Use-Node.ps1
+npm.cmd run db:generate
+npm.cmd run db:migrate
+powershell -ExecutionPolicy Bypass -File .\scripts\Start-Sage.ps1
+```
+
+Mantén Docker Desktop funcionando. La migración elimina únicamente los contadores version de Usuario y SesionClase y conserva sus datos. Recarga el navegador para usar el frontend actualizado. Asistencia usa PUT (el POST antiguo ya no existe); usuarios conserva PUT sin version. Las respuestas usan `{ data: ... }` o `{ error: ... }`, sin success. Las instalaciones nuevas reciben el esquema actualizado al ejecutar Setup-Sage.ps1.
+
 ## Inicio rápido en Windows
 
 Requisitos: Git para obtener el repositorio, Windows x64, Docker Desktop abierto con contenedores Linux e Internet durante la primera instalación. Puertos libres: 5432, 3000 y 5173. No necesitas instalar Node ni PostgreSQL globalmente.
@@ -117,7 +132,7 @@ npm run db:migrate
 npm --prefix backend run db:status
 ```
 
-Las migraciones crean el modelo y añaden Usuario.version e Instalacion. Se usa migrate deploy, sin editar tablas a mano. Para detener sin borrar datos: `npm run db:down`. Estado: `docker compose ps`.
+Las migraciones crean el modelo e Instalacion; la tercera elimina los contadores técnicos de edición de Usuario y SesionClase sin borrar sus registros. Se usa migrate deploy, sin editar tablas a mano. Para detener sin borrar datos: `npm run db:down`. Estado: `docker compose ps`.
 
 `npm run db:seed` queda como opción explícita para la antigua demo y la suite de regresión. Crea Ana Torres (`docente@sage.local`), Elena Mendoza (`apoderado@sage.local`), cinco alumnos, Matemática, 3.° B, aula A-203 y sesión 02/10/2026, 08:00–08:45. Contraseña de ejemplo: `Docente123!`, configurable con DEMO_PASSWORD antes del primer seed. No crea administrador y conserva contraseñas/asistencias al repetirse. **No se necesita para instalar ni demostrar el nuevo flujo.**
 
@@ -151,7 +166,7 @@ Por defecto filtra al docente `docente.verificacion@sage.local` y al alumno con 
 - Solo ADMINISTRADOR administra; solo el docente asignado accede a su asistencia. Una cuenta nueva no recibe clases automáticamente.
 - Matrícula única por alumno/año, año derivado de la sección y sesiones coherentes con día/año/horas del bloque.
 - Cruces de docente, aula y sección comprobados bajo bloqueo transaccional en PostgreSQL. Se permiten bloques contiguos.
-- Asistencia y auditoría en transacción serializable, clave única sesión/matrícula y control de versión. La edición de cuentas también exige versión.
+- Asistencia y auditoría en una transacción READ COMMITTED, con clave única sesión/matrícula. PUT actualiza el padrón completo o los datos editables de una cuenta sin exigir contadores de edición; prevalece el último guardado.
 - Errores completos, requestId, logs JSON rotados (5 MB, tres archivos), Helmet, CORS limitado y Zod estricto.
 
 El límite de acceso/instalación es 30 solicitudes por IP cada 15 minutos en una instancia. El prototipo usa HTTP local. Producción requiere infraestructura y secretos propios, origen HTTPS y terminación TLS. No se ha desplegado públicamente.
@@ -164,7 +179,7 @@ El límite de acceso/instalación es 30 solicitudes por IP cada 15 minutos en un
 - **No conserva sesión:** usa localhost en ambos servidores y revisa FRONTEND_URL/VITE_API_URL.
 - **Sin sesiones:** crea el usuario DOCENTE, su bloque académico y una sesión con fecha; recarga la selección.
 - **Sin alumnos:** comprueba la matrícula activa en la sección y año de la sesión.
-- **409:** puede ser duplicado, cruce horario o versión antigua. Lee el mensaje y recarga antes de editar otra vez.
+- **409:** puede ser un duplicado, cruce horario o una regla de protección administrativa. Lee el mensaje para corregir los datos.
 - **Clave inicial inválida:** ejecuta setup, consulta setup:key y reinicia el backend si estaba abierto.
 - **Sin conexión:** comprueba [health](http://localhost:3000/api/v1/health), la terminal y los logs.
 

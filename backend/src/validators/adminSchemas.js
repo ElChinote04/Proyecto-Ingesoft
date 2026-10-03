@@ -22,7 +22,7 @@ const account = {
 };
 export const createUserSchema = z.object({ ...person, ...account, contrasena: password }).strict();
 export const editUserSchema = z
-  .object({ ...account, version: z.number().int().nonnegative(), contrasena: password.optional() })
+  .object({ ...account, activo: z.boolean(), contrasena: password.optional() })
   .strict();
 export const setupSchema = z
   .object({

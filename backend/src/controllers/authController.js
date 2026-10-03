@@ -12,11 +12,11 @@ export async function login(req, res) {
     ...cookieOptions,
     expires: new Date(result.expiresAt),
   });
-  res.json({ success: true, data: result.user });
+  res.json({ data: result.user });
 }
-export const me = (req, res) => res.json({ success: true, data: req.user });
+export const me = (req, res) => res.json({ data: req.user });
 export async function logout(req, res) {
   await service.logout(req.sessionId);
   res.clearCookie('sage_session', cookieOptions);
-  res.json({ success: true, data: { message: 'Sesión cerrada.' } });
+  res.json({ data: { message: 'Sesión cerrada.' } });
 }

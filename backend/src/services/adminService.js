@@ -17,7 +17,6 @@ export const userDto = (u) => ({
   personaId: u.personaId,
   identificador: u.identificador,
   activo: u.activo,
-  version: u.version,
   numeroDocumento: u.persona.numeroDocumento,
   nombres: u.persona.nombres,
   apellidos: u.persona.apellidos,
@@ -132,8 +131,6 @@ export async function updateUser(id, input, actor, requestId) {
   const hash = input.contrasena ? await bcrypt.hash(input.contrasena, 12) : null;
   return mutation(actor, requestId, 'USUARIO_ACTUALIZADO', async (db) => {
     const current = exists(await repository.findUser(id, db), 'El usuario');
-    if (current.version !== input.version)
-      fail(409, 'STALE_VERSION', 'El usuario cambió. Recarga el listado y vuelve a editar.');
     const wasAdmin = current.roles.some((r) => r.rol.nombre === 'ADMINISTRADOR');
     const isAdmin = input.roles.includes('ADMINISTRADOR') && input.activo;
     if (id === actor.id && !isAdmin)
@@ -155,7 +152,6 @@ export async function updateUser(id, input, actor, requestId) {
       {
         identificador: input.identificador,
         activo: input.activo,
-        version: { increment: 1 },
         ...(hash && { hashContrasena: hash }),
         roles: {
           deleteMany: {},
@@ -176,7 +172,18 @@ export async function updateUser(id, input, actor, requestId) {
   });
 }
 export const catalogs = () => repository.catalogs();
-export const auditEvents = () => repository.audits();
+export const auditEvents = async () =>
+  (await repository.audits()).map((event) => {
+    // Los eventos anteriores a la migración conservan su detalle original en BD.
+    // El contador técnico retirado ya no forma parte del contrato de la API.
+    if (event.tipoEvento !== 'ASISTENCIA_GUARDADA' || !event.detalle) return event;
+    return {
+      ...event,
+      detalle: Object.fromEntries(
+        Object.entries(event.detalle).filter(([key]) => key !== 'version'),
+      ),
+    };
+  });
 export function createCatalog(type, input, actor, requestId) {
   return mutation(actor, requestId, 'CATALOGO_CREADO', async (db) => {
     if (type === 'secciones') {
