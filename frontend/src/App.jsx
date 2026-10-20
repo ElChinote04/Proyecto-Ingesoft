@@ -1,122 +1,76 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
-
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+import { useEffect, useState } from 'react';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './hooks/useAuth';
+import { Feedback, Loading } from './components/Feedback';
+import Login from './pages/Login';
+import SessionSelect from './pages/SessionSelect';
+import Attendance from './pages/Attendance';
+import Confirmation from './pages/Confirmation';
+import Admin from './pages/Admin';
+import Setup from './pages/Setup';
+import Portal from './pages/Portal';
+import MiHorario from './pages/MiHorario';
+import CambiarContrasena from './pages/CambiarContrasena';
+import './styles/app.css';
+function Screens() {
+  const { user, loading, startupError, restore } = useAuth();
+  const [route, setRoute] = useState(window.location.hash.slice(1));
+  const [saved, setSaved] = useState(null);
+  useEffect(() => {
+    const change = () => {
+      setRoute(window.location.hash.slice(1));
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener('hashchange', change);
+    return () => window.removeEventListener('hashchange', change);
+  }, []);
+  if (loading)
+    return (
+      <div className="center">
+        <Loading>Comprobando sesión…</Loading>
+      </div>
+    );
+  if (startupError)
+    return (
+      <div className="center stack">
+        <Feedback>{startupError}</Feedback>
+        <button onClick={restore}>Volver a intentar</button>
+      </div>
+    );
+  if (!user) return route === '/instalacion' ? <Setup /> : <Login />;
+  const perfiles = [user.roles.join(','), user.docenteId, user.estudianteId, user.apoderadoId].join(
+    ':',
+  );
+  if (user.requiereCambioContrasena || route === '/contrasena') return <CambiarContrasena />;
+  if (route === '/horario' && user.roles.some((rol) => ['DOCENTE', 'ALUMNO'].includes(rol)))
+    return <MiHorario key={perfiles} />;
+  if (route === '/portal' && user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)))
+    return <Portal key={perfiles} />;
+  if (
+    user.roles.includes('ADMINISTRADOR') &&
+    (route.startsWith('/admin') || !user.roles.includes('DOCENTE'))
   )
+    return <Admin key={route} page={route.split('/')[2] || 'inicio'} />;
+  if (!user.roles.includes('DOCENTE')) return <Portal key={perfiles} />;
+  if (route === '/confirmacion' && saved) return <Confirmation result={saved} />;
+  const match = route.match(/^\/sesiones\/(\d+)$/);
+  if (match)
+    return (
+      <Attendance
+        key={match[1]}
+        id={match[1]}
+        onSaved={(result) => {
+          setSaved(result);
+          window.location.hash = '/confirmacion';
+        }}
+      />
+    );
+  return <SessionSelect />;
 }
-
-export default App
+export default function App() {
+  return (
+    <AuthProvider>
+      <Screens />
+    </AuthProvider>
+  );
+}

@@ -1,0 +1,62 @@
+import * as service from '../services/adminService.js';
+export const status = async (req, res) => res.json({ data: await service.setupStatus(req.ip) });
+export const initialize = async (req, res) =>
+  res
+    .status(201)
+    .json({ data: await service.initialize(req.validated.body, req.requestId, req.ip) });
+export const users = async (_req, res) => res.json({ data: await service.users() });
+export const createUser = async (req, res) =>
+  res.status(201).json({
+    data: await service.createUser(req.validated.body, req.user, req.requestId),
+  });
+export const updateUser = async (req, res) =>
+  res.json({
+    data: await service.updateUser(
+      req.validated.params.id,
+      req.validated.body,
+      req.user,
+      req.requestId,
+    ),
+  });
+export const catalogs = async (_req, res) => res.json({ data: await service.catalogs() });
+export const createCatalog = (type) => async (req, res) =>
+  res.status(201).json({
+    data: await service.createCatalog(type, req.validated.body, req.user, req.requestId),
+  });
+export const students = async (_req, res) => res.json({ data: await service.students() });
+export const createStudent = async (req, res) =>
+  res.status(201).json({
+    data: await service.createStudent(req.validated.body, req.user, req.requestId),
+  });
+export const enroll = async (req, res) =>
+  res.status(201).json({
+    data: await service.enroll(req.validated.body, req.user, req.requestId),
+  });
+export const schedule = async (_req, res) => res.json({ data: await service.schedule() });
+export const createBlock = async (req, res) =>
+  res.status(201).json({
+    data: await service.createBlock(req.validated.body, req.user, req.requestId),
+  });
+export const createClass = async (req, res) =>
+  res.status(201).json({
+    data: await service.createClass(req.validated.body, req.user, req.requestId),
+  });
+export const audits = async (_req, res) => res.json({ data: await service.auditEvents() });
+
+export const activarAnio = async (req, res) =>
+  res.json({ data: await service.activarAnio(req.validated.params.id, req.user, req.requestId) });
+export const vincularApoderado = async (req, res) =>
+  res.json({ data: await service.vincularApoderado(req.validated.body, req.user, req.requestId) });
+export const modificarBloque = async (req, res) =>
+  res.json({
+    data: await service.modificarBloque(
+      req.validated.params.id,
+      req.validated.body,
+      req.user,
+      req.requestId,
+    ),
+  });
+export const eliminarBloque = async (req, res) =>
+  res.json({
+    data: await service.eliminarBloque(req.validated.params.id, req.user, req.requestId),
+  });

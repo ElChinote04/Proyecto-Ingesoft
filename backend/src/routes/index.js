@@ -1,0 +1,62 @@
+import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
+import * as auth from '../controllers/authController.js';
+import * as session from '../controllers/sessionController.js';
+import * as health from '../controllers/healthController.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
+import { validate, loginSchema, idSchema, asistenciaSchema } from '../validators/schemas.js';
+import { AppError } from '../errors/AppError.js';
+import { adminRouter } from './admin.js';
+import * as admin from '../controllers/adminController.js';
+import { passwordSchema } from '../validators/seguridad.schemas.js';
+import { setupSchema } from '../validators/adminSchemas.js';
+import * as portal from '../controllers/portal.controller.js';
+import { horarioSchema, paginaSchema } from '../validators/portal.schemas.js';
+export const router = Router();
+const requirePortal = (req, res, next) => {
+  if (!req.user.roles.some((role) => ['ALUMNO', 'APODERADO'].includes(role)))
+    throw new AppError(403, 'FORBIDDEN', 'Este portal está disponible para alumnos y apoderados.');
+  next();
+};
+const loginLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (_req, _res, next) =>
+    next(
+      new AppError(
+        429,
+        'TOO_MANY_ATTEMPTS',
+        'Demasiados intentos de acceso. Espera 15 minutos antes de volver a intentar.',
+      ),
+    ),
+});
+router.get('/health', health.check);
+router.get('/instalacion', admin.status);
+router.post('/instalacion', loginLimit, validate(setupSchema), admin.initialize);
+router.use('/admin', adminRouter);
+router.post('/auth/login', loginLimit, validate(loginSchema), auth.login);
+router.get('/auth/me', requireAuth, auth.me);
+router.put('/auth/contrasena', requireAuth, validate(passwordSchema), auth.cambiarContrasena);
+router.post('/auth/logout', requireAuth, auth.logout);
+router.get('/horarios', requireAuth, validate(horarioSchema, 'query'), portal.obtenerHorario);
+router.get('/portal/estudiantes', requireAuth, requirePortal, portal.obtenerPortal);
+router.get(
+  '/portal/estudiantes/:id/asistencias',
+  requireAuth,
+  requirePortal,
+  validate(idSchema, 'params'),
+  validate(paginaSchema, 'query'),
+  portal.obtenerHistorial,
+);
+router.use('/sesiones', requireAuth, requireRole('DOCENTE'));
+router.get('/sesiones', session.list);
+router.get('/sesiones/:id', validate(idSchema, 'params'), session.detail);
+router.get('/sesiones/:id/alumnos', validate(idSchema, 'params'), session.students);
+router.put(
+  '/sesiones/:id/asistencias',
+  validate(idSchema, 'params'),
+  validate(asistenciaSchema),
+  session.save,
+);

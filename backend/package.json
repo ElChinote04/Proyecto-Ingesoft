@@ -1,13 +1,41 @@
 {
-  "name": "backend",
+  "name": "sage-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.21.0"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node scripts/test.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "node prisma/seed.js",
+    "db:status": "prisma migrate status"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "bcrypt": "6.0.0",
+    "cookie-parser": "1.4.7",
+    "cors": "2.8.5",
+    "dotenv": "17.2.3",
+    "express": "5.2.1",
+    "express-rate-limit": "8.7.0",
+    "helmet": "8.1.0",
+    "jsonwebtoken": "9.0.3",
+    "pg": "8.16.3",
+    "winston": "3.19.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "prisma": "7.10.0",
+    "supertest": "7.2.2"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2",
+    "mysql2": "3.24.5"
+  }
 }

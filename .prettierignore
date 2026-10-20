@@ -1,0 +1,10 @@
+node_modules
+.tools
+work
+dist
+logs
+package-lock.json
+**/package-lock.json
+**/prisma/migrations
+*.svg
+*.png
