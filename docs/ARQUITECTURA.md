@@ -2,20 +2,21 @@
 
 ## Fuentes y trazabilidad
 
-Se revisaron el Plan de Proyecto (19 páginas), las tres hojas de Backlog (2).xlsx (24 historias), SAGE_Diagrama_Clases_expanded.svg, Documentacion_Diagrama_Clases.pdf (8 páginas), las tres imágenes adjuntas y el repositorio inicial. El usuario aplazó el documento separado de arquitectura y el estándar de programación. Las decisiones de stack/capas de este prototipo provienen de sus instrucciones posteriores de implementación.
+Se revisaron el Plan de Proyecto (19 páginas), las tres hojas de Backlog (2).xlsx (24 historias), SAGE_Diagrama_Clases_expanded.svg, Documentacion_Diagrama_Clases.pdf (8 páginas), las imágenes adjuntas y el repositorio. La ampliación del 20 de octubre también aplica los Estándares de Interfaz Gráfica, Estándares de Programación de SAGE y los requisitos funcionales aportados. Las decisiones de stack/capas provienen de las instrucciones expresas de implementación.
 
 La revisión previa precedió al código. El alcance inicial era Login + Asistencia; la ampliación solicitada permite crear todo su contexto académico sin seed. El flujo de pagos continúa como contexto futuro. De matrícula se implementan registro y asignación, sin baja ni traslado.
 
-| Fuente                                           | Requisito                                                                | Realización                                                              |
-| ------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| Backlog, Historia de usuario A4:M4, US-001, Must | Validar credenciales, opciones por rol, registrar intentos fallidos      | bcrypt/JWT, menú DOCENTE, requireAuth/requireRole, Winston               |
-| Backlog, A14:M14, US-014, Must                   | Presente, tardanza o inasistencia por alumno/sesión, fecha/sección/curso | Pantallas de sesión/asistencia, transacción y relaciones Prisma          |
-| US-014 depende de US-001 y US-005                | Contar con usuarios y matrículas                                         | Alta de alumnos y matrícula única por año desde administración           |
-| Retroalimentación y US-002                       | Crear/editar/desactivar cuentas y varios roles por usuario               | Usuario N:M Rol, perfiles independientes, administración y revocación    |
-| US-021                                           | Asignar curso/docente/aula en horario visual                             | Matriz semanal por año/sección/docente/aula y creación de sesiones       |
-| US-022                                           | Evitar cruces de docente, aula y sección                                 | Validación transaccional de solapamientos, incluida concurrencia         |
-| Retroalimentación                                | Auditoría consistente                                                    | Timestamps comunes, helpers auditCreate/auditUpdate y evento de guardado |
-| Retroalimentación                                | Errores de login completos                                               | Bloques que crecen y ajustan líneas, sin truncado ni tooltips            |
+| Fuente                            | Requisito                                                                | Realización                                                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| US-001, Must                      | Validar credenciales, opciones por rol, registrar intentos fallidos      | Cuatro perfiles, acceso privado alumno/familia, cambio inicial, bloqueo por cuenta, inactividad, permisos y auditoría de seguridad |
+| US-023, Should                    | Horario semanal docente/alumno de solo lectura                           | Consulta personalizada por año activo, actualización automática y matriz semanal                                                   |
+| Backlog, A14:M14, US-014, Must    | Presente, tardanza o inasistencia por alumno/sesión, fecha/sección/curso | Pantallas de sesión/asistencia, transacción y relaciones Prisma                                                                    |
+| US-014 depende de US-001 y US-005 | Contar con usuarios y matrículas                                         | Alta de alumnos y matrícula única por año desde administración                                                                     |
+| Retroalimentación y US-002        | Crear/editar/desactivar cuentas y varios roles por usuario               | Usuario N:M Rol, perfiles independientes, administración y revocación                                                              |
+| US-021                            | Asignar curso/docente/aula en horario visual                             | Matriz semanal por año/sección/docente/aula y creación de sesiones                                                                 |
+| US-022                            | Evitar cruces de docente, aula y sección                                 | Validación transaccional de solapamientos, incluida concurrencia                                                                   |
+| Retroalimentación                 | Auditoría consistente                                                    | Timestamps comunes, helpers auditCreate/auditUpdate y evento de guardado                                                           |
+| Retroalimentación                 | Errores de login completos                                               | Bloques que crecen y ajustan líneas, sin truncado ni tooltips                                                                      |
 
 Figma: [Prototipo SAGE](https://www.figma.com/design/gCuuBOpsdHJhx289Udq40E/SAGE-%E2%80%94-Prototipo-Completo?node-id=2003-2). Se inspeccionaron SEC 01–03 y ASI 01–03, incluyendo los nodos 2005:7, 2013:1022, 2013:1109 y 2013:1229. Se conservaron Inter, morado #4c1d95, navegación lateral, formulario, tabla de estados y confirmación. Los vectores de radio/menú/chevron se sirven localmente. Se retiraron controles de simulación del diseño; cantidades y resultados se calculan con datos reales. Los mensajes no tienen altura fija.
 
@@ -29,7 +30,7 @@ El seed opcional y las pruebas acceden al ORM para preparar/verificar datos. La 
 
 ## Modelo de dominio
 
-Se mantiene **Estudiante**, nombre del diagrama. En asistencia, `alumnoId` representa su ID. Persona se relaciona opcionalmente con Usuario, Docente y Estudiante mediante composición. No hay herencia excluyente. ADMINISTRADOR habilita gestión; APODERADO puede coexistir con DOCENTE sin crear otra Persona. No se implementa todavía vínculo de representación familiar porque este recorrido no lo utiliza.
+Se mantiene **Estudiante**, nombre del diagrama. En asistencia, `alumnoId` representa su ID. Persona tiene asociaciones opcionales con Usuario, Docente, Estudiante y Apoderado. No hay herencia excluyente. ADMINISTRADOR es un rol; APODERADO puede coexistir con DOCENTE sin crear otra Persona. ApoderadoEstudiante vincula perfiles con parentesco y actividad; permite acceso privado a información y asistencia de estudiantes vinculados.
 
 AsistenciaEstudiante → Matricula → Estudiante/Seccion. AsistenciaEstudiante → SesionClase → CursoSeccionDocenteAula → CursoSeccionDocente → Curso/Seccion/Docente. Seccion → Grado/AnioAcademico. Esas relaciones conservan el contexto del modelo suministrado y evitan copiar curso, docente o fecha en cada fila de asistencia.
 
@@ -47,7 +48,9 @@ PUT /sesiones/:id/asistencias guarda el padrón completo. Una transacción READ 
 
 JWT firmado HS256 con subject, issuer, audience y jti; el servidor guarda el identificador de sesión y su vencimiento. La cookie HttpOnly contiene el token y el frontend nunca lo lee. La BD permite revocar inmediatamente al cerrar sesión y rechazar cuentas desactivadas. Los roles se consultan en cada petición. Los tokens vencidos/manipulados y las sesiones revocadas devuelven 401; rol o sesión ajena, 403.
 
-Se usa bcrypt con costo 12 y comparación de costo equivalente para identificadores inexistentes. La contraseña nunca sale en un DTO. El límite de 30 solicitudes de login por IP/15 min es una protección técnica local, no una política académica inferida de la pantalla de bloqueo de Figma.
+Se usa bcrypt con costo 12 y comparación equivalente para identificadores inexistentes. La contraseña nunca sale en un DTO. Además del límite de 30 solicitudes por IP/15 min, hay bloqueo por intentos consecutivos por cuenta y vencimiento por inactividad, configurables. Las altas y restablecimientos administrativos exigen cambiar contraseña; se revocan todas las sesiones al hacerlo. Los usuarios previos mantienen sus credenciales. La sesión absoluta conserva JWT_EXPIRES_IN.
+
+Los eventos de acceso incluyen resultado, origen y requestId; usuario puede ser nulo si la cuenta no existe. Un trigger impide modificar/eliminar eventos. Esto satisface seguridad de acceso de US-001; **US-003 no se implementó**, por indicación del propietario, y continúa pendiente con los módulos de notas y pagos.
 
 ## Decisiones menores
 
@@ -60,7 +63,7 @@ Se usa bcrypt con costo 12 y comparación de costo equivalente para identificado
 
 ## Límites de esta arquitectura de demostración
 
-Una instancia de backend, limitador de login en memoria y PostgreSQL local Docker. No hay despliegue público, balanceador, TLS configurado, recuperación de contraseña ni todos los módulos del plan global. Catálogos, matrículas, bloques y sesiones tienen creación/consulta; sus bajas, traslados y reprogramaciones no forman parte de este recorrido. Los usuarios sí permiten editar identificador, roles, actividad y contraseña. Los nombres y documentos de identidades existentes no se cambian desde esta pantalla.
+Una instancia de backend, limitador por IP en memoria y PostgreSQL local Docker. No hay despliegue público, balanceador, TLS configurado, recuperación por correo ni todos los módulos del plan. Catálogos, matrículas y sesiones tienen creación/consulta; traslados y bajas académicas siguen pendientes. Los bloques del año activo admiten PUT y retiro lógico; si ya tienen sesiones no se editan para preservar su historial. Las cuentas admiten edición administrativa y cambio de contraseña propia. Los nombres y documentos existentes no se cambian desde esa pantalla.
 
 ## Instalación y administración sin seed
 
@@ -73,3 +76,11 @@ Los bloques se solapan cuando inicioA < finB e inicioB < finA, en el mismo día/
 Cada mutación guarda RegistroAuditoria en la misma transacción. El log de éxito se emite después del commit. Se reutiliza el historial existente y no se introducen entidades de auditoría duplicadas. La consulta administrativa muestra los últimos 100 eventos, sin editar/eliminar.
 
 Se inspeccionaron también las referencias Figma de usuarios (2007:263), matrícula (2010:672), matriz horaria (2017:1623) y asignación (2019:1746). Se adaptaron a varios roles, catálogos reales y los pasos necesarios para una instalación vacía; se conservaron paleta, tipografía, navegación y formularios. No se incorporaron controles de simulación.
+
+## Horario personal y año activo
+
+La migración del 20 de octubre añade AnioAcademico.activo y fechas opcionales de inicio/fin (ambas presentes y ordenadas si se envían). Un índice parcial SQL permite un único año activo; otro limita duplicados de bloques activos, permitiendo conservar los retirados. El primer año nuevo queda activo y los posteriores requieren activación administrativa. Para datos anteriores se elige el año calendario si existe y, en su defecto, el más reciente.
+
+El repositorio del portal consulta solo asignaciones del docente o de la matrícula activa del alumno en ese año. La API no admite un ID de otra persona. React muestra el formato semanal de Figma y actualiza cada 10 segundos con la pestaña visible, al abrir y recuperar foco. Estas lecturas no prolongan la sesión por inactividad. No hay WebSockets ni permisos de edición en la consulta personal.
+
+Los nodos Figma 2137:4051, 2184:4996, 2006:193, 2006:257 y 2051:2677 se revisaron con contexto y captura. El portal muestra solo datos implementados, sin cifras simuladas de notas o pagos. Contratos, reglas, casos y límites: [US-001 y US-023](ITERACION_1_ACCESO_HORARIOS.md).

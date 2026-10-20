@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Feedback } from '../components/Feedback';
 export default function AppLayout({
   children,
   step = 'Seleccionar sesión',
   section = 'Asistencia',
+  anioAcademico,
   onLeave = (action) => action(),
 }) {
   const { user, logout } = useAuth();
+  useEffect(() => {
+    document.title = `SAGE | ${section} · ${step}`;
+  }, [section, step]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   async function close() {
@@ -27,7 +31,8 @@ export default function AppLayout({
           <div className="brand">SAGE</div>
           <p className="caption">{user.roles.join(' · ')}</p>
           <nav aria-label="Menú principal">
-            {user.roles.includes('ADMINISTRADOR') &&
+            {!user.requiereCambioContrasena &&
+              user.roles.includes('ADMINISTRADOR') &&
               [
                 ['inicio', 'Inicio'],
                 ['usuarios', 'Usuarios y roles'],
@@ -58,7 +63,7 @@ export default function AppLayout({
                   {label}
                 </button>
               ))}
-            {user.roles.includes('DOCENTE') && (
+            {!user.requiereCambioContrasena && user.roles.includes('DOCENTE') && (
               <button
                 className={section === 'Asistencia' ? 'nav-active' : 'nav-item'}
                 onClick={() =>
@@ -74,15 +79,72 @@ export default function AppLayout({
                 Control de asistencia
               </button>
             )}
+            {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['DOCENTE', 'ALUMNO'].includes(rol)) && (
+                <button
+                  className={section === 'Mi horario' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/horario';
+                    })
+                  }
+                >
+                  <img
+                    src={section === 'Mi horario' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                    alt=""
+                  />
+                  Mi horario
+                </button>
+              )}
+            {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)) && (
+                <button
+                  className={section === 'Portal académico' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/portal';
+                    })
+                  }
+                >
+                  <img
+                    src={
+                      section === 'Portal académico' ? '/figma/nav-active.svg' : '/figma/nav.svg'
+                    }
+                    alt=""
+                  />
+                  Inicio
+                </button>
+              )}
+            <button
+              className={section === 'Seguridad' ? 'nav-active' : 'nav-item'}
+              onClick={() =>
+                onLeave(() => {
+                  window.location.hash = '/contrasena';
+                })
+              }
+            >
+              <img
+                src={section === 'Seguridad' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                alt=""
+              />
+              Cambiar contraseña
+            </button>
           </nav>
         </div>
         <div className="sidebar-footer">
-          Prototipo de arquitectura<span className="caption">Gestión académica escolar</span>
+          {anioAcademico ? `Año académico ${anioAcademico}` : 'SAGE'}
+          <span className="caption">{user.roles.join(' · ')}</span>
         </div>
       </aside>
       <div className="workspace">
         <header className="topbar">
-          <strong>{section === 'Asistencia' ? 'Control de asistencia' : section}</strong>
+          <strong>
+            {section === 'Asistencia'
+              ? 'Control de asistencia'
+              : section === 'Portal académico'
+                ? step
+                : section}
+          </strong>
           <div>
             <span className="muted">{user.nombre}</span>
             <button className="text-button" disabled={busy} onClick={() => onLeave(close)}>
@@ -92,7 +154,7 @@ export default function AppLayout({
         </header>
         <main>
           <div className="breadcrumb">
-            {section}
+            Inicio
             <span aria-hidden="true">/</span>
             {step}
           </div>

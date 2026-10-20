@@ -7,13 +7,13 @@ export class ApiError extends Error {
     this.details = error.details;
   }
 }
-export async function api(path, { body, ...options } = {}) {
+export async function api(path, { body, headers, ...options } = {}) {
   let response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
       ...options,
       credentials: 'include',
-      headers: { ...(body && { 'Content-Type': 'application/json' }) },
+      headers: { ...(body && { 'Content-Type': 'application/json' }), ...headers },
       ...(body && { body: JSON.stringify(body) }),
     });
   } catch (error) {
@@ -29,6 +29,8 @@ export async function api(path, { body, ...options } = {}) {
   if (!response.ok) {
     if (response.status === 401 && path !== '/auth/login' && path !== '/auth/me')
       window.dispatchEvent(new Event('sage:expired'));
+    if (payload.error?.code === 'PASSWORD_CHANGE_REQUIRED')
+      window.dispatchEvent(new Event('sage:password-required'));
     throw new ApiError(response.status, payload.error);
   }
   return payload.data ?? payload;

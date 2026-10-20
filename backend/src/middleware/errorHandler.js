@@ -1,6 +1,7 @@
+import { registrarDenegacion } from '../services/authService.js';
 import { AppError } from '../errors/AppError.js';
 import { logger } from '../logging/logger.js';
-export function errorHandler(error, req, res, _next) {
+export async function errorHandler(error, req, res, _next) {
   let known = error instanceof AppError ? error : null;
   if (error.type === 'entity.parse.failed')
     known = new AppError(400, 'INVALID_JSON', 'El cuerpo debe ser JSON válido.');
@@ -9,6 +10,16 @@ export function errorHandler(error, req, res, _next) {
   if (error.code === 'P2002')
     known = new AppError(409, 'CONFLICT', 'Ya existe un registro con esos datos.');
   const status = known?.status ?? 500;
+  if (status === 403 && req.user) {
+    try {
+      await registrarDenegacion(req);
+    } catch {
+      logger.error('No se pudo registrar la denegación de acceso', {
+        module: 'auditoria',
+        requestId: req.requestId,
+      });
+    }
+  }
   // Nunca registrar body, cookies, URL de BD ni el mensaje libre de un driver.
   logger.log(status >= 500 ? 'error' : 'warn', known?.message ?? 'Error interno de aplicación', {
     module: 'http',

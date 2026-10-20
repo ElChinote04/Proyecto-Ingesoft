@@ -15,6 +15,7 @@ const admin = request.agent(app),
   teacher = request.agent(app),
   secondTeacher = request.agent(app);
 const password = 'PruebaFlujo123!';
+const teacherPassword = 'DocentePersonal123!';
 const initial = {
   numeroDocumento: 'ADMIN-01',
   nombres: 'María',
@@ -137,6 +138,17 @@ test('05 el docente inicia sesión, todavía sin clases, y no administra', async
     .send({ identificador: teacherInput.identificador, contrasena: password })
     .expect(200);
   assert.equal(r.body.data.docenteId, teacherUser.docenteId);
+  assert.equal(r.body.data.requiereCambioContrasena, true);
+  await teacher.get(`${base}/sesiones`).expect(403);
+  await teacher
+    .put(`${base}/auth/contrasena`)
+    .send({ contrasenaActual: password, nuevaContrasena: teacherPassword })
+    .expect(200);
+  await teacher
+    .post(`${base}/auth/login`)
+    .send({ identificador: teacherInput.identificador, contrasena: teacherPassword })
+    .expect(200);
+
   assert.deepEqual((await teacher.get(`${base}/sesiones`).expect(200)).body.data, []);
   for (const route of ['usuarios', 'catalogos', 'estudiantes', 'horarios', 'auditoria'])
     await teacher.get(`${base}/admin/${route}`).expect(403);
@@ -234,6 +246,14 @@ test('09 asigna curso/sección/docente/aula y el bloque semanal', async () => {
   await secondTeacher
     .post(`${base}/auth/login`)
     .send({ identificador: otherTeacher.identificador, contrasena: password })
+    .expect(200);
+  await secondTeacher
+    .put(`${base}/auth/contrasena`)
+    .send({ contrasenaActual: password, nuevaContrasena: 'SegundoPersonal123!' })
+    .expect(200);
+  await secondTeacher
+    .post(`${base}/auth/login`)
+    .send({ identificador: otherTeacher.identificador, contrasena: 'SegundoPersonal123!' })
     .expect(200);
 });
 test('10 detecta por separado cruces de docente, aula y sección sin escritura parcial', async () => {
@@ -336,7 +356,7 @@ test('16 PUT repetido de usuario acepta ambos guardados; desactivar revoca sesio
   teacherUser = (await edit(teacherUser, { activo: true }).expect(200)).body.data;
   await teacher
     .post(`${base}/auth/login`)
-    .send({ identificador: teacherUser.identificador, contrasena: password })
+    .send({ identificador: teacherUser.identificador, contrasena: teacherPassword })
     .expect(200);
   assert.equal(
     (await teacher.get(`${base}/sesiones/${session.id}/alumnos`)).body.data.alumnos[0].estado,
@@ -350,7 +370,7 @@ test('17 protege al administrador y al cambiar contraseña revoca el acceso ante
   await teacher.get(`${base}/auth/me`).expect(401);
   await teacher
     .post(`${base}/auth/login`)
-    .send({ identificador: teacherUser.identificador, contrasena: password })
+    .send({ identificador: teacherUser.identificador, contrasena: teacherPassword })
     .expect(401);
   await teacher
     .post(`${base}/auth/login`)

@@ -2,9 +2,11 @@
 
 Sistema Académico de Gestión Educativa. Permite completar el recorrido **administrador → docente → alumno → matrícula → horario → sesión → asistencia**, con PostgreSQL, auditoría y logs. **La instalación no ejecuta el seed:** todas las cuentas y los datos académicos se pueden crear desde la aplicación.
 
-Se cubren US-001, gestión de cuentas y roles de US-002, registro/matrícula de US-005, asistencia de US-014, asignación horaria de US-021 y validación de cruces de US-022 para este recorrido. [Fuentes y límites](docs/ARQUITECTURA.md).
+Se cubren acceso por roles de US-001, gestión de cuentas y roles de US-002, registro/matrícula de US-005, asistencia de US-014, asignación horaria de US-021 y validación de cruces de US-022 para este recorrido. Se añadió US-023: horario semanal personal para docente y alumno, y acceso académico para alumno/apoderado. **US-003 permanece pendiente y fue excluida de esta ampliación.** [Fuentes y límites](docs/ARQUITECTURA.md).
 
-**Para continuar con otro integrante o una nueva IA:** [contexto completo de implementación](docs/CONTEXTO_COMPLETO_PROT_SAGE.md) y [mensaje para iniciar otro chat](docs/INICIO_NUEVO_CHAT.md). Incluyen modelo, API, reglas, configuración, comprobaciones y pendientes reales.
+**Ampliación del 20 de octubre:** [funcionalidades, preparación sin seed, parámetros y casos de prueba de US-001/US-023](docs/ITERACION_1_ACCESO_HORARIOS.md). Las cuentas nuevas deben cambiar la contraseña inicial; las anteriores se conservan. El apoderado requiere un vínculo familiar creado por administración y los horarios utilizan el único año académico activo.
+
+**Para continuar con otro integrante o una nueva IA:** [contexto completo de implementación](docs/CONTEXTO_COMPLETO_PROT_SAGE.md) y la ampliación anterior. Incluyen modelo, API, reglas, configuración, comprobaciones y pendientes reales.
 
 ## Actualizar una instalación existente al contrato sin versiones
 
@@ -17,7 +19,7 @@ npm.cmd run db:migrate
 powershell -ExecutionPolicy Bypass -File .\scripts\Start-Sage.ps1
 ```
 
-Mantén Docker Desktop funcionando. La migración elimina únicamente los contadores version de Usuario y SesionClase y conserva sus datos. Recarga el navegador para usar el frontend actualizado. Asistencia usa PUT (el POST antiguo ya no existe); usuarios conserva PUT sin version. Las respuestas usan `{ data: ... }` o `{ error: ... }`, sin success. Las instalaciones nuevas reciben el esquema actualizado al ejecutar Setup-Sage.ps1.
+Mantén Docker Desktop funcionando. La migración anterior retiró los contadores version; la nueva añade perfiles familiares, seguridad, año activo y retiro lógico de horarios, conservando los datos. Recarga el navegador para usar el frontend actualizado. Asistencia y ediciones usan PUT, sin version. Las respuestas usan `{ data: ... }` o `{ error: ... }`, sin success. Start-Sage.ps1 también genera Prisma y aplica migraciones antes de arrancar.
 
 ## Inicio rápido en Windows
 
@@ -108,18 +110,20 @@ Los lockfiles fijan las dependencias. Los overrides de deepmerge-ts/mysql2 afect
 
 Los archivos reales de entorno, runtime, logs, dependencias y compilados están excluidos de Git.
 
-| Archivo / variable                     | Uso                                                                           |
-| -------------------------------------- | ----------------------------------------------------------------------------- |
-| raíz: POSTGRES_PASSWORD, POSTGRES_PORT | Contenedor y puerto                                                           |
-| backend: NODE_ENV, HOST, PORT          | Desarrollo, 127.0.0.1, puerto 3000                                            |
-| DATABASE_URL                           | Conexión a sage, coherente con Docker                                         |
-| TEST_DATABASE_URL                      | Conexión base cuyo nombre termina en _test; se crean bases efímeras distintas |
-| FRONTEND_URL                           | Origen CORS: http://localhost:5173                                            |
-| JWT_SECRET, JWT_EXPIRES_IN             | Secreto generado y vigencia de sesión, por defecto 1h                         |
-| INITIAL_SETUP_KEY                      | Clave aleatoria local; solo sirve antes del primer administrador              |
-| LOG_LEVEL, LOG_DIR                     | info y logs relativo a backend                                                |
-| DEMO_PASSWORD                          | Contraseña del seed opcional                                                  |
-| frontend: VITE_API_URL                 | http://localhost:3000/api/v1                                                  |
+| Archivo / variable                     | Uso                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------- |
+| raíz: POSTGRES_PASSWORD, POSTGRES_PORT | Contenedor y puerto                                                             |
+| backend: NODE_ENV, HOST, PORT          | Desarrollo, 127.0.0.1, puerto 3000                                              |
+| DATABASE_URL                           | Conexión a sage, coherente con Docker                                           |
+| TEST_DATABASE_URL                      | Conexión base cuyo nombre termina en _test; se crean bases efímeras distintas   |
+| FRONTEND_URL                           | Origen CORS: http://localhost:5173                                              |
+| JWT_SECRET, JWT_EXPIRES_IN             | Secreto generado y vigencia de sesión, por defecto 1h                           |
+| LOGIN_MAX_ATTEMPTS, LOGIN_LOCK_SECONDS | Intentos fallidos consecutivos y bloqueo por cuenta: 5 y 900 segundos           |
+| SESSION_IDLE_SECONDS                   | Cierre por inactividad: 1800 segundos; las consultas automáticas no lo renuevan |
+| INITIAL_SETUP_KEY                      | Clave aleatoria local; solo sirve antes del primer administrador                |
+| LOG_LEVEL, LOG_DIR                     | info y logs relativo a backend                                                  |
+| DEMO_PASSWORD                          | Contraseña del seed opcional                                                    |
+| frontend: VITE_API_URL                 | http://localhost:3000/api/v1                                                    |
 
 `npm run setup -- --env-only` prepara la configuración sin instalar ni iniciar Docker. Mantén coordinadas las credenciales de raíz y backend; cambiar POSTGRES_PASSWORD no cambia la contraseña de un volumen existente.
 

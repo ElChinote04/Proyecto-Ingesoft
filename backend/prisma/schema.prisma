@@ -20,6 +20,7 @@ enum CondicionAsistencia {
 }
 
 model Persona {
+  apoderado       Apoderado?
   id              Int         @id @default(autoincrement())
   numeroDocumento String      @unique
   nombres         String
@@ -33,19 +34,22 @@ model Persona {
 }
 
 model Usuario {
-  id                     Int                    @id @default(autoincrement())
-  personaId              Int                    @unique
-  persona                Persona                @relation(fields: [personaId], references: [id])
-  identificador          String                 @unique
-  hashContrasena         String
-  activo                 Boolean                @default(true)
-  creadoEn               DateTime               @default(now())
-  modificadoEn           DateTime               @updatedAt
-  roles                  UsuarioRol[]
-  sesiones               SesionAuth[]
-  eventos                RegistroAuditoria[]
-  asistenciasCreadas     AsistenciaEstudiante[] @relation("Creador")
-  asistenciasModificadas AsistenciaEstudiante[] @relation("Modificador")
+  id                       Int                    @id @default(autoincrement())
+  personaId                Int                    @unique
+  persona                  Persona                @relation(fields: [personaId], references: [id])
+  identificador            String                 @unique
+  hashContrasena           String
+  activo                   Boolean                @default(true)
+  intentosFallidos         Int                    @default(0)
+  bloqueadoHasta           DateTime?
+  requiereCambioContrasena Boolean                @default(false)
+  creadoEn                 DateTime               @default(now())
+  modificadoEn             DateTime               @updatedAt
+  roles                    UsuarioRol[]
+  sesiones                 SesionAuth[]
+  eventos                  RegistroAuditoria[]
+  asistenciasCreadas       AsistenciaEstudiante[] @relation("Creador")
+  asistenciasModificadas   AsistenciaEstudiante[] @relation("Modificador")
 }
 
 model Instalacion {
@@ -69,11 +73,12 @@ model UsuarioRol {
 }
 
 model SesionAuth {
-  id        String   @id
-  usuarioId Int
-  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  expiraEn  DateTime
-  creadoEn  DateTime @default(now())
+  id              String   @id
+  usuarioId       Int
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  ultimaActividad DateTime @default(now())
+  expiraEn        DateTime
+  creadoEn        DateTime @default(now())
 
   @@index([expiraEn])
 }
@@ -87,18 +92,41 @@ model Docente {
 }
 
 model Estudiante {
-  id               Int         @id @default(autoincrement())
-  personaId        Int         @unique
-  persona          Persona     @relation(fields: [personaId], references: [id])
-  codigoEstudiante String      @unique
+  id               Int                   @id @default(autoincrement())
+  personaId        Int                   @unique
+  persona          Persona               @relation(fields: [personaId], references: [id])
+  codigoEstudiante String                @unique
+  apoderados       ApoderadoEstudiante[]
   matriculas       Matricula[]
 }
 
+model Apoderado {
+  id          Int                   @id @default(autoincrement())
+  personaId   Int                   @unique
+  persona     Persona               @relation(fields: [personaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  estudiantes ApoderadoEstudiante[]
+}
+
+model ApoderadoEstudiante {
+  apoderadoId  Int
+  estudianteId Int
+  apoderado    Apoderado  @relation(fields: [apoderadoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  estudiante   Estudiante @relation(fields: [estudianteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parentesco   String     @db.VarChar(50)
+  activo       Boolean    @default(true)
+  creadoEn     DateTime   @default(now())
+
+  @@id([apoderadoId, estudianteId])
+}
+
 model AnioAcademico {
-  id         Int         @id @default(autoincrement())
-  codigo     String      @unique
-  secciones  Seccion[]
-  matriculas Matricula[]
+  id          Int         @id @default(autoincrement())
+  codigo      String      @unique
+  activo      Boolean     @default(false)
+  fechaInicio DateTime?   @db.Date
+  fechaFin    DateTime?   @db.Date
+  secciones   Seccion[]
+  matriculas  Matricula[]
 }
 
 model Grado {
@@ -164,6 +192,7 @@ model Aula {
 }
 
 model CursoSeccionDocenteAula {
+  activo       Boolean             @default(true)
   id           Int                 @id @default(autoincrement())
   asignacionId Int
   asignacion   CursoSeccionDocente @relation(fields: [asignacionId], references: [id])
@@ -174,7 +203,7 @@ model CursoSeccionDocenteAula {
   horaFin      String
   sesiones     SesionClase[]
 
-  @@unique([asignacionId, aulaId, diaSemana, horaInicio])
+  // La unicidad solo de bloques activos se aplica mediante índice parcial en SQL.
 }
 
 model SesionClase {
@@ -213,12 +242,16 @@ model AsistenciaEstudiante {
 
 model RegistroAuditoria {
   id         Int      @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id])
+  usuarioId  Int?
+  usuario    Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
   fechaHora  DateTime @default(now())
   tipoEvento String
+  entidad    String   @default("Registro")
+  resultado  String   @default("EXITO")
+  requestId  String?
   entidadId  Int
   detalle    Json
 
   @@index([entidadId, fechaHora])
+  @@index([tipoEvento, fechaHora], map: "RegistroAuditoria_tipo_fecha")
 }

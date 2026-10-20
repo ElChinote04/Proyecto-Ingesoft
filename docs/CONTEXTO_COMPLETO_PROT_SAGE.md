@@ -2,7 +2,15 @@
 
 Documento de traspaso para el equipo y asistentes de programación como Codex o Claude.
 
-**Fecha de revisión del código:** 2 de octubre de 2026. **Versión de referencia:** commit `b77829959668744dec34d5e42caf3ee605a23dca`, rama `feat/prototipo-arquitectura-sage`. Este documento se redactó después de ese commit. Actualizado también para el refactor local del 2 de octubre: PUT sin version y respuestas sin success. Describe el código con estos cambios; las evidencias de navegador corresponden al 1 de octubre. Las 38 pruebas de API, lint, build y preservación de datos durante la migración se volvieron a verificar el 2 de octubre; véase VERIFICACION.md.
+**Fecha de revisión del código:** 20 de octubre de 2026, rama `feat/prototipo-arquitectura-sage`, ampliación local sobre `b8d9cfc`. Se conservan PUT sin version y respuestas sin success. La ampliación completa US-001 y US-023; **US-003 fue excluida expresamente y sigue pendiente**. Antes de continuar, leer [la especificación actual de acceso y horarios](ITERACION_1_ACCESO_HORARIOS.md), [API](API.md) y [verificación](VERIFICACION.md). Las secciones de evidencia fechadas el 1/2 de octubre son históricas.
+
+### Cambios principales del 20 de octubre
+
+Alumno y apoderado tienen portal académico privado; este último requiere vínculo familiar activo registrado por administración. Se añadieron Apoderado/ApoderadoEstudiante, cambio inicial obligatorio para altas/restablecimientos, cambio de contraseña propia, bloqueo por cuenta e inactividad configurables y auditoría de seguridad con correlación/origen. No hay notas ni pagos.
+
+MiHorario muestra asignaciones propias del docente o de la sección matriculada del alumno en el único año activo. Consulta al abrir/recuperar foco y cada 10 segundos con pestaña visible, sin mantener viva una sesión inactiva. Administración puede activar año y editar/retirar bloques; los que tienen sesiones se conservan y se sustituyen por otro bloque. Los años inactivos son de consulta para horarios.
+
+Archivos nuevos principales: `portal.controller.js`, `portal.service.js`, `portal.repository.js`, `seguridad.service.js`, validadores `portal.schemas.js`/`seguridad.schemas.js`; frontend `Portal.jsx`, `MiHorario.jsx`, `CambiarContrasena.jsx`, `useHorario.js`, `AdministrarPerfiles.jsx`, `GestionBloques.jsx`, `ConfirmarAccion.jsx`, `TablaDatos.jsx` y `AccesoLayout.jsx`. Tres suites suman 46 pruebas. Start-Sage genera Prisma y migra antes de iniciar. Véase el documento enlazado para contratos y casos reproducibles.
 
 **Repositorio:** <https://github.com/ElChinote04/Proyecto-Ingesoft>. No depende del historial del chat para entenderse. Los nombres de archivos relativos se resuelven desde la raíz del repositorio, salvo los enlaces Markdown entre documentos.
 
@@ -76,20 +84,21 @@ El trabajo previo revisó estos archivos proporcionados por el propietario:
 
 Los documentos originales externos no se encuentran todos versionados en el repositorio. Este documento sintetiza su aplicación al código, pero **no reemplaza los criterios originales para desarrollar módulos nuevos**. Solicitar al equipo el Plan, Backlog y diagrama si una tarea nueva depende de ellos.
 
-El documento separado de arquitectura y el estándar separado de programación **no fueron entregados**. El propietario indicó expresamente que no eran necesarios por ahora y que los aportaría después. No afirmar que se revisaron ni que se certificó conformidad con un estándar todavía ausente.
+En la etapa inicial el propietario aplazó los estándares separados. El 20 de octubre aportó Estándares de Interfaz Gráfica, Estándares de Programación - SAGE, Plan actualizado y requisitos RF01–RF147; se revisaron para esta ampliación. El Figma válido es gCuuBOpsdHJhx289Udq40E, confirmado expresamente; el archivo distinto enlazado dentro del PDF no es la referencia vigente.
 
 Prioridad acordada ante diferencias: decisiones arquitectónicas expresamente cerradas; Backlog y Plan para función; diagrama para dominio; estándar cuando se entregue para convenciones. Las correcciones explícitas posteriores del propietario deben incorporarse: por ejemplo, el diseño multirrol corrige la jerarquía excluyente del material previo.
 
 ### 2.2 Trazabilidad del alcance
 
-| Historia         | Aplicación en esta entrega                                                                 | Límite de la afirmación                                                          |
-| ---------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| **US-001, Must** | Validación de credenciales, acceso según roles, registro de login fallido, sesión y logout | No incorpora recuperación de contraseña ni MFA                                   |
-| **US-002**       | Alta, edición de identificador/roles/actividad/contraseña, varios roles, revocación        | No es un CRUD completo de todos los datos personales                             |
-| **US-005**       | Registro de estudiante y matrícula por año/grado/sección                                   | Sin bajas, traslados ni ciclo completo del diagrama de matrícula                 |
-| **US-014, Must** | Asistencia de cada alumno por sesión: presente, tardanza, ausente; persistencia y consulta | No incorpora justificaciones, avisos familiares ni reportes académicos generales |
-| **US-021**       | Asignación manual curso/sección/docente/aula; matriz semanal y sesiones fechadas           | Sin generación automática de horarios ni reprogramación                          |
-| **US-022**       | Rechazo de cruces de docente, aula y sección, incluida concurrencia por API                | No existe una restricción de exclusión SQL que cubra escrituras externas         |
+| Historia           | Aplicación en esta entrega                                                                 | Límite de la afirmación                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| **US-001, Must**   | Validación de credenciales, acceso según roles, registro de login fallido, sesión y logout | No incorpora recuperación de contraseña ni MFA                                   |
+| **US-002**         | Alta, edición de identificador/roles/actividad/contraseña, varios roles, revocación        | No es un CRUD completo de todos los datos personales                             |
+| **US-005**         | Registro de estudiante y matrícula por año/grado/sección                                   | Sin bajas, traslados ni ciclo completo del diagrama de matrícula                 |
+| **US-014, Must**   | Asistencia de cada alumno por sesión: presente, tardanza, ausente; persistencia y consulta | No incorpora justificaciones, avisos familiares ni reportes académicos generales |
+| **US-021**         | Asignación manual curso/sección/docente/aula; matriz semanal y sesiones fechadas           | Sin generación automática de horarios ni reprogramación                          |
+| **US-022**         | Rechazo de cruces de docente, aula y sección, incluida concurrencia por API                | No existe una restricción de exclusión SQL que cubra escrituras externas         |
+| **US-023, Should** | Horario semanal propio del docente/alumno, año activo y actualización automática           | Solo lectura; la edición administrativa preserva sesiones históricas             |
 
 US-014 depende de autenticación y matrícula (US-001/US-005); el recorrido ampliado añade la preparación académica que antes hacía el seed. US-022 complementa la asignación de US-021. La auditoría implementada no significa que se haya completado una historia más amplia de auditoría de notas/pagos, como US-003, ni todos los Must del Backlog.
 
@@ -214,7 +223,7 @@ El modelo se llama **Estudiante**, como el diagrama. La interfaz suele decir alu
 
 Las tablas y columnas generadas conservan nombres con mayúsculas y camelCase. En PostgreSQL se consultan con comillas dobles: `"Usuario"`, `"personaId"`. `SesionAuth` es acceso a la aplicación; `SesionClase` es una clase fechada. Son conceptos distintos.
 
-### 5.2 Diccionario de las 19 entidades
+### 5.2 Diccionario de entidades
 
 Salvo `Instalacion`, `UsuarioRol` y `SesionAuth`, las entidades tienen `id` entero autoincremental. Las relaciones se detallan por sus claves; los campos de navegación Prisma no son columnas adicionales.
 
@@ -247,7 +256,9 @@ NombreRol = ADMINISTRADOR | DOCENTE | ALUMNO | APODERADO
 CondicionAsistencia = PRESENTE | TARDANZA | AUSENTE
 ```
 
-`activo` es verdadero por defecto donde existe. `creadoEn` usa `now()` y `modificadoEn` usa `@updatedAt`. No todos los modelos tienen esos campos: no asumir un supermodelo universal de auditoría.
+El diccionario anterior describe las 19 entidades originales. Ahora hay 21: se añaden **Apoderado** (id, personaId único) y **ApoderadoEstudiante** (PK apoderadoId/estudianteId, parentesco, activo, creadoEn). Usuario añade intentosFallidos, bloqueadoHasta y requiereCambioContrasena; SesionAuth añade ultimaActividad; AnioAcademico añade activo y fechas opcionales; CursoSeccionDocenteAula añade activo; RegistroAuditoria añade entidad, resultado y requestId y permite usuarioId nulo. Índices parciales SQL garantizan un año activo y unicidad de bloques activos, permitiendo duplicados históricos retirados. El índice de bloques del diccionario original fue reemplazado por ese índice parcial.
+
+`activo` es verdadero por defecto salvo AnioAcademico (false; el servicio activa el primero). `creadoEn` usa `now()` y `modificadoEn` usa `@updatedAt`. No todos los modelos tienen esos campos: no asumir un supermodelo universal de auditoría.
 
 `UsuarioRol.usuario` y `SesionAuth.usuario` tienen borrado en cascada. Las otras relaciones mantienen las restricciones del esquema/migraciones; no hay borrado masivo expuesto en API. Un evento de auditoría tiene FK a su autor, pero `entidadId` **no es una FK polimórfica** validada por PostgreSQL contra cada tabla de negocio.
 
@@ -272,6 +283,7 @@ Una asistencia obtiene alumno, sección, año, curso, docente, fecha y aula reco
 1. `20261001022912_initial_sage`: esquema inicial, 18 modelos, enums, FKs, índices y claves únicas.
 2. `20261001120000_administracion_sin_seed`: añadió históricamente el contador de Usuario e Instalacion, incluido CHECK `id=1`.
 3. `20261002120000_eliminar_control_versiones`: elimina únicamente las columnas version de Usuario y SesionClase. Conserva filas, relaciones y auditoría histórica; no se reescriben migraciones ya aplicadas. La API omite version en detalles antiguos de asistencia sin alterar el evento guardado en BD.
+4. `20261020120000_acceso_horarios_auditoria`: perfiles familiares, seguridad de cuenta/sesión, año activo, retiro de bloques, índices parciales y protección de eventos. Conserva las columnas y filas anteriores; migra perfiles de cuentas APODERADO existentes. No introduce notas/pagos ni cierra US-003.
 
 Prisma mantiene además su tabla técnica `_prisma_migrations`; no es una entidad de negocio número 20.
 
@@ -293,7 +305,7 @@ Dos solicitudes simultáneas no deben crear dos administradores iniciales. El ma
 - Se rechaza reutilizar el documento con otra identidad; no se corrige silenciosamente el nombre.
 - Una Persona tiene como máximo una cuenta. Añadir un rol se hace editando esa cuenta.
 - Incluir DOCENTE crea/reutiliza Docente; código automático `DOC-${personaId}`. Incluir ALUMNO crea/reutiliza Estudiante; código `EST-${personaId}`.
-- Una cuenta DOCENTE + APODERADO es válida. APODERADO es un rol disponible; todavía no hay entidad de vínculo familiar ni un módulo de representación.
+- Una cuenta DOCENTE + APODERADO es válida. APODERADO crea/reutiliza su perfil; la administración registra vínculos ApoderadoEstudiante para autorizar consulta familiar.
 - Retirar un rol conserva Persona, perfiles, asignaciones e historial. Una cuenta docente sin DOCENTE pierde acceso aunque su perfil siga existiendo.
 - Crear usuario docente no asigna cursos, bloques ni clases. Crear usuario ALUMNO no lo matricula.
 - La edición admite identificador, roles, activo y contraseña opcional. No admite cambiar datos personales por este endpoint.
@@ -359,7 +371,7 @@ El servidor entrega el JWT en cookie **`sage_session`**: HttpOnly, SameSite=Lax,
 
 Cada petición protegida verifica firma/algoritmo/issuer/audience/expiración, sesión en BD, correspondencia del usuario, actividad y roles actuales. Logout elimina SesionAuth y expira la cookie. Un JWT firmado pero revocado deja de ser válido.
 
-Los DTO de usuario no incluyen hash. El DTO de autenticación contiene `id`, `identificador`, `nombre`, `roles[]`, `docenteId`; el administrativo incorpora personaId, documento, nombres/apellidos, activo.
+Los DTO no incluyen hash. Autenticación devuelve id, identificador, nombre, roles, permisos, docenteId, estudianteId, apoderadoId, requiereCambioContrasena e inactividadSegundos. El administrativo incorpora personaId, documento, nombres/apellidos y activo. Cada petición verifica inactividad; las consultas con X-Sage-Background no la renuevan. Altas/restablecimientos administrativos deben cambiar la contraseña mediante PUT /auth/contrasena, que revoca todas las sesiones. Las cuentas anteriores no se fuerzan a cambiar por la migración.
 
 ### 7.2 Matriz efectiva de permisos
 
@@ -372,6 +384,8 @@ Los DTO de usuario no incluyen hash. El DTO de autenticación contiene `id`, `id
 | Listar/abrir/guardar asistencia                               | No                                          | Solo si además tiene DOCENTE y clase propia | Sí, de sus clases                  | No                     |
 
 La interfaz oculta menús, pero la protección decisiva está en middleware y services. Tener ADMINISTRADOR no concede automáticamente permiso para registrar la asistencia de cualquier docente. Los roles se acumulan; no hay elección obligatoria de un único rol activo.
+
+Se añaden horario propio para DOCENTE/ALUMNO, portal propio/familiar para ALUMNO/APODERADO y cambio de contraseña para cualquier cuenta autenticada. Antes del cambio inicial solo me, logout y contrasena están habilitados. La API de acceso académico no acepta IDs arbitrarios para consultar el horario de otra persona.
 
 ### 7.3 Controles transversales
 
@@ -389,7 +403,7 @@ No hay MFA, refresh tokens, recuperación por correo, política configurable de 
 
 Base local: **`http://localhost:3000/api/v1`**. JSON UTF-8. Respuesta normal `{ "data": ... }`; health devuelve su objeto directamente. Altas → 201; lecturas, login, logout, edición y guardado de asistencia → 200.
 
-### 8.1 Inventario completo: 26 combinaciones método/ruta
+### 8.1 Inventario original y ampliación de rutas
 
 | #   | Método | Ruta relativa a /api/v1      | Acceso / efecto                                 |
 | --- | ------ | ---------------------------- | ----------------------------------------------- |
@@ -420,7 +434,12 @@ Base local: **`http://localhost:3000/api/v1`**. JSON UTF-8. Respuesta normal `{ 
 | 25  | POST   | `/admin/sesiones`            | ADMINISTRADOR; clase fechada                    |
 | 26  | GET    | `/admin/auditoria`           | ADMINISTRADOR; últimos 100 eventos              |
 
-No hay rutas DELETE, PATCH, paginación general o Swagger UI. El contrato detallado con respuestas completas está en [API.md](API.md), incluido en el paquete de contexto.
+La ampliación añade PUT /auth/contrasena, GET /horarios, GET /portal/estudiantes,
+GET /portal/estudiantes/:id/asistencias, PUT /admin/apoderados/estudiantes,
+PUT /admin/anios/:id/activacion, PUT /admin/bloques/:id y DELETE /admin/bloques/:id.
+Esta última hace retiro lógico. La asistencia del portal pagina 10/25/50 y los listados
+nuevos de bloques/vínculos tienen paginación visual. No hay PATCH ni Swagger UI.
+El contrato detallado está en [API.md](API.md).
 
 ### 8.2 Campos de las solicitudes
 
@@ -524,7 +543,7 @@ Rutas de interfaz:
 | `#/sesiones/:id`     | Padrón y formulario de asistencia                  |
 | `#/confirmacion`     | Resultado del último guardado en memoria           |
 
-Sin autenticación solo se muestra Login o Setup. ADMINISTRADOR sin DOCENTE entra a administración. Una cuenta con ambos puede navegar entre módulos; login la dirige a inicio administrativo. ALUMNO/APODERADO sin otros roles reciben vista de acceso restringido en el módulo docente.
+Sin autenticación solo se muestra Login o Setup. Una contraseña administrativa inicial dirige a cambio obligatorio. ADMINISTRADOR entra a administración; DOCENTE a asistencia; ALUMNO/APODERADO al portal. Los permisos se acumulan y muestran solo sus opciones. MiHorario consulta el perfil docente o alumno; una cuenta con ambos puede elegirlos. Los estudiantes y familias ya no reciben una pantalla genérica de acceso restringido.
 
 La confirmación no es un comprobante persistido ni una ruta recuperable con todos sus datos tras F5: el resultado vive en estado React. Al perderlo, la navegación cae en selección de sesiones; la asistencia sí permanece en PostgreSQL. El router tiene pantallas por defecto, no una página 404 estricta para todo hash desconocido.
 
@@ -876,7 +895,7 @@ La plantilla sage_test no necesita contener el esquema ni ser la base usada dire
 | `api.test.js`            | 20    | Health real, login/cookie, contraseña incorrecta, 401/403, propiedad, padrón de seed, guardado, enums, alumno ajeno, recuperación, duplicados/PUT repetido, entrada estricta, concurrencia, multirrol, actividad/tokens, CORS/JSON, repetición de seed, logout, error 500 seguro/logs                                                              |
 | `administracion.test.js` | 18    | Base vacía, instalación protegida y simultánea, multirrol/perfil/hash, duplicados sin huérfanos, permisos, catálogos, matrícula, reutilización de Persona ALUMNO, asignación, tres tipos de cruce, concurrencia/contigüidad, fechas, padrón, asistencia/auditoría, edición/roles/PUT repetido, revocación, protección admin y ausencia de secretos |
 
-Son **38 pruebas de integración**, no 38 pruebas visuales ni cobertura exhaustiva de todas las ramas del código. Una suite conserva el seed opcional; la administrativa empieza sin cuentas, roles ni años y crea el contexto por HTTP.
+Se añade `perfiles.test.js` con 8 casos de acceso, seguridad, privacidad y horario. Son **46 pruebas de integración**, no pruebas visuales ni cobertura exhaustiva de todas las ramas. Una suite conserva el seed opcional; administración y perfiles empiezan vacías y crean el contexto por HTTP.
 
 ### 13.3 Resultado registrado y sus límites
 
@@ -904,16 +923,16 @@ Este documento no afirma que se hayan vuelto a ejecutar esas pruebas el 2 de oct
 Esta lista separa el estado implementado de posibles tareas futuras. **No es una orden de implementarlas todas ni una declaración de prioridad Must adicional.** Cualquier ampliación debe contrastarse con Backlog/Plan y la tarea del propietario.
 
 1. **Detalle incompleto de auditoría:** cuatro altas usan `{}`; falta snapshot de identificador editado y observaciones de asistencia. Ya explicado con precisión en sección 10.
-2. **Subconjunto de SAGE:** no pagos, notas, competencias, justificaciones, relación familiar operativa, notificaciones ni recuperación de contraseña. El rol APODERADO no equivale a esos módulos.
-3. **Administración académica de alta/consulta:** sin editar/eliminar catálogos, bajar/trasladar matrículas, reprogramar bloques/sesiones o gestionar vigencias históricas. La cuenta de usuario sí admite edición/desactivación.
+2. **Subconjunto de SAGE:** no pagos, notas, competencias, justificaciones, notificaciones ni recuperación por correo. US-003 sigue pendiente por decisión expresa. Sí existe consulta académica/asistencia familiar autorizada.
+3. **Administración académica:** no edición/baja de catálogos ni traslado/baja de matrículas. Se puede editar/retirar bloque del año activo, preservando los que ya tienen sesiones, y activar un año. No hay reprogramación de sesiones históricas ni formulario de fechas del año académico.
 4. **Padrón dinámico:** no hay matrícula con fecha efectiva ni padrón congelado por clase. Un alumno incorporado hoy puede aparecer al abrir una clase anterior de esa sección.
 5. **Escala:** consultas generales sin paginación; auditoría limitada a últimos 100; bloqueo global de mutaciones administrativas; asistencia máximo 500 registros y body 100 KB. Ambos límites aplican: 500 observaciones largas pueden superar el tamaño de body antes del límite del array.
 6. **Concurrencia fuera del servicio:** no hay restricciones SQL completas para cruces ni para todas las coherencias entre tablas. Operaciones directas o futuras rutas deben respetar reglas/transacciones.
 7. **Seguridad de producción pendiente:** limitador en memoria, sin infraestructura TLS/proxy/secrets manager/backups ni validación de despliegue real. Usuario PostgreSQL del contenedor local no está separado en cuentas de privilegios mínimos por función.
 8. **Sesiones y UI:** sin refresh token; roles backend se actualizan por petición, menú React puede quedar temporalmente antiguo; confirmación depende de memoria; protección de edición pendiente no cubre todo cambio posible del hash.
-9. **Auditoría no inmutable a nivel DB:** no tiene trigger anti modificación ni retención/archivo administrativo; logs rotan y no garantizan conservación indefinida.
+9. **Retención de auditoría:** un trigger impide UPDATE/DELETE de eventos; no hay retención/archivo administrativo y el superusuario de PostgreSQL puede alterar controles SQL. Los logs rotan y no garantizan conservación indefinida.
 10. **Calidad comprobada con alcance concreto:** pruebas backend y revisión manual, sin pruebas UI automáticas ni CI remoto; sin ensayo de carga, recuperación de desastre, Linux o despliegue HTTPS documentado como ejecutado.
-11. **Fuentes pendientes:** no llegó el estándar separado ni el documento formal de arquitectura. No inventar normas o dar por terminadas historias completas fuera del recorrido revisado.
+11. **Cobertura de fuentes:** se recibieron y revisaron estándares y requisitos nuevos el 20 de octubre. No dar por terminadas todas las historias del plan ni todos los RF por implementar únicamente US-001 y US-023.
 
 Las limitaciones describen mecanismos observados o funciones ausentes. No implican que los fallos potenciales se hayan reproducido durante el recorrido aprobado por el propietario.
 
@@ -950,7 +969,7 @@ No usar reset de migraciones, borrado del volumen ni sustitución global del rep
 
 ### 15.3 Convenciones vigentes
 
-Módulos ESM con import/export; archivos backend `.js`, componentes React `.jsx`; funciones de servicio/repositorio separadas; nombres del dominio en español y funciones técnicas según el código existente; mensajes al usuario en español. Usar Zod para contratos, AppError para errores previstos y logger central para diagnóstico. ESLint frontend y Prettier sirven de controles existentes; no presentarlos como el estándar formal todavía no entregado.
+Módulos ESM con import/export; backend `.js`, React `.jsx`, CSS, capas separadas; mensajes en español. Usar Zod, AppError y logger central. La ampliación aplica los estándares aportados: nuevos archivos por recurso/responsabilidad, camelCase, dos espacios, punto y coma, comillas simples y sin Prisma fuera de repositorios salvo configuración/seed/pruebas. ESLint y Prettier verifican parte de estas reglas; no certifican por sí solos todas las convenciones.
 
 No versionar dependencias, compilados o cliente Prisma generado. Mantener lockfiles cuando cambian dependencias. No cambiar versiones principales o introducir TypeScript, otro ORM, otro motor de BD o microservicios como refactor incidental.
 

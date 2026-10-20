@@ -13,6 +13,9 @@ export async function seed(db) {
   return db.$transaction(
     async (tx) => {
       const roles = {};
+      const tieneAnioActivo = Boolean(
+        await tx.anioAcademico.findFirst({ where: { activo: true } }),
+      );
       for (const nombre of ['ADMINISTRADOR', 'DOCENTE', 'ALUMNO', 'APODERADO']) {
         roles[nombre] = await tx.rol.upsert({ where: { nombre }, update: {}, create: { nombre } });
       }
@@ -54,7 +57,7 @@ export async function seed(db) {
       const anio = await tx.anioAcademico.upsert({
         where: { codigo: '2026' },
         update: {},
-        create: { codigo: '2026' },
+        create: { codigo: '2026', activo: !tieneAnioActivo },
       });
       const grado = await tx.grado.upsert({
         where: { nombre: '3.°' },
@@ -99,11 +102,14 @@ export async function seed(db) {
         diaSemana: 5,
         horaInicio: '08:00',
       };
-      const bloque = await tx.cursoSeccionDocenteAula.upsert({
-        where: { asignacionId_aulaId_diaSemana_horaInicio: bloqueData },
-        update: {},
-        create: { ...bloqueData, horaFin: '08:45' },
-      });
+      const bloque =
+        (await tx.cursoSeccionDocenteAula.findFirst({
+          where: bloqueData,
+          orderBy: [{ activo: 'desc' }, { id: 'asc' }],
+        })) ??
+        (await tx.cursoSeccionDocenteAula.create({
+          data: { ...bloqueData, horaFin: '08:45' },
+        }));
       const fecha = new Date('2026-10-02T00:00:00Z');
       const sesion = await tx.sesionClase.upsert({
         where: { bloqueId_fecha: { bloqueId: bloque.id, fecha } },

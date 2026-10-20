@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './hooks/useAuth';
 import { Feedback, Loading } from './components/Feedback';
-import AppLayout from './layouts/AppLayout';
 import Login from './pages/Login';
 import SessionSelect from './pages/SessionSelect';
 import Attendance from './pages/Attendance';
 import Confirmation from './pages/Confirmation';
 import Admin from './pages/Admin';
 import Setup from './pages/Setup';
+import Portal from './pages/Portal';
+import MiHorario from './pages/MiHorario';
+import CambiarContrasena from './pages/CambiarContrasena';
 import './styles/app.css';
 function Screens() {
   const { user, loading, startupError, restore } = useAuth();
@@ -36,20 +38,20 @@ function Screens() {
       </div>
     );
   if (!user) return route === '/instalacion' ? <Setup /> : <Login />;
+  const perfiles = [user.roles.join(','), user.docenteId, user.estudianteId, user.apoderadoId].join(
+    ':',
+  );
+  if (user.requiereCambioContrasena || route === '/contrasena') return <CambiarContrasena />;
+  if (route === '/horario' && user.roles.some((rol) => ['DOCENTE', 'ALUMNO'].includes(rol)))
+    return <MiHorario key={perfiles} />;
+  if (route === '/portal' && user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)))
+    return <Portal key={perfiles} />;
   if (
     user.roles.includes('ADMINISTRADOR') &&
     (route.startsWith('/admin') || !user.roles.includes('DOCENTE'))
   )
     return <Admin key={route} page={route.split('/')[2] || 'inicio'} />;
-  if (!user.roles.includes('DOCENTE'))
-    return (
-      <AppLayout step="Acceso">
-        <h1>Acceso restringido</h1>
-        <Feedback intent="info">
-          Tu cuenta está autenticada, pero no tiene el rol Docente requerido para este módulo.
-        </Feedback>
-      </AppLayout>
-    );
+  if (!user.roles.includes('DOCENTE')) return <Portal key={perfiles} />;
   if (route === '/confirmacion' && saved) return <Confirmation result={saved} />;
   const match = route.match(/^\/sesiones\/(\d+)$/);
   if (match)

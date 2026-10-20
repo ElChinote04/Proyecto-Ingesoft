@@ -68,7 +68,7 @@ ORDER BY sc.fecha;
 
 \echo '6. Ultimos 30 eventos de auditoria'
 SELECT ra.id, ra."fechaHora", u.identificador, ra."tipoEvento", ra."entidadId", ra.detalle
-FROM "RegistroAuditoria" ra JOIN "Usuario" u ON u.id = ra."usuarioId"
+FROM "RegistroAuditoria" ra LEFT JOIN "Usuario" u ON u.id = ra."usuarioId"
 ORDER BY ra.id DESC LIMIT 30;
 
 \echo '7. Incongruencias: todas las cantidades deben ser cero'
@@ -92,6 +92,6 @@ JOIN "CursoSeccionDocente" cd1 ON cd1.id = b1."asignacionId" JOIN "Seccion" s1 O
 JOIN "CursoSeccionDocenteAula" b2 ON b2.id > b1.id AND b2."diaSemana" = b1."diaSemana"
   AND b1."horaInicio" < b2."horaFin" AND b1."horaFin" > b2."horaInicio"
 JOIN "CursoSeccionDocente" cd2 ON cd2.id = b2."asignacionId" JOIN "Seccion" s2 ON s2.id = cd2."seccionId"
-WHERE s1."anioAcademicoId" = s2."anioAcademicoId"
+WHERE b1.activo AND b2.activo AND s1."anioAcademicoId" = s2."anioAcademicoId"
   AND (b1."aulaId" = b2."aulaId" OR cd1."docenteId" = cd2."docenteId" OR cd1."seccionId" = cd2."seccionId");
 COMMIT;

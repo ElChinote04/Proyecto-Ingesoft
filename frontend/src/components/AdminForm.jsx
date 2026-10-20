@@ -4,7 +4,15 @@ import { Feedback } from './Feedback';
 export function Field({ label, name, type = 'text', required = true, ...props }) {
   return (
     <label className="field">
-      {label}
+      <span>
+        {label}
+        {required && (
+          <span className="required-mark" aria-hidden="true">
+            {' '}
+            *
+          </span>
+        )}
+      </span>
       <input name={name} type={type} required={required} {...props} />
     </label>
   );
@@ -12,7 +20,13 @@ export function Field({ label, name, type = 'text', required = true, ...props })
 export function Select({ label, name, items, ...props }) {
   return (
     <label className="field">
-      {label}
+      <span>
+        {label}
+        <span className="required-mark" aria-hidden="true">
+          {' '}
+          *
+        </span>
+      </span>
       <select
         name={name}
         required

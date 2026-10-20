@@ -18,6 +18,9 @@ const schema = z.object({
     .string()
     .regex(/^\d+[smhd]$/)
     .default('1h'),
+  LOGIN_MAX_ATTEMPTS: z.coerce.number().int().min(2).max(30).default(5),
+  LOGIN_LOCK_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+  SESSION_IDLE_SECONDS: z.coerce.number().int().min(60).max(86400).default(1800),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   LOG_DIR: z.string().default('logs'),
 });

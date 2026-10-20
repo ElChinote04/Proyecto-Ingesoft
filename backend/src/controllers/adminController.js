@@ -40,3 +40,21 @@ export const createClass = async (req, res) =>
     data: await service.createClass(req.validated.body, req.user, req.requestId),
   });
 export const audits = async (_req, res) => res.json({ data: await service.auditEvents() });
+
+export const activarAnio = async (req, res) =>
+  res.json({ data: await service.activarAnio(req.validated.params.id, req.user, req.requestId) });
+export const vincularApoderado = async (req, res) =>
+  res.json({ data: await service.vincularApoderado(req.validated.body, req.user, req.requestId) });
+export const modificarBloque = async (req, res) =>
+  res.json({
+    data: await service.modificarBloque(
+      req.validated.params.id,
+      req.validated.body,
+      req.user,
+      req.requestId,
+    ),
+  });
+export const eliminarBloque = async (req, res) =>
+  res.json({
+    data: await service.eliminarBloque(req.validated.params.id, req.user, req.requestId),
+  });

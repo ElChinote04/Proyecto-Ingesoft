@@ -828,3 +828,187 @@ a {
     padding: 20px;
   }
 }
+
+/* Vistas por perfil: mismos tokens, superficies y escala del estándar SAGE. */
+.portal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.portal-selector {
+  max-width: 420px;
+  margin-bottom: 24px;
+}
+.portal-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.portal-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 170px;
+  padding: 20px;
+}
+.portal-summary-card strong {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.portal-historial {
+  margin-top: 32px;
+}
+.portal-historial h2 {
+  margin-bottom: 16px;
+}
+.portal-table td:last-child {
+  width: auto;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 16px 0;
+}
+.horario-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 320px));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.horario-perfil {
+  max-width: 280px;
+  margin-bottom: 24px;
+}
+.pagination label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pagination select {
+  width: 80px;
+}
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.horario-personal {
+  min-width: 760px;
+  width: 100%;
+  table-layout: fixed;
+}
+.horario-personal th:first-child {
+  width: 120px;
+}
+.horario-personal td {
+  vertical-align: top;
+  height: 84px;
+  padding: 10px;
+  border: 1px solid var(--border);
+}
+.horario-personal tbody th {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  background: #f3f4f6;
+  vertical-align: top;
+  padding: 10px;
+}
+.horario-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.horario-block strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.horario-block span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.horario-tone-0 {
+  background: #eff6ff;
+}
+.horario-tone-1 {
+  background: #f0fdf4;
+}
+.horario-tone-2 {
+  background: #fffbeb;
+}
+.horario-note {
+  margin-top: 16px;
+}
+@media (max-width: 900px) {
+  .portal-summary {
+    grid-template-columns: 1fr;
+  }
+  .portal-summary-card {
+    min-height: auto;
+  }
+}
+@media (max-width: 700px) {
+  .horario-filters {
+    grid-template-columns: 1fr;
+  }
+  .portal-heading {
+    align-items: flex-start;
+  }
+}
+
+.confirmation-dialog {
+  width: min(520px, calc(100% - 48px));
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: #111827;
+}
+.confirmation-dialog::backdrop {
+  background: #11182766;
+}
+.confirmation-dialog h2 {
+  margin-bottom: 16px;
+}
+.destructive {
+  background: #dc2626;
+}
+.destructive:hover:not(:disabled) {
+  background: #b91c1c;
+}
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.required-mark {
+  color: #dc2626;
+}
+.password-card {
+  width: 456px;
+  max-width: 100%;
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 1px 4px #11182714;
+}
+.password-card .page-heading {
+  margin: 16px 0 24px;
+}
+.password-card .card {
+  border: 0;
+  padding: 0;
+}
+.password-card .form-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.password-card > .text-button {
+  margin-top: 16px;
+}

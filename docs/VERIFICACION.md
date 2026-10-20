@@ -1,5 +1,48 @@
 # Verificación de entrega
 
+## Verificación del 20 de octubre de 2026: US-001 y US-023
+
+- **46/46 pruebas de integración aprobadas**, sin omisiones: API 20,
+  administración sin seed 18 y perfiles/horarios 8. Las tres suites usan PostgreSQL
+  real en bases temporales independientes. El seed opcional conserva su regresión.
+- PER-01 a PER-08 de [la ampliación](ITERACION_1_ACCESO_HORARIOS.md) terminaron
+  **aprobados**. Incluyen cambio inicial/contraseña propia, bloqueo temporal,
+  inactividad sin renovación automática, privacidad entre familias, revocación de
+  vínculos, horario personal, edición/retiro/recreación, asistencia visible en portal,
+  año activo e inmutabilidad de auditoría de seguridad.
+- Migración nueva aplicada en `sage`: comparación de cantidad y SHA-256 del
+  contenido de las columnas originales de **las 19 tablas preexistentes** idéntica
+  antes/después. Se conservaron 9 usuarios, 5 matrículas, 7 sesiones de clase,
+  3 asistencias y 77 eventos anteriores. Se añadieron perfiles familiares y campos;
+  las contraseñas existentes no se restablecieron ni se ejecutó seed.
+- Interfaz contrastada con el Figma confirmado gCuuBOpsdHJhx289Udq40E:
+  horarios personales docente/alumno, paneles alumno/apoderado y cambio inicial.
+  Las comprobaciones de navegador usan datos ficticios en una BD temporal distinta
+  de `sage`. El cambio de contraseña se ejecuta por pruebas HTTP; en navegador
+  se comprueba el formulario obligatorio, sin introducir nuevas credenciales.
+- Guardado de horario por formulario comprobado: PUT aceptado con confirmación;
+  consulta del alumno recuperó el cambio. Una segunda actualización administrativa
+  cambió 09:00–10:00 a 11:00–12:00 y la matriz personal la mostró automáticamente
+  sin recargar. También se observó el cierre por inactividad al retomar la prueba.
+- Vista estrecha: ancho de página y contenido de 537 px CSS, sin desbordamiento
+  horizontal de la página; la matriz conserva desplazamiento dentro de su contenedor.
+- `npm.cmd run lint`, `npm.cmd run build`, `npm.cmd run format:check` y
+  `git diff --check` completados correctamente. La sintaxis Prisma fue formateada.
+  `prisma migrate diff` entre PostgreSQL local y el esquema produjo una migración
+  vacía: claves foráneas, nulabilidad e índices declarables coinciden. Los índices
+  parciales y el trigger de protección se mantienen explícitos en la migración SQL.
+- Evidencias actuales: [horario alumno](evidencias/SAGE_horario_alumno.png),
+  [horario docente](evidencias/SAGE_horario_docente.png),
+  [panel apoderado](evidencias/SAGE_portal_apoderado.png) y
+  [cambio inicial](evidencias/SAGE_cambio_inicial.png).
+  También: [edición confirmada](evidencias/SAGE_edicion_horario.png) y
+  [vista estrecha](evidencias/SAGE_horario_estrecho.png).
+- **US-003 excluida por el propietario**: no se afirma auditoría de notas ni pagos.
+  Los eventos de seguridad de US-001 y los eventos de operaciones previas se mantienen.
+
+Los apartados siguientes conservan la evidencia histórica de octubre 1/2. Para el
+estado funcional actual prevalecen esta sección, API.md y la ampliación enlazada.
+
 Última comprobación del refactor: 2 de octubre de 2026. Las evidencias de navegador que siguen son del 1 de octubre y se identifican como históricas. Windows x64, Node 24.21.0 local al proyecto, Docker Desktop y PostgreSQL 18.6. Rama: feat/prototipo-arquitectura-sage.
 
 ## Refactor: PUT sin contadores de edición
@@ -68,6 +111,6 @@ En ese recorrido se comprobaron 5 asistencias: Carlos PRESENTE, Lucía TARDANZA,
 
 Verificación local con PostgreSQL real y navegador. No se afirma ejecución de CI remoto ni despliegue AWS/HTTPS. La prueba de base vacía es de integración HTTP; la prueba visual se hizo sobre un conjunto nuevo en la base existente, conservando datos previos.
 
-Catálogos, matrículas, bloques y sesiones admiten altas y consultas, suficientes para este recorrido. Bajas, traslados, reprogramaciones, pagos, notas, justificaciones y recuperación de contraseña quedan fuera. No se recibió un estándar de programación separado; se siguieron las decisiones explícitas, ESLint y Prettier.
+En la verificación inicial solo había altas/consultas académicas. La ampliación del 20 de octubre añade edición y retiro lógico de bloques, año activo, acceso privado y contraseña propia. Pagos, notas, bajas/traslados de matrículas, justificaciones y recuperación por correo continúan pendientes. Esta ampliación sí revisa los estándares de programación/interfaz aportados.
 
 Para reproducir el proceso y comprobar cada clic: [Flujo completo](FLUJO_COMPLETO.md) y [consultas SQL](sql/verificar_flujo.sql).

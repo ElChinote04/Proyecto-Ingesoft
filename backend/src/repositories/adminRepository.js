@@ -1,7 +1,7 @@
 import { prisma } from '../config/database.js';
 export const userInclude = {
   roles: { include: { rol: true } },
-  persona: { include: { docente: true, estudiante: true } },
+  persona: { include: { docente: true, estudiante: true, apoderado: true } },
 };
 const sectionInclude = { grado: true, anioAcademico: true };
 export const blockInclude = {
@@ -64,14 +64,16 @@ export const ensureTeacher = (personaId, db) =>
     create: { personaId, codigoDocente: `DOC-${personaId}` },
     update: {},
   });
+export const ensureGuardian = (personaId, db) =>
+  db.apoderado.upsert({ where: { personaId }, create: { personaId }, update: {} });
 export const ensureStudent = (personaId, db) =>
   db.estudiante.upsert({
     where: { personaId },
     create: { personaId, codigoEstudiante: `EST-${personaId}` },
     update: {},
   });
-export const audit = (db, usuarioId, tipoEvento, entidadId, detalle = {}) =>
-  db.registroAuditoria.create({ data: { usuarioId, tipoEvento, entidadId, detalle } });
+export const audit = (db, usuarioId, tipoEvento, entidadId, detalle = {}, contexto = {}) =>
+  db.registroAuditoria.create({ data: { usuarioId, tipoEvento, entidadId, detalle, ...contexto } });
 export const audits = () =>
   prisma.registroAuditoria.findMany({
     take: 100,
@@ -79,24 +81,42 @@ export const audits = () =>
     include: { usuario: { select: { identificador: true } } },
   });
 export async function catalogs() {
-  const [anios, grados, secciones, cursos, aulas, docentes] = await Promise.all([
-    prisma.anioAcademico.findMany({ orderBy: { codigo: 'desc' } }),
-    prisma.grado.findMany({ orderBy: { nombre: 'asc' } }),
-    prisma.seccion.findMany({ include: sectionInclude, orderBy: { id: 'asc' } }),
-    prisma.curso.findMany({ orderBy: { nombre: 'asc' } }),
-    prisma.aula.findMany({ orderBy: { codigo: 'asc' } }),
-    prisma.docente.findMany({
-      where: {
-        persona: {
-          activo: true,
-          usuario: { is: { activo: true, roles: { some: { rol: { nombre: 'DOCENTE' } } } } },
+  const [anios, grados, secciones, cursos, aulas, docentes, apoderados, vinculos] =
+    await Promise.all([
+      prisma.anioAcademico.findMany({ orderBy: { codigo: 'desc' } }),
+      prisma.grado.findMany({ orderBy: { nombre: 'asc' } }),
+      prisma.seccion.findMany({ include: sectionInclude, orderBy: { id: 'asc' } }),
+      prisma.curso.findMany({ orderBy: { nombre: 'asc' } }),
+      prisma.aula.findMany({ orderBy: { codigo: 'asc' } }),
+      prisma.docente.findMany({
+        where: {
+          persona: {
+            activo: true,
+            usuario: { is: { activo: true, roles: { some: { rol: { nombre: 'DOCENTE' } } } } },
+          },
         },
-      },
-      include: { persona: true },
-      orderBy: { id: 'asc' },
-    }),
-  ]);
+        include: { persona: true },
+        orderBy: { id: 'asc' },
+      }),
+      prisma.apoderado.findMany({
+        where: {
+          persona: {
+            activo: true,
+            usuario: { is: { activo: true, roles: { some: { rol: { nombre: 'APODERADO' } } } } },
+          },
+        },
+        include: { persona: true },
+      }),
+      prisma.apoderadoEstudiante.findMany({
+        orderBy: [{ apoderadoId: 'asc' }, { estudianteId: 'asc' }],
+      }),
+    ]);
   return {
+    apoderados: apoderados.map((p) => ({
+      id: p.id,
+      nombre: `${p.persona.nombres} ${p.persona.apellidos}`,
+    })),
+    vinculos,
     anios,
     grados,
     secciones,
@@ -116,7 +136,13 @@ const models = {
   cursos: 'curso',
   aulas: 'aula',
 };
-export const createCatalog = (type, data, db) => db[models[type]].create({ data });
+export async function createCatalog(type, data, db) {
+  if (type === 'anios') {
+    const activo = !(await db.anioAcademico.findFirst({ where: { activo: true } }));
+    return db.anioAcademico.create({ data: { ...data, activo } });
+  }
+  return db[models[type]].create({ data });
+}
 export const findSection = (id, db) =>
   db.seccion.findUnique({ where: { id }, include: sectionInclude });
 export const findGrade = (id, db) => db.grado.findUnique({ where: { id } });
@@ -144,9 +170,11 @@ export const findEnrollment = (estudianteId, anioAcademicoId, db) =>
 export const createEnrollment = (data, db) => db.matricula.create({ data });
 export const findBlock = (id, db) =>
   db.cursoSeccionDocenteAula.findUnique({ where: { id }, include: blockInclude });
-export const conflictingBlock = (data, yearId, db) =>
+export const conflictingBlock = (data, yearId, db, excluirId) =>
   db.cursoSeccionDocenteAula.findFirst({
     where: {
+      activo: true,
+      ...(excluirId && { id: { not: excluirId } }),
       diaSemana: data.diaSemana,
       horaInicio: { lt: data.horaFin },
       horaFin: { gt: data.horaInicio },
@@ -184,3 +212,43 @@ export async function schedule() {
   ]);
   return { bloques, sesiones };
 }
+
+export async function activarAnio(id, db) {
+  await db.anioAcademico.updateMany({ where: { activo: true }, data: { activo: false } });
+  return db.anioAcademico.update({ where: { id }, data: { activo: true } });
+}
+export const findGuardian = (id, db) =>
+  db.apoderado.findUnique({
+    where: { id },
+    include: {
+      persona: { include: { usuario: { include: { roles: { include: { rol: true } } } } } },
+    },
+  });
+export const linkGuardian = (data, db) =>
+  db.apoderadoEstudiante.upsert({
+    where: {
+      apoderadoId_estudianteId: { apoderadoId: data.apoderadoId, estudianteId: data.estudianteId },
+    },
+    create: data,
+    update: { parentesco: data.parentesco, activo: data.activo },
+  });
+export const hasClassSessions = (bloqueId, db) => db.sesionClase.count({ where: { bloqueId } });
+export async function updateBlock(id, data, db) {
+  const { cursoId, seccionId, docenteId, ...bloque } = data;
+  const asignacion = await db.cursoSeccionDocente.upsert({
+    where: { cursoId_seccionId_docenteId: { cursoId, seccionId, docenteId } },
+    create: { cursoId, seccionId, docenteId },
+    update: {},
+  });
+  return db.cursoSeccionDocenteAula.update({
+    where: { id },
+    data: { ...bloque, asignacionId: asignacion.id },
+    include: blockInclude,
+  });
+}
+export const deactivateBlock = (id, db) =>
+  db.cursoSeccionDocenteAula.update({
+    where: { id },
+    data: { activo: false },
+    include: blockInclude,
+  });

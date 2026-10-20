@@ -16,7 +16,7 @@ const include = {
 };
 export const listSessions = (docenteId) =>
   prisma.sesionClase.findMany({
-    where: { activo: true, bloque: { asignacion: { docenteId } } },
+    where: { activo: true, bloque: { activo: true, asignacion: { docenteId } } },
     include,
     orderBy: [{ fecha: 'asc' }, { horaInicio: 'asc' }],
   });

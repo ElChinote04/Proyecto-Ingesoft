@@ -21,16 +21,44 @@ El login envía `Set-Cookie: sage_session=...; HttpOnly; SameSite=Lax; Path=/api
     "identificador": "docente@sage.local",
     "nombre": "Ana Torres",
     "roles": ["DOCENTE"],
-    "docenteId": 1
+    "docenteId": 1,
+    "estudianteId": null,
+    "apoderadoId": null,
+    "permisos": ["asistencia.registrar", "horario.consultar"],
+    "requiereCambioContrasena": false,
+    "inactividadSegundos": 1800
   }
 }
 ```
 
 Identificador requerido, máximo 200 caracteres, normalizado a minúsculas y sin espacios externos. Contraseña requerida, máximo 72 caracteres. Se rechazan propiedades adicionales. Credenciales incorrectas, cuenta inactiva o sin roles: 401 con mensaje genérico. 400 si falta información. Más de 30 solicitudes por IP/15 min: 429.
 
+También se bloquea temporalmente por cuenta al alcanzar LOGIN_MAX_ATTEMPTS consecutivos
+(5 por defecto), durante LOGIN_LOCK_SECONDS (900). El mensaje 401 no revela si existe
+la cuenta. Éxitos/fallos dejan auditoría de seguridad con resultado, origen y requestId.
+No se devuelve bloqueo, hash ni token en el DTO.
+
 ### GET /auth/me
 
 Sin body. Requiere cookie válida. 200 con el mismo usuario seguro del login; permite varios valores en `roles`. Sin sesión válida: 401.
+
+SESSION_IDLE_SECONDS controla inactividad (1800 por defecto); JWT_EXPIRES_IN sigue
+limitando la duración absoluta. `X-Sage-Background: 1` indica una consulta automática
+que debe validar la sesión sin renovar su última actividad. Las cuentas nuevas con
+contraseña administrativa tienen requiereCambioContrasena=true: solo me, logout y
+el cambio de contraseña están habilitados hasta completar el cambio; otros endpoints
+responden 403 PASSWORD_CHANGE_REQUIRED.
+
+### PUT /auth/contrasena
+
+```json
+{ "contrasenaActual": "ClaveInicialDeEjemplo123!", "nuevaContrasena": "MiNuevaClaveDeEjemplo123!" }
+```
+
+Requiere autenticación, contraseña actual correcta y nueva diferente, de 10 caracteres
+como mínimo y 72 bytes como máximo. 200 con data.message; elimina todas las sesiones
+de la cuenta y expira la cookie. Se debe iniciar sesión nuevamente. Error 400 si la
+clave actual no coincide o la nueva es igual; error de validación para datos inválidos.
 
 ### POST /auth/logout
 
@@ -216,7 +244,7 @@ Todas las respuestas de error tienen la misma envoltura. Ejemplo:
 | 429  | TOO_MANY_ATTEMPTS                                                  | Límite de login por IP                          |
 | 500  | INTERNAL_ERROR                                                     | Error interno, detalles seguros solo en logs    |
 
-No hay Swagger UI expuesta. Hay 26 combinaciones método/ruta: ocho originales, dos de instalación y dieciséis administrativas.
+No hay Swagger UI expuesta. Los contratos se describen en este documento y se verifican mediante las suites de integración.
 
 ## Instalación inicial sin seed
 
@@ -253,7 +281,7 @@ Todas las rutas `/admin/*` requieren cookie válida y rol ADMINISTRADOR. 401 sin
 | POST /admin/usuarios    | numeroDocumento, nombres, apellidos, identificador, contrasena, roles y activo opcional (true). Devuelve cuenta segura          |
 | PUT /admin/usuarios/:id | identificador, roles y activo obligatorios; contrasena opcional. Devuelve la cuenta actualizada                                 |
 
-Roles admitidos: ADMINISTRADOR, DOCENTE, ALUMNO, APODERADO; de uno a cuatro sin repetidos. Una persona puede tener varios. DOCENTE crea/reutiliza su perfil Docente; ALUMNO crea/reutiliza Estudiante. No asignan clases ni matrícula automáticamente. Al añadir un perfil a una persona existente, documento, nombres y apellidos deben coincidir; se conserva una única cuenta por Persona.
+Roles admitidos: ADMINISTRADOR, DOCENTE, ALUMNO, APODERADO; de uno a cuatro sin repetidos. Una persona puede tener varios. DOCENTE crea/reutiliza Docente; ALUMNO, Estudiante; APODERADO, Apoderado. El DTO incluye sus IDs y requiereCambioContrasena. No asignan clases, matrícula ni familia automáticamente. Al añadir un perfil a una persona existente, documento, nombres y apellidos deben coincidir; se conserva una única cuenta por Persona. Altas y restablecimientos de contraseña requieren cambio inicial; una edición solo de roles no lo impone.
 
 Documento: 1–30 caracteres, trim/mayúsculas. Nombres/apellidos: 1–100, trim. Identificador: 1–200, trim/minúsculas. Contraseña de alta o cambio: mínimo 10 caracteres y máximo 72 bytes UTF-8. Body estricto. Una contraseña vacía no sirve como omisión: para conservarla no envíes el campo.
 
@@ -261,7 +289,7 @@ La edición protege el acceso administrativo propio (409 SELF_LOCKOUT) y al últ
 
 ### Catálogos
 
-GET `/admin/catalogos` devuelve `{ anios, grados, secciones, cursos, aulas, docentes }`. Secciones incluyen grado/año; docentes incluye solo perfiles con persona y cuenta activas y rol DOCENTE. Cada docente devuelve id, nombre y codigoDocente.
+GET `/admin/catalogos` devuelve `{ anios, grados, secciones, cursos, aulas, docentes, apoderados, vinculos }`. Años incluyen activo. Secciones incluyen grado/año; docentes y apoderados requieren persona/cuenta activas y el rol correspondiente. Cada docente devuelve id, nombre y codigoDocente. Los vínculos contienen apoderadoId, estudianteId, parentesco y activo.
 
 | Alta                            | Body                                                                       |
 | ------------------------------- | -------------------------------------------------------------------------- |
@@ -307,8 +335,86 @@ POST `/admin/sesiones`: `{ "bloqueId": 1, "fecha": "2027-10-01" }`. Devuelve la 
 
 ### Auditoría
 
-GET `/admin/auditoria`: últimos 100 eventos, id descendente, con usuario.identificador, fechaHora, tipoEvento, entidadId y detalle JSON. El historial completo permanece en BD. No hay rutas para alterar eventos.
+GET `/admin/auditoria`: últimos 100 eventos, id descendente, con usuario.identificador
+(usuario puede ser nulo), fechaHora, tipoEvento, entidad, entidadId, resultado,
+requestId y detalle JSON. Incluye LOGIN_EXITOSO, LOGIN_FALLIDO y ACCESO_DENEGADO.
+El historial completo permanece en BD. No hay rutas para alterar eventos y SQL rechaza
+UPDATE/DELETE mediante trigger. Esto no implementa la auditoría de notas/pagos de US-003.
 
 Eventos administrativos: ADMINISTRADOR_INICIAL_CREADO, USUARIO_CREADO, USUARIO_ACTUALIZADO, CATALOGO_CREADO, ESTUDIANTE_REGISTRADO, MATRICULA_REGISTRADA, BLOQUE_ASIGNADO y SESION_CLASE_CREADA. La asistencia conserva ASISTENCIA_GUARDADA. CATALOGO_CREADO indica el tipo en detalle.catalogo; los restantes tipos identifican el dominio del entidadId.
 
-Catálogos, matrículas, bloques y sesiones tienen altas y consultas en este alcance. No se exponen bajas ni reprogramación de registros con historial.
+Catálogos, matrículas y sesiones conservan altas y consultas. Los bloques admiten
+edición y retiro según las reglas siguientes, conservando registros con historial.
+
+## Portal privado y horario semanal
+
+### GET /portal/estudiantes
+
+Roles ALUMNO o APODERADO. Devuelve data como arreglo de estudiantes autorizados:
+`{ id, nombre, codigo, matriculas: [{ id, seccionId, seccion, anioAcademico }] }`.
+Solo matrícula activa del año activo. Alumno consulta su perfil; apoderado, vínculos
+familiares activos. Si combina ambos roles se aplica la unión de esos permisos.
+Sin vínculos devuelve `[]`, no concede acceso a otras familias.
+
+### GET /portal/estudiantes/:id/asistencias?pagina=1&limite=10
+
+Mismos roles y validación de propiedad del estudiante. data contiene total, pagina,
+limite y registros `{ id, fecha, curso, estado, observacion }`, ordenados por fecha
+descendente. Incluye historia de asistencia. Límite permitido 10, 25 o 50; página
+entera positiva. Estudiante ajeno: 403 STUDENT_FORBIDDEN. Parámetros inválidos: 400.
+
+### PUT /admin/apoderados/estudiantes
+
+Solo administrador. Body `{ apoderadoId, estudianteId, parentesco, activo }`.
+Parentesco de 1 a 50 caracteres. Crea/actualiza el vínculo compuesto, sin duplicados;
+200 con data del vínculo e id del estudiante. Requiere perfil apoderado con cuenta
+activa y rol APODERADO. `activo=false` retira inmediatamente el permiso familiar.
+
+### GET /horarios?perfil=DOCENTE
+
+Perfil opcional: DOCENTE o ALUMNO; por defecto docente si tiene ese rol, si no alumno.
+No admite usuarioId, docenteId o estudianteId. Se valida el rol solicitado. Solo lectura:
+
+```json
+{
+  "data": {
+    "anioAcademico": { "id": 1, "codigo": "2026" },
+    "perfil": "DOCENTE",
+    "secciones": [],
+    "bloques": [
+      {
+        "id": 1,
+        "diaSemana": 1,
+        "horaInicio": "08:00",
+        "horaFin": "09:00",
+        "curso": "Matemática",
+        "seccion": "Segundo C",
+        "docente": "Elena Prueba",
+        "aula": "A203"
+      }
+    ]
+  }
+}
+```
+
+Docente obtiene sus bloques activos; alumno obtiene los de su sección matriculada
+en el único año activo y secciones contiene sus nombres. Sin año devuelve
+anioAcademico=null, secciones=[], bloques=[]. Sin clases devuelve bloques=[].
+La interfaz actualiza cada 10 segundos con la pestaña visible y al recuperar foco.
+
+### PUT /admin/anios/:id/activacion
+
+Sin body, solo administrador. 200 con año activado. Cambia el activo en una transacción;
+un índice parcial garantiza como máximo uno. El primer año creado se activa
+automáticamente; los siguientes requieren esta operación.
+
+### PUT /admin/bloques/:id y DELETE /admin/bloques/:id
+
+PUT recibe el mismo body de POST /admin/bloques y responde 200. Solo bloque y año
+activos. Valida referencias, docente e intervalos/cruces excluyendo el propio ID.
+Si tiene sesiones responde 409 BLOCK_HAS_SESSIONS: debe retirarse y crearse otro.
+
+DELETE sin body responde 200 con bloque activo=false. Conserva sesiones/asistencias;
+deja de aparecer en horarios personales. Es posible crear después el mismo intervalo
+en un bloque nuevo. No se borra físicamente. Un año inactivo responde 409 INACTIVE_YEAR
+al crear/editar/retirar bloques o crear sesiones. Un bloque retirado no permite nuevas sesiones.

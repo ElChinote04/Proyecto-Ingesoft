@@ -135,7 +135,10 @@ test('08 guarda en una transacción con trazabilidad', async () => {
   assert.equal('success' in r.body, false);
   assert.deepEqual(r.body.data.resumen, { PRESENTE: 2, TARDANZA: 2, AUSENTE: 1 });
   assert.equal(await prisma.asistenciaEstudiante.count(), 5);
-  assert.equal(await prisma.registroAuditoria.count(), 1);
+  assert.equal(
+    await prisma.registroAuditoria.count({ where: { tipoEvento: 'ASISTENCIA_GUARDADA' } }),
+    1,
+  );
 });
 test('09 rechaza estado fuera del enum', async () => {
   const records = attendance();

@@ -68,7 +68,7 @@ Get-Content -Raw -Encoding utf8 .\docs\sql\verificar_flujo.sql |
 
 El **bloque 1** debe mostrar cuenta activa, roles DOCENTE/APODERADO y docente_id. No muestra hashes. Los bloques académicos estarán vacíos hasta completar los siguientes pasos.
 
-Cierra sesión del administrador, inicia como docente y ejecuta de nuevo la consulta. El **bloque 2** debe mostrar al menos una sesión de autenticación vigente. **Todavía debe aparecer “Sin sesiones asignadas”**, porque crear el rol/perfil no asigna una clase. El docente no tiene menú administrativo; la API administrativa devuelve 403 para su cuenta.
+Cierra sesión del administrador e inicia como docente. La primera vez se exige reemplazar la contraseña inicial y volver a ingresar con la nueva. Ejecuta de nuevo la consulta: el **bloque 2** debe mostrar una sesión de autenticación vigente. **Todavía debe aparecer “Sin sesiones asignadas”**, porque crear el rol/perfil no asigna una clase. El docente no tiene menú administrativo y esa API devuelve 403 para su cuenta.
 
 Cierra sesión y vuelve al administrador. Si usas dos ventanas para alternar cuentas, una debe tener un perfil de navegador separado o ser privada; dos pestañas normales comparten cookie.
 
@@ -84,7 +84,7 @@ En **Catálogos académicos**, crea en este orden:
 | Curso         | Código COM-VER, nombre Comunicación |
 | Aula          | V101                                |
 
-Cada botón **Crear…** debe devolver 201 y añadir el registro a su listado. Un año o código repetido debe devolver 409 sin duplicar filas. Si ya existen, selecciónalos; no los vuelvas a crear.
+Cada botón **Crear…** debe devolver 201 y añadir el registro a su listado. Un año o código repetido debe devolver 409 sin duplicar filas. Si ya existen, selecciónalos; no los vuelvas a crear. En **Año académico activo**, activa **2027** para este recorrido: solo se crean horarios y sesiones en el año activo. Si es el primer año creado, se activa automáticamente.
 
 Las tablas son AnioAcademico, Grado, Seccion, Curso y Aula. Para inspeccionar cualquiera en psql:
 
@@ -175,7 +175,7 @@ npm.cmd run build
 npm.cmd run format:check
 ```
 
-Debes obtener **38 pruebas aprobadas**, lint sin errores, build correcto y formato válido. La suite administrativa crea su propia BD vacía y reproduce las altas, matrícula, asignación, sesión y asistencia sin seed. Los datos de esta demostración permanecen en sage.
+Debes obtener **46 pruebas aprobadas**, lint sin errores, build correcto y formato válido. Las suites administrativa y de perfiles crean sus propias BD vacías sin seed. Los datos de esta demostración permanecen en sage. Para comprobar además acceso de alumno/apoderado, cambio inicial, vínculos familiares y horario semanal, sigue [la ampliación US-001/US-023](ITERACION_1_ACCESO_HORARIOS.md).
 
 Para consultar otro recorrido, añade filtros al comando SQL:
 

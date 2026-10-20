@@ -1,3 +1,5 @@
+import { VincularApoderado, AdministrarAnio } from '../components/AdministrarPerfiles';
+import GestionBloques from '../components/GestionBloques';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { userFormBody } from '../utils/userForm';
@@ -178,7 +180,8 @@ function Users() {
             </fieldset>
             <p className="muted form-wide">
               Una misma persona puede tener varios roles. Al asignar Docente se crea su perfil; la
-              asignación de cursos y sesiones se realiza en Horarios.
+              asignación de cursos y sesiones se realiza en Horarios. Las contraseñas asignadas aquí
+              son temporales: el usuario debe cambiarlas al iniciar sesión.
             </p>
           </AdminForm>
           <h2>Cuentas registradas</h2>
@@ -313,6 +316,7 @@ function Catalogs() {
               </section>
             ))}
           </div>
+          <AdministrarAnio anios={c.anios} onSaved={resource.retry} />
         </>
       )}
     </Data>
@@ -326,6 +330,20 @@ function Enrollments() {
     <Data resource={resource}>
       {([c, students]) => (
         <>
+          <AdminForm
+            title="Registrar alumno"
+            submit="Registrar alumno"
+            onSave={async (form) => {
+              const estudiante = await api('/admin/estudiantes', {
+                method: 'POST',
+                body: Object.fromEntries(form),
+              });
+              resource.retry();
+              return `Alumno #${estudiante.id} registrado (${estudiante.codigoEstudiante}). Ya puedes matricularlo o crear su cuenta ALUMNO con el mismo documento.`;
+            }}
+          >
+            <PersonFields />
+          </AdminForm>
           <AdminForm
             title="Asignar grado y sección"
             submit="Confirmar matrícula"
@@ -377,6 +395,7 @@ function Enrollments() {
               en Catálogos académicos.
             </p>
           </AdminForm>
+          <VincularApoderado catalogos={c} estudiantes={students} onSaved={resource.retry} />
           <h2>Alumnos y sus matrículas</h2>
           <Table
             headers={['ID / Código', 'Alumno', 'Documento', 'Matrículas']}
@@ -408,6 +427,7 @@ function Schedule() {
       {([c, schedule]) => {
         const blocks = schedule.bloques.filter(
           (b) =>
+            b.activo &&
             (!year || String(b.asignacion.seccion.anioAcademicoId) === year) &&
             (!filter || String(view === 'aula' ? b.aulaId : b.asignacion[`${view}Id`]) === filter),
         );
@@ -506,6 +526,7 @@ function Schedule() {
                 </tbody>
               </table>
             </div>
+            <GestionBloques catalogos={c} bloques={schedule.bloques} onSaved={resource.retry} />
             <AdminForm
               title="Nueva asignación horaria"
               submit="Guardar asignación"
@@ -521,7 +542,10 @@ function Schedule() {
               <Select
                 label="Año / grado / sección"
                 name="seccionId"
-                items={options(c.secciones, sectionLabel)}
+                items={options(
+                  c.secciones.filter((seccion) => seccion.anioAcademico.activo),
+                  sectionLabel,
+                )}
               />
               <Select label="Curso" name="cursoId" items={options(c.cursos, (x) => x.nombre)} />
               <Select
@@ -557,7 +581,12 @@ function Schedule() {
               <Select
                 label="Bloque asignado"
                 name="bloqueId"
-                items={options(schedule.bloques, blockLabel)}
+                items={options(
+                  schedule.bloques.filter(
+                    (bloque) => bloque.activo && bloque.asignacion.seccion.anioAcademico.activo,
+                  ),
+                  blockLabel,
+                )}
               />
               <Field label="Fecha de la sesión" name="fecha" type="date" />
               <p className="muted form-wide">
@@ -588,7 +617,7 @@ function Audits() {
             headers={['ID / Fecha', 'Usuario', 'Evento / Entidad', 'Detalle']}
             rows={events.map((e) => [
               `#${e.id} · ${new Date(e.fechaHora).toLocaleString('es-PE', { timeZone: 'America/Lima' })}`,
-              e.usuario.identificador,
+              e.usuario?.identificador ?? 'Cuenta no identificada',
               `${e.tipoEvento} · #${e.entidadId}`,
               <details key="details">
                 <summary>Ver detalle</summary>

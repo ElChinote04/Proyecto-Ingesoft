@@ -8,8 +8,16 @@ import { validate, loginSchema, idSchema, asistenciaSchema } from '../validators
 import { AppError } from '../errors/AppError.js';
 import { adminRouter } from './admin.js';
 import * as admin from '../controllers/adminController.js';
+import { passwordSchema } from '../validators/seguridad.schemas.js';
 import { setupSchema } from '../validators/adminSchemas.js';
+import * as portal from '../controllers/portal.controller.js';
+import { horarioSchema, paginaSchema } from '../validators/portal.schemas.js';
 export const router = Router();
+const requirePortal = (req, res, next) => {
+  if (!req.user.roles.some((role) => ['ALUMNO', 'APODERADO'].includes(role)))
+    throw new AppError(403, 'FORBIDDEN', 'Este portal está disponible para alumnos y apoderados.');
+  next();
+};
 const loginLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
@@ -30,7 +38,18 @@ router.post('/instalacion', loginLimit, validate(setupSchema), admin.initialize)
 router.use('/admin', adminRouter);
 router.post('/auth/login', loginLimit, validate(loginSchema), auth.login);
 router.get('/auth/me', requireAuth, auth.me);
+router.put('/auth/contrasena', requireAuth, validate(passwordSchema), auth.cambiarContrasena);
 router.post('/auth/logout', requireAuth, auth.logout);
+router.get('/horarios', requireAuth, validate(horarioSchema, 'query'), portal.obtenerHorario);
+router.get('/portal/estudiantes', requireAuth, requirePortal, portal.obtenerPortal);
+router.get(
+  '/portal/estudiantes/:id/asistencias',
+  requireAuth,
+  requirePortal,
+  validate(idSchema, 'params'),
+  validate(paginaSchema, 'query'),
+  portal.obtenerHistorial,
+);
 router.use('/sesiones', requireAuth, requireRole('DOCENTE'));
 router.get('/sesiones', session.list);
 router.get('/sesiones/:id', validate(idSchema, 'params'), session.detail);

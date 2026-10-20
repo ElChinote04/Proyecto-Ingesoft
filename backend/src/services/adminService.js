@@ -22,12 +22,30 @@ export const userDto = (u) => ({
   apellidos: u.persona.apellidos,
   roles: u.roles.map((r) => r.rol.nombre),
   docenteId: u.persona.docente?.id ?? null,
+  estudianteId: u.persona.estudiante?.id ?? null,
+  apoderadoId: u.persona.apoderado?.id ?? null,
+  requiereCambioContrasena: u.requiereCambioContrasena,
 });
 async function mutation(user, requestId, event, operation) {
   try {
     const result = await repository.transaction(async (db) => {
       const { data, detail = {} } = await operation(db);
-      await repository.audit(db, user.id, event, data.id, detail);
+      await repository.audit(db, user.id, event, data.id, detail, {
+        requestId,
+        entidad: event.startsWith('USUARIO')
+          ? 'Usuario'
+          : event.startsWith('BLOQUE')
+            ? 'CursoSeccionDocenteAula'
+            : event.startsWith('MATRICULA')
+              ? 'Matricula'
+              : event.startsWith('ESTUDIANTE')
+                ? 'Estudiante'
+                : event.startsWith('ANIO')
+                  ? 'AnioAcademico'
+                  : event.startsWith('APODERADO')
+                    ? 'ApoderadoEstudiante'
+                    : 'Registro',
+      });
       return data;
     });
     logger.info(event, {
@@ -77,12 +95,14 @@ async function account(input, hashContrasena, db) {
   const roles = await repository.roles(db);
   if (input.roles.includes('DOCENTE')) await repository.ensureTeacher(p.id, db);
   if (input.roles.includes('ALUMNO')) await repository.ensureStudent(p.id, db);
+  if (input.roles.includes('APODERADO')) await repository.ensureGuardian(p.id, db);
   return repository.createUser(
     {
       personaId: p.id,
       identificador: input.identificador,
       hashContrasena,
       activo: input.activo,
+      requiereCambioContrasena: input.requiereCambioContrasena ?? true,
       roles: {
         create: roles.filter((r) => input.roles.includes(r.nombre)).map((r) => ({ rolId: r.id })),
       },
@@ -105,7 +125,11 @@ export async function initialize(input, requestId) {
   const user = await repository.transaction(async (db) => {
     if (await repository.isInitialized(db))
       fail(409, 'SETUP_COMPLETED', 'La instalación ya tiene administrador. Inicia sesión.');
-    const created = await account({ ...input, roles: ['ADMINISTRADOR'], activo: true }, hash, db);
+    const created = await account(
+      { ...input, roles: ['ADMINISTRADOR'], activo: true, requiereCambioContrasena: false },
+      hash,
+      db,
+    );
     await repository.closeSetup(db);
     await repository.audit(db, created.id, 'ADMINISTRADOR_INICIAL_CREADO', created.id, {
       roles: ['ADMINISTRADOR'],
@@ -147,12 +171,13 @@ export async function updateUser(id, input, actor, requestId) {
     const roles = await repository.roles(db);
     if (input.roles.includes('DOCENTE')) await repository.ensureTeacher(current.personaId, db);
     if (input.roles.includes('ALUMNO')) await repository.ensureStudent(current.personaId, db);
+    if (input.roles.includes('APODERADO')) await repository.ensureGuardian(current.personaId, db);
     const updated = await repository.editUser(
       id,
       {
         identificador: input.identificador,
         activo: input.activo,
-        ...(hash && { hashContrasena: hash }),
+        ...(hash && { hashContrasena: hash, requiereCambioContrasena: true }),
         roles: {
           deleteMany: {},
           create: roles.filter((r) => input.roles.includes(r.nombre)).map((r) => ({ rolId: r.id })),
@@ -172,18 +197,14 @@ export async function updateUser(id, input, actor, requestId) {
   });
 }
 export const catalogs = () => repository.catalogs();
-export const auditEvents = async () =>
-  (await repository.audits()).map((event) => {
-    // Los eventos anteriores a la migración conservan su detalle original en BD.
-    // El contador técnico retirado ya no forma parte del contrato de la API.
-    if (event.tipoEvento !== 'ASISTENCIA_GUARDADA' || !event.detalle) return event;
-    return {
-      ...event,
-      detalle: Object.fromEntries(
-        Object.entries(event.detalle).filter(([key]) => key !== 'version'),
-      ),
-    };
-  });
+function eventoPublico(event) {
+  if (event.tipoEvento !== 'ASISTENCIA_GUARDADA' || !event.detalle) return event;
+  return {
+    ...event,
+    detalle: Object.fromEntries(Object.entries(event.detalle).filter(([key]) => key !== 'version')),
+  };
+}
+export const auditEvents = async () => (await repository.audits()).map(eventoPublico);
 export function createCatalog(type, input, actor, requestId) {
   return mutation(actor, requestId, 'CATALOGO_CREADO', async (db) => {
     if (type === 'secciones') {
@@ -254,6 +275,8 @@ function validTeacher(t) {
 export function createBlock(input, actor, requestId) {
   return mutation(actor, requestId, 'BLOQUE_ASIGNADO', async (db) => {
     const section = exists(await repository.findSection(input.seccionId, db), 'La sección');
+    if (!section.anioAcademico.activo)
+      fail(409, 'INACTIVE_YEAR', 'Solo puedes asignar horarios al año académico activo.');
     exists(await repository.findCourse(input.cursoId, db), 'El curso');
     exists(await repository.findRoom(input.aulaId, db), 'El aula');
     if (!validTeacher(await repository.findTeacher(input.docenteId, db)))
@@ -276,6 +299,9 @@ export function createBlock(input, actor, requestId) {
 export function createClass(input, actor, requestId) {
   return mutation(actor, requestId, 'SESION_CLASE_CREADA', async (db) => {
     const block = exists(await repository.findBlock(input.bloqueId, db), 'El bloque');
+    if (!block.activo) fail(409, 'INACTIVE_BLOCK', 'El bloque está inactivo.');
+    if (!block.asignacion.seccion.anioAcademico.activo)
+      fail(409, 'INACTIVE_YEAR', 'Los horarios de años anteriores son de solo lectura.');
     if (!validTeacher(await repository.findTeacher(block.asignacion.docenteId, db)))
       fail(
         400,
@@ -298,3 +324,75 @@ export function createClass(input, actor, requestId) {
   });
 }
 export const schedule = () => repository.schedule();
+
+export function activarAnio(id, actor, requestId) {
+  return mutation(actor, requestId, 'ANIO_ACADEMICO_ACTIVADO', async (db) => {
+    exists(await repository.findYear(id, db), 'El año académico');
+    return { data: await repository.activarAnio(id, db), detail: { activo: true } };
+  });
+}
+export function vincularApoderado(input, actor, requestId) {
+  return mutation(actor, requestId, 'APODERADO_VINCULADO', async (db) => {
+    const apoderado = exists(await repository.findGuardian(input.apoderadoId, db), 'El apoderado');
+    if (
+      !apoderado.persona.activo ||
+      !apoderado.persona.usuario?.activo ||
+      !apoderado.persona.usuario.roles.some((r) => r.rol.nombre === 'APODERADO')
+    )
+      fail(400, 'INVALID_GUARDIAN', 'Selecciona un apoderado con cuenta activa y rol Apoderado.');
+    exists(await repository.findStudent(input.estudianteId, db), 'El estudiante');
+    const vinculo = await repository.linkGuardian(input, db);
+    return { data: { ...vinculo, id: input.estudianteId }, detail: { ...input } };
+  });
+}
+export function modificarBloque(id, input, actor, requestId) {
+  return mutation(actor, requestId, 'BLOQUE_MODIFICADO', async (db) => {
+    const anterior = exists(await repository.findBlock(id, db), 'El bloque');
+    const seccion = exists(await repository.findSection(input.seccionId, db), 'La sección');
+    if (
+      !anterior.activo ||
+      !anterior.asignacion.seccion.anioAcademico.activo ||
+      !seccion.anioAcademico.activo
+    )
+      fail(409, 'INACTIVE_YEAR', 'Solo puedes modificar bloques activos del año académico activo.');
+    if (await repository.hasClassSessions(id, db))
+      fail(
+        409,
+        'BLOCK_HAS_SESSIONS',
+        'Este bloque tiene sesiones vinculadas. Conserva su historial y crea otra asignación.',
+      );
+    exists(await repository.findCourse(input.cursoId, db), 'El curso');
+    exists(await repository.findRoom(input.aulaId, db), 'El aula');
+    if (!validTeacher(await repository.findTeacher(input.docenteId, db)))
+      fail(400, 'INVALID_TEACHER', 'Selecciona un docente activo.');
+    if (await repository.conflictingBlock(input, seccion.anioAcademicoId, db, id))
+      fail(
+        409,
+        'SCHEDULE_CONFLICT',
+        'Existe un cruce de docente, aula o sección. No se guardaron cambios.',
+      );
+    return {
+      data: await repository.updateBlock(id, input, db),
+      detail: {
+        anterior: {
+          aulaId: anterior.aulaId,
+          diaSemana: anterior.diaSemana,
+          horaInicio: anterior.horaInicio,
+          horaFin: anterior.horaFin,
+        },
+        nuevo: input,
+      },
+    };
+  });
+}
+export function eliminarBloque(id, actor, requestId) {
+  return mutation(actor, requestId, 'BLOQUE_DESACTIVADO', async (db) => {
+    const bloque = exists(await repository.findBlock(id, db), 'El bloque');
+    if (!bloque.asignacion.seccion.anioAcademico.activo)
+      fail(409, 'INACTIVE_YEAR', 'Los horarios de años anteriores son de solo lectura.');
+    return {
+      data: await repository.deactivateBlock(id, db),
+      detail: { activo: false, conservaHistorial: true },
+    };
+  });
+}
