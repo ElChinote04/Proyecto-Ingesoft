@@ -1,5 +1,33 @@
 # Verificación de entrega
 
+## Instalación local simplificada (20 de octubre de 2026)
+
+- **54/54 pruebas aprobadas**: las 46 anteriores y 8 nuevas de instalación.
+  Se verificaron producción sin clave/clave incorrecta, configuración protegida
+  incompleta, escucha en red, origen remoto, loopback IPv4/IPv6, alta local sin
+  clave, dos solicitudes simultáneas y cierre permanente de la instalación.
+- La suite administrativa también comprueba el alta protegida con clave válida
+  en modo producción. No se afirma un despliegue público real.
+- `Start-Sage.ps1` ejecutado contra una BD temporal inicialmente vacía:
+  Docker healthy, Prisma generado, cuatro migraciones aplicadas y ambos servidores
+  iniciados desde ese único comando. La prueba usa dependencias ya instaladas;
+  no equivale a una prueba en una PC Windows recién instalada.
+- Formulario local comprobado sin campo de clave ni instrucciones setup:key.
+  El primer administrador sigue eligiendo sus datos y contraseña. No se introduce
+  una cuenta predefinida ni se ejecuta seed. No hay cambios de esquema ni migraciones nuevas.
+- Alta por API sin clave: 201; login: 200; GET de instalación posterior:
+  requerido=false. En navegador se comprobó el formulario, su cierre después del
+  alta y el acceso a Administración con la cuenta creada. Evidencias:
+  [formulario local](evidencias/SAGE_instalacion_local.png) y
+  [instalación cerrada](evidencias/SAGE_instalacion_cerrada.png).
+- Código y API documentados en README, API, arquitectura y contexto del proyecto.
+  Las verificaciones anteriores se conservan a continuación como evidencia histórica.
+- Se corrigió una respuesta de /auth/me que podía restaurar el panel después del
+  logout. Prueba de navegador con un proxy temporal de latencia: la consulta se
+  validó antes del logout y se entregó dos segundos después. El login permaneció
+  visible y Administración oculta. [Evidencia](evidencias/SAGE_logout_respuesta_tardia.png).
+  El proxy pertenece solo a la prueba; no forma parte de la aplicación ni del arranque.
+
 ## Verificación del 20 de octubre de 2026: US-001 y US-023
 
 - **46/46 pruebas de integración aprobadas**, sin omisiones: API 20,

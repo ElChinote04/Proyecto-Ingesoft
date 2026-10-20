@@ -1,7 +1,9 @@
 import * as service from '../services/adminService.js';
-export const status = async (_req, res) => res.json({ data: await service.setupStatus() });
+export const status = async (req, res) => res.json({ data: await service.setupStatus(req.ip) });
 export const initialize = async (req, res) =>
-  res.status(201).json({ data: await service.initialize(req.validated.body, req.requestId) });
+  res
+    .status(201)
+    .json({ data: await service.initialize(req.validated.body, req.requestId, req.ip) });
 export const users = async (_req, res) => res.json({ data: await service.users() });
 export const createUser = async (req, res) =>
   res.status(201).json({

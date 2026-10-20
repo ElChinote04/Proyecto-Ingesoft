@@ -13,9 +13,6 @@ Se cubren acceso por roles de US-001, gestión de cuentas y roles de US-002, reg
 Detén el servidor anterior con Ctrl+C. Desde la raíz, después de obtener estos cambios:
 
 ```powershell
-. .\scripts\Use-Node.ps1
-npm.cmd run db:generate
-npm.cmd run db:migrate
 powershell -ExecutionPolicy Bypass -File .\scripts\Start-Sage.ps1
 ```
 
@@ -25,19 +22,22 @@ Mantén Docker Desktop funcionando. La migración anterior retiró los contadore
 
 Requisitos: Git para obtener el repositorio, Windows x64, Docker Desktop abierto con contenedores Linux e Internet durante la primera instalación. Puertos libres: 5432, 3000 y 5173. No necesitas instalar Node ni PostgreSQL globalmente.
 
-En PowerShell, desde la raíz del repositorio:
+En PowerShell, para una PC nueva:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Sage.ps1
-. .\scripts\Use-Node.ps1
-npm.cmd run setup:key
+git clone --branch feat/prototipo-arquitectura-sage https://github.com/ElChinote04/Proyecto-Ingesoft.git
+cd Proyecto-Ingesoft
 powershell -ExecutionPolicy Bypass -File .\scripts\Start-Sage.ps1
 ```
 
-1. Setup prepara Node **24.21.0** local en `.tools/`, verifica su SHA256 oficial, instala los lockfiles, levanta PostgreSQL, genera Prisma y aplica las migraciones. Genera JWT_SECRET e INITIAL_SETUP_KEY aleatorios; conserva configuración y datos existentes.
-2. `setup:key` muestra al operador la clave local para crear el primer administrador. No es su contraseña ni se almacena en los logs.
-3. Abre [SAGE](http://localhost:5173), pulsa **Configurar el primer administrador** y elige sus datos de acceso. Usa la clave anterior. La operación solo puede completarse una vez.
-4. Inicia sesión y sigue **Usuarios → Catálogos → Alumnos y matrículas → Horarios y sesiones**. Después ingresa como docente para tomar asistencia.
+1. Start prepara lo que falte: Node **24.21.0** local, parámetros, dependencias, PostgreSQL, Prisma y migraciones. Conserva configuración y datos existentes y no ejecuta seed.
+2. Abre [SAGE](http://localhost:5173), pulsa **Configurar el primer administrador** y completa sus datos y contraseña. **En desarrollo local no se pide clave de instalación.** El alta se cierra automáticamente al crear esa cuenta.
+3. Inicia sesión y sigue **Usuarios → Catálogos → Alumnos y matrículas → Horarios y sesiones**. Después ingresa como docente para tomar asistencia.
+
+Si ya tienes el repositorio preparado, basta con el comando Start de la última línea.
+Si ya existe un administrador en esa base, ingresa con su cuenta; no se crea otro.
+En producción o cuando el backend escucha en la red, la creación inicial continúa
+requiriendo `INITIAL_SETUP_KEY`; el operador puede consultarla con `npm run setup:key`.
 
 Mantén abierta la terminal de inicio. Ctrl+C detiene ambos servidores; PostgreSQL conserva los datos en el volumen Docker. La opción de PowerShell solo afecta al proceso de ese comando.
 
@@ -62,7 +62,6 @@ Con Node 24.21.0 y Docker Compose en PATH, en Windows, macOS o Linux:
 
 ```sh
 npm run setup
-npm run setup:key
 npm run dev
 ```
 
@@ -110,20 +109,20 @@ Los lockfiles fijan las dependencias. Los overrides de deepmerge-ts/mysql2 afect
 
 Los archivos reales de entorno, runtime, logs, dependencias y compilados están excluidos de Git.
 
-| Archivo / variable                     | Uso                                                                             |
-| -------------------------------------- | ------------------------------------------------------------------------------- |
-| raíz: POSTGRES_PASSWORD, POSTGRES_PORT | Contenedor y puerto                                                             |
-| backend: NODE_ENV, HOST, PORT          | Desarrollo, 127.0.0.1, puerto 3000                                              |
-| DATABASE_URL                           | Conexión a sage, coherente con Docker                                           |
-| TEST_DATABASE_URL                      | Conexión base cuyo nombre termina en _test; se crean bases efímeras distintas   |
-| FRONTEND_URL                           | Origen CORS: http://localhost:5173                                              |
-| JWT_SECRET, JWT_EXPIRES_IN             | Secreto generado y vigencia de sesión, por defecto 1h                           |
-| LOGIN_MAX_ATTEMPTS, LOGIN_LOCK_SECONDS | Intentos fallidos consecutivos y bloqueo por cuenta: 5 y 900 segundos           |
-| SESSION_IDLE_SECONDS                   | Cierre por inactividad: 1800 segundos; las consultas automáticas no lo renuevan |
-| INITIAL_SETUP_KEY                      | Clave aleatoria local; solo sirve antes del primer administrador                |
-| LOG_LEVEL, LOG_DIR                     | info y logs relativo a backend                                                  |
-| DEMO_PASSWORD                          | Contraseña del seed opcional                                                    |
-| frontend: VITE_API_URL                 | http://localhost:3000/api/v1                                                    |
+| Archivo / variable                     | Uso                                                                                                 |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| raíz: POSTGRES_PASSWORD, POSTGRES_PORT | Contenedor y puerto                                                                                 |
+| backend: NODE_ENV, HOST, PORT          | Desarrollo, 127.0.0.1, puerto 3000                                                                  |
+| DATABASE_URL                           | Conexión a sage, coherente con Docker                                                               |
+| TEST_DATABASE_URL                      | Conexión base cuyo nombre termina en _test; se crean bases efímeras distintas                       |
+| FRONTEND_URL                           | Origen CORS: http://localhost:5173                                                                  |
+| JWT_SECRET, JWT_EXPIRES_IN             | Secreto generado y vigencia de sesión, por defecto 1h                                               |
+| LOGIN_MAX_ATTEMPTS, LOGIN_LOCK_SECONDS | Intentos fallidos consecutivos y bloqueo por cuenta: 5 y 900 segundos                               |
+| SESSION_IDLE_SECONDS                   | Cierre por inactividad: 1800 segundos; las consultas automáticas no lo renuevan                     |
+| INITIAL_SETUP_KEY                      | Protege el primer administrador en producción/test o acceso por red; no se pide en desarrollo local |
+| LOG_LEVEL, LOG_DIR                     | info y logs relativo a backend                                                                      |
+| DEMO_PASSWORD                          | Contraseña del seed opcional                                                                        |
+| frontend: VITE_API_URL                 | http://localhost:3000/api/v1                                                                        |
 
 `npm run setup -- --env-only` prepara la configuración sin instalar ni iniciar Docker. Mantén coordinadas las credenciales de raíz y backend; cambiar POSTGRES_PASSWORD no cambia la contraseña de un volumen existente.
 
@@ -149,7 +148,7 @@ npm run build
 npm run format:check
 ```
 
-38 pruebas de integración: 20 de regresión y 18 del recorrido administrativo. Cada suite crea una BD aleatoria propia `sage_run_<id>_test`, aplica ambas migraciones y elimina exclusivamente esa BD temporal. La suite administrativa comienza vacía y nunca importa el seed. Requiere CREATEDB, disponible en el contenedor local. No reinicia sage.
+54 pruebas de integración: 20 de API, 18 administrativas, 8 de perfiles/horarios y 8 de instalación local/protegida. Cada suite crea una BD aleatoria propia `sage_run_<id>_test`, aplica las migraciones y elimina exclusivamente esa BD temporal. Administración, perfiles e instalación empiezan vacías sin seed. Requiere CREATEDB, disponible en el contenedor local. No reinicia sage.
 
 Los logs de pruebas quedan en `backend/logs/tests/<id>/`, separados de la aplicación. Build genera frontend/dist. [Resultados y evidencias](docs/VERIFICACION.md).
 
@@ -184,7 +183,7 @@ El límite de acceso/instalación es 30 solicitudes por IP cada 15 minutos en un
 - **Sin sesiones:** crea el usuario DOCENTE, su bloque académico y una sesión con fecha; recarga la selección.
 - **Sin alumnos:** comprueba la matrícula activa en la sección y año de la sesión.
 - **409:** puede ser un duplicado, cruce horario o una regla de protección administrativa. Lee el mensaje para corregir los datos.
-- **Clave inicial inválida:** ejecuta setup, consulta setup:key y reinicia el backend si estaba abierto.
+- **Clave inicial solicitada:** solo corresponde a producción/test o escucha en red. Para desarrollo local usa NODE_ENV=development y HOST=127.0.0.1, y reinicia el backend. En una instalación protegida, el operador consulta setup:key.
 - **Sin conexión:** comprueba [health](http://localhost:3000/api/v1/health), la terminal y los logs.
 
 ## Documentación y límites

@@ -29,7 +29,7 @@ export const setupSchema = z
     ...person,
     identificador: account.identificador,
     contrasena: password,
-    claveInstalacion: z.string().min(1).max(200),
+    claveInstalacion: z.string().min(1).max(200).optional(),
   })
   .strict();
 export const studentSchema = z.object(person).strict();

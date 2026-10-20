@@ -88,9 +88,16 @@ test('01 inicia en base vacía y protege la creación del administrador', async 
   await request(app).get(`${base}/admin/usuarios`).expect(401);
 });
 test('02 instalación simultánea crea exactamente un administrador y cierra el alta pública', async () => {
-  const results = await Promise.all(
-    [1, 2].map(() => request(app).post(`${base}/instalacion`).send(initial)),
-  );
+  const modoAnterior = env.NODE_ENV;
+  let results;
+  try {
+    env.NODE_ENV = 'production';
+    results = await Promise.all(
+      [1, 2].map(() => request(app).post(`${base}/instalacion`).send(initial)),
+    );
+  } finally {
+    env.NODE_ENV = modoAnterior;
+  }
   assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
   adminUser = results.find((r) => r.status === 201).body.data;
   assert.equal(await prisma.usuario.count(), 1);

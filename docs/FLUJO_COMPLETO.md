@@ -7,13 +7,11 @@ Esta guía crea los datos desde los formularios. No ejecuta `db:seed`, no insert
 Desde la raíz del repositorio en PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Sage.ps1
-. .\scripts\Use-Node.ps1
-npm.cmd run setup:key
 powershell -ExecutionPolicy Bypass -File .\scripts\Start-Sage.ps1
 ```
 
-Conserva la clave mostrada por setup:key para el paso siguiente. No la publiques ni la uses como contraseña de usuario. En otra terminal:
+Start prepara las dependencias y los parámetros que falten y aplica migraciones.
+En desarrollo local no necesitas clave de instalación. En otra terminal:
 
 ```powershell
 docker compose ps
@@ -34,7 +32,7 @@ Ctrl+C detiene solo esa lectura. Cada respuesta de la API incluye X-Request-Id; 
 
 ## 1. Crear el administrador inicial
 
-En Login → **Configurar el primer administrador** completa documento, nombres, apellidos, usuario/correo, contraseña elegida (mínimo 10 caracteres) y clave de instalación. Pulsa **Crear administrador**.
+En Login → **Configurar el primer administrador** completa documento, nombres, apellidos, usuario/correo y contraseña elegida (mínimo 10 caracteres). En desarrollo local no hay campo de clave de instalación. Pulsa **Crear administrador**.
 
 **Debes ver:** POST `/api/v1/instalacion` → 201; confirmación y enlace a iniciar sesión. GET `/api/v1/instalacion` devuelve `requerido: false`. Una segunda alta pública queda rechazada con 409. Las cuatro definiciones de rol se crean con esta operación, sin datos académicos de ejemplo.
 
@@ -175,7 +173,7 @@ npm.cmd run build
 npm.cmd run format:check
 ```
 
-Debes obtener **46 pruebas aprobadas**, lint sin errores, build correcto y formato válido. Las suites administrativa y de perfiles crean sus propias BD vacías sin seed. Los datos de esta demostración permanecen en sage. Para comprobar además acceso de alumno/apoderado, cambio inicial, vínculos familiares y horario semanal, sigue [la ampliación US-001/US-023](ITERACION_1_ACCESO_HORARIOS.md).
+Debes obtener **54 pruebas aprobadas**, lint sin errores, build correcto y formato válido. Las suites administrativa y de perfiles crean sus propias BD vacías sin seed. Los datos de esta demostración permanecen en sage. Para comprobar además acceso de alumno/apoderado, cambio inicial, vínculos familiares y horario semanal, sigue [la ampliación US-001/US-023](ITERACION_1_ACCESO_HORARIOS.md).
 
 Para consultar otro recorrido, añade filtros al comando SQL:
 

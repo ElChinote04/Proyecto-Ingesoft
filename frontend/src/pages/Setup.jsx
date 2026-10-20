@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useResource } from '../hooks/useResource';
 import { AdminForm, Field, PersonFields } from '../components/AdminForm';
 import { Feedback, Loading, ResourceError } from '../components/Feedback';
 
 export default function Setup() {
+  useEffect(() => {
+    document.title = 'SAGE | Configurar el colegio';
+  }, []);
   const resource = useResource('/instalacion');
   const [created, setCreated] = useState(false);
   return (
@@ -48,17 +51,20 @@ export default function Setup() {
             minLength={10}
             autoComplete="new-password"
           />
-          <Field
-            label="Clave de instalación"
-            name="claveInstalacion"
-            type="password"
-            autoComplete="off"
-          />
-          <p className="muted form-wide">
-            El responsable de la instalación obtiene la clave ejecutando{' '}
-            <code>npm run setup:key</code> en la carpeta del proyecto. Solo se utiliza para crear
-            esta primera cuenta.
-          </p>
+          {resource.data.requiereClave && (
+            <>
+              <Field
+                label="Clave de instalación"
+                name="claveInstalacion"
+                type="password"
+                autoComplete="off"
+              />
+              <p className="muted form-wide">
+                Esta instalación requiere una clave. Solicítala al responsable del servidor. Solo se
+                utiliza para crear esta primera cuenta.
+              </p>
+            </>
+          )}
         </AdminForm>
       )}
     </main>

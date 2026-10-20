@@ -27,7 +27,7 @@ export async function api(path, { body, headers, ...options } = {}) {
     error: { message: 'El servidor devolvió una respuesta no válida.', code: 'INVALID_RESPONSE' },
   }));
   if (!response.ok) {
-    if (response.status === 401 && path !== '/auth/login' && path !== '/auth/me')
+    if (response.status === 401 && !['/auth/login', '/auth/me', '/auth/logout'].includes(path))
       window.dispatchEvent(new Event('sage:expired'));
     if (payload.error?.code === 'PASSWORD_CHANGE_REQUIRED')
       window.dispatchEvent(new Event('sage:password-required'));

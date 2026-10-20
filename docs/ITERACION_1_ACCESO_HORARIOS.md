@@ -1,6 +1,8 @@
 # Iteración 1: acceso por roles y horario personal
 
 Actualización: 20 de octubre de 2026. Alcance autorizado: **US-001 y US-023**.
+En desarrollo local el primer administrador se crea desde la página sin clave de instalación. Basta con ejecutar Start-Sage.ps1; prepara una copia nueva automáticamente. La clave se conserva para producción/test y acceso por red.
+
 El propietario excluyó expresamente **US-003**. No se implementaron notas, pagos ni
 su auditoría; esa historia sigue pendiente. La auditoría de seguridad de acceso
 pertenece a los requisitos de autenticación y se conserva.
@@ -144,7 +146,7 @@ se verifican también con [verificar_flujo.sql](sql/verificar_flujo.sql).
 
 ## Casos automatizados asociados
 
-`npm.cmd test` ejecuta tres suites en bases PostgreSQL temporales independientes.
+`npm.cmd test` ejecuta cuatro suites en bases PostgreSQL temporales independientes.
 La suite administrativa y la de perfiles empiezan vacías y no usan seed.
 
 | Caso   | Historia | Resultado esperado                                                                                   |
@@ -158,8 +160,11 @@ La suite administrativa y la de perfiles empiezan vacías y no usan seed.
 | PER-07 | US-023   | Único año activo, consulta actualizada y escrituras históricas rechazadas                            |
 | PER-08 | US-001   | Auditoría de seguridad exclusiva de administrador, correlacionada e inmutable                        |
 
-La ejecución y evidencias se registran en [VERIFICACION](VERIFICACION.md). Las otras
-38 pruebas mantienen la regresión de instalación, administración y asistencia.
+Además, `instalacion.test.js` añade INST-01 a INST-08: producción y red con clave,
+configuración protegida incompleta, origen remoto, loopback IPv4/IPv6, alta local
+sin clave, dos solicitudes simultáneas y cierre permanente del alta inicial.
+La ejecución y evidencias se registran en [VERIFICACION](VERIFICACION.md). Las
+38 pruebas originales mantienen la regresión de administración y asistencia.
 
 ## Actualización y límites
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { AuthContext } from './auth';
 export function AuthProvider({ children }) {
@@ -6,12 +6,17 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [startupError, setStartupError] = useState('');
+  // Las respuestas de una sesión anterior no deben restaurarla después del logout.
+  const sesionActual = useRef({});
   async function restore() {
+    const sesion = sesionActual.current;
     setLoading(true);
     setStartupError('');
     try {
-      setUser(await api('/auth/me'));
+      const data = await api('/auth/me');
+      if (sesionActual.current === sesion) setUser(data);
     } catch (error) {
+      if (sesionActual.current !== sesion) return;
       if (error.status === 401) setUser(null);
       else setStartupError(error.message);
     } finally {
@@ -20,15 +25,20 @@ export function AuthProvider({ children }) {
   }
   useEffect(() => {
     const abort = new AbortController();
+    const sesion = sesionActual.current;
     api('/auth/me', { signal: abort.signal })
-      .then(setUser)
+      .then((data) => {
+        if (!abort.signal.aborted && sesionActual.current === sesion) setUser(data);
+      })
       .catch((error) => {
-        if (error.name !== 'AbortError' && error.status !== 401) setStartupError(error.message);
+        if (sesionActual.current === sesion && error.name !== 'AbortError' && error.status !== 401)
+          setStartupError(error.message);
       })
       .finally(() => {
         if (!abort.signal.aborted) setLoading(false);
       });
     const expired = () => {
+      sesionActual.current = {};
       setUser(null);
       setNotice('Tu sesión venció. Inicia sesión nuevamente para continuar.');
     };
@@ -44,30 +54,30 @@ export function AuthProvider({ children }) {
     if (!userId) return;
     let ultimaAccion = Date.now();
     let ultimoEnvio = 0;
+    function consultarSesion(background = false) {
+      const sesion = sesionActual.current;
+      api('/auth/me', background ? { headers: { 'X-Sage-Background': '1' } } : undefined)
+        .then((data) => {
+          if (sesionActual.current === sesion) setUser(data);
+        })
+        .catch((error) => {
+          if (sesionActual.current === sesion && error.status === 401)
+            window.dispatchEvent(new Event('sage:expired'));
+        });
+    }
     const actividad = () => {
       ultimaAccion = Date.now();
       if (Date.now() - ultimoEnvio < Math.min(60000, inactividadSegundos * 500)) return;
       ultimoEnvio = Date.now();
-      api('/auth/me')
-        .then(setUser)
-        .catch((error) => {
-          if (error.status === 401) window.dispatchEvent(new Event('sage:expired'));
-        });
+      consultarSesion();
     };
     const verificar = setInterval(() => {
       if (Date.now() - ultimaAccion >= inactividadSegundos * 1000) {
-        api('/auth/logout', { method: 'POST' }).catch(() => {
-          window.dispatchEvent(new Event('sage:expired'));
-        });
+        api('/auth/logout', { method: 'POST' }).catch(() => undefined);
         window.dispatchEvent(new Event('sage:expired'));
       }
     }, 1000);
-    const foco = () =>
-      api('/auth/me', { headers: { 'X-Sage-Background': '1' } })
-        .then(setUser)
-        .catch((error) => {
-          if (error.status === 401) window.dispatchEvent(new Event('sage:expired'));
-        });
+    const foco = () => consultarSesion(true);
     const cambiarClave = () => {
       setUser((previo) => (previo ? { ...previo, requiereCambioContrasena: true } : null));
       window.location.hash = '/contrasena';
@@ -86,6 +96,7 @@ export function AuthProvider({ children }) {
   }, [userId, inactividadSegundos]);
   async function login(credentials) {
     const data = await api('/auth/login', { method: 'POST', body: credentials });
+    sesionActual.current = {};
     setNotice('');
     setUser(data);
     window.location.hash = data.requiereCambioContrasena
@@ -97,11 +108,13 @@ export function AuthProvider({ children }) {
           : '/portal';
   }
   async function logout() {
+    sesionActual.current = {};
     try {
       await api('/auth/logout', { method: 'POST' });
     } catch (error) {
       if (error.status !== 401) throw error;
     }
+    sesionActual.current = {};
     setUser(null);
     setNotice('Sesión cerrada correctamente.');
     window.location.hash = '/login';

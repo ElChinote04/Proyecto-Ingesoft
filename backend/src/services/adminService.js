@@ -110,17 +110,31 @@ async function account(input, hashContrasena, db) {
     db,
   );
 }
-export const setupStatus = async () => ({ requerido: !(await repository.isInitialized()) });
-export async function initialize(input, requestId) {
-  if (!env.INITIAL_SETUP_KEY)
-    fail(
-      503,
-      'SETUP_NOT_CONFIGURED',
-      'Ejecuta la preparación local antes de crear el administrador.',
-    );
-  const digest = (v) => createHash('sha256').update(v).digest();
-  if (!timingSafeEqual(digest(input.claveInstalacion), digest(env.INITIAL_SETUP_KEY)))
-    fail(403, 'INVALID_SETUP_KEY', 'La clave de instalación no es válida.');
+function requiereClaveInstalacion(ip) {
+  return (
+    env.NODE_ENV !== 'development' ||
+    !['127.0.0.1', '::1', 'localhost'].includes(env.HOST) ||
+    !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)
+  );
+}
+export const setupStatus = async (ip) => ({
+  requerido: !(await repository.isInitialized()),
+  requiereClave: requiereClaveInstalacion(ip),
+});
+export async function initialize(input, requestId, ip) {
+  if (await repository.isInitialized())
+    fail(409, 'SETUP_COMPLETED', 'La instalación ya tiene administrador. Inicia sesión.');
+  if (requiereClaveInstalacion(ip)) {
+    if (!env.INITIAL_SETUP_KEY)
+      fail(
+        503,
+        'SETUP_NOT_CONFIGURED',
+        'La instalación protegida no está preparada. Comunícate con el responsable del servidor.',
+      );
+    const digest = (v) => createHash('sha256').update(v).digest();
+    if (!timingSafeEqual(digest(input.claveInstalacion ?? ''), digest(env.INITIAL_SETUP_KEY)))
+      fail(403, 'INVALID_SETUP_KEY', 'La clave de instalación no es válida.');
+  }
   const hash = await bcrypt.hash(input.contrasena, 12);
   const user = await repository.transaction(async (db) => {
     if (await repository.isInitialized(db))

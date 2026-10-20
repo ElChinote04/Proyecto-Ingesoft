@@ -2,7 +2,7 @@
 
 Documento de traspaso para el equipo y asistentes de programación como Codex o Claude.
 
-**Fecha de revisión del código:** 20 de octubre de 2026, rama `feat/prototipo-arquitectura-sage`, ampliación local sobre `b8d9cfc`. Se conservan PUT sin version y respuestas sin success. La ampliación completa US-001 y US-023; **US-003 fue excluida expresamente y sigue pendiente**. Antes de continuar, leer [la especificación actual de acceso y horarios](ITERACION_1_ACCESO_HORARIOS.md), [API](API.md) y [verificación](VERIFICACION.md). Las secciones de evidencia fechadas el 1/2 de octubre son históricas.
+**Fecha de revisión del código:** 20 de octubre de 2026, rama `feat/prototipo-arquitectura-sage`, ampliación sobre `7c92424`, con simplificación local posterior del alta inicial. Se conservan PUT sin version y respuestas sin success. La ampliación completa US-001 y US-023; **US-003 fue excluida expresamente y sigue pendiente**. Antes de continuar, leer [la especificación actual de acceso y horarios](ITERACION_1_ACCESO_HORARIOS.md), [API](API.md) y [verificación](VERIFICACION.md). Las secciones de evidencia fechadas el 1/2 de octubre son históricas.
 
 ### Cambios principales del 20 de octubre
 
@@ -10,7 +10,7 @@ Alumno y apoderado tienen portal académico privado; este último requiere vínc
 
 MiHorario muestra asignaciones propias del docente o de la sección matriculada del alumno en el único año activo. Consulta al abrir/recuperar foco y cada 10 segundos con pestaña visible, sin mantener viva una sesión inactiva. Administración puede activar año y editar/retirar bloques; los que tienen sesiones se conservan y se sustituyen por otro bloque. Los años inactivos son de consulta para horarios.
 
-Archivos nuevos principales: `portal.controller.js`, `portal.service.js`, `portal.repository.js`, `seguridad.service.js`, validadores `portal.schemas.js`/`seguridad.schemas.js`; frontend `Portal.jsx`, `MiHorario.jsx`, `CambiarContrasena.jsx`, `useHorario.js`, `AdministrarPerfiles.jsx`, `GestionBloques.jsx`, `ConfirmarAccion.jsx`, `TablaDatos.jsx` y `AccesoLayout.jsx`. Tres suites suman 46 pruebas. Start-Sage genera Prisma y migra antes de iniciar. Véase el documento enlazado para contratos y casos reproducibles.
+Archivos nuevos principales: `portal.controller.js`, `portal.service.js`, `portal.repository.js`, `seguridad.service.js`, validadores `portal.schemas.js`/`seguridad.schemas.js`; frontend `Portal.jsx`, `MiHorario.jsx`, `CambiarContrasena.jsx`, `useHorario.js`, `AdministrarPerfiles.jsx`, `GestionBloques.jsx`, `ConfirmarAccion.jsx`, `TablaDatos.jsx` y `AccesoLayout.jsx`. Cuatro suites suman 54 pruebas. En desarrollo local, Start prepara una copia nueva y la primera cuenta se crea sin clave de instalación; producción/test o acceso por red conservan la clave. Start-Sage genera Prisma y migra antes de iniciar. Véase el documento enlazado para contratos y casos reproducibles.
 
 **Repositorio:** <https://github.com/ElChinote04/Proyecto-Ingesoft>. No depende del historial del chat para entenderse. Los nombres de archivos relativos se resuelven desde la raíz del repositorio, salvo los enlaces Markdown entre documentos.
 
@@ -38,7 +38,7 @@ Archivos nuevos principales: `portal.controller.js`, `portal.service.js`, `porta
 SAGE significa **Sistema Académico de Gestión Educativa**. La entrega actual es un **prototipo de arquitectura funcional**, ampliado para completar desde cero este recorrido:
 
 1. Preparar PostgreSQL, migraciones y parámetros locales.
-2. Crear el primer administrador mediante una clave de instalación.
+2. Crear el primer administrador desde la página, sin clave en desarrollo local.
 3. Crear una cuenta docente con uno o varios roles; generar su perfil académico.
 4. Crear año, grado, sección, curso y aula.
 5. Registrar un estudiante y matricularlo en una sección del año correspondiente.
@@ -293,11 +293,11 @@ Las restricciones únicas de BD protegen duplicados incluso ante concurrencia. O
 
 ### 6.1 Primer administrador
 
-`GET /instalacion` devuelve si se necesita configuración. Está cerrada cuando existe `Instalacion(1)` **o cualquier cuenta vinculada al rol ADMINISTRADOR**, aunque esa cuenta no esté activa.
+`GET /instalacion` devuelve requerido y requiereClave, sin secretos. requiereClave solo es false con NODE_ENV=development, HOST de loopback y conexión real local. Está cerrada cuando existe `Instalacion(1)` **o cualquier cuenta vinculada al rol ADMINISTRADOR**, aunque esa cuenta no esté activa.
 
-`POST /instalacion` valida identidad, contraseña y clave. La clave configurada se compara mediante digests SHA-256 y `timingSafeEqual`. El hash de contraseña se calcula con bcrypt. Dentro de una transacción protegida se vuelve a comprobar el cierre y se crean/reutilizan cuatro roles, Persona, Usuario administrador, UsuarioRol, marcador y evento `ADMINISTRADOR_INICIAL_CREADO`.
+`POST /instalacion` valida identidad y contraseña. Solo cuando requiereClave es true, exige la clave configurada y la compara mediante digests SHA-256 y `timingSafeEqual`. El hash de contraseña se calcula con bcrypt. Dentro de una transacción protegida se vuelve a comprobar el cierre y se crean/reutilizan cuatro roles, Persona, Usuario administrador, UsuarioRol, marcador y evento `ADMINISTRADOR_INICIAL_CREADO`.
 
-Dos solicitudes simultáneas no deben crear dos administradores iniciales. El marcador mantiene el cierre aunque luego alguien altere manualmente los roles. La comprobación de clave ocurre antes de la de instalación completada: clave incorrecta da 403; clave válida con instalación cerrada da 409. No existe un botón de reinicio de instalación.
+Dos solicitudes simultáneas no crean dos administradores iniciales. El marcador mantiene el cierre aunque luego se alteren roles. Se comprueba primero si la instalación está completada (409) y, si sigue abierta y es protegida, la clave (403 ausente/incorrecta o 503 sin configuración). Antes de crear la cuenta se vuelve a verificar el cierre dentro de la transacción. No hay botón para reiniciar la instalación.
 
 ### 6.2 Personas, cuentas y perfiles
 
@@ -375,13 +375,13 @@ Los DTO no incluyen hash. Autenticación devuelve id, identificador, nombre, rol
 
 ### 7.2 Matriz efectiva de permisos
 
-| Operación                                                     | Público                                     | ADMINISTRADOR                               | DOCENTE                            | ALUMNO/APODERADO solos |
-| ------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------- | ---------------------------------- | ---------------------- |
-| Health, estado inicial y login                                | Sí                                          | Sí                                          | Sí                                 | Sí                     |
-| Crear primer administrador                                    | Solo con clave válida e instalación abierta | Igual condición                             | Igual condición                    | Igual condición        |
-| Me/logout                                                     | No; requiere sesión                         | Sí                                          | Sí                                 | Sí                     |
-| Usuarios, catálogos, alumnos, matrícula, horarios y auditoría | No                                          | Sí                                          | Solo si además tiene ADMINISTRADOR | No                     |
-| Listar/abrir/guardar asistencia                               | No                                          | Solo si además tiene DOCENTE y clase propia | Sí, de sus clases                  | No                     |
+| Operación                                                     | Público                                         | ADMINISTRADOR                               | DOCENTE                            | ALUMNO/APODERADO solos |
+| ------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------- | ---------------------------------- | ---------------------- |
+| Health, estado inicial y login                                | Sí                                              | Sí                                          | Sí                                 | Sí                     |
+| Crear primer administrador                                    | Instalación abierta; clave solo si es protegida | Igual condición                             | Igual condición                    | Igual condición        |
+| Me/logout                                                     | No; requiere sesión                             | Sí                                          | Sí                                 | Sí                     |
+| Usuarios, catálogos, alumnos, matrícula, horarios y auditoría | No                                              | Sí                                          | Solo si además tiene ADMINISTRADOR | No                     |
+| Listar/abrir/guardar asistencia                               | No                                              | Solo si además tiene DOCENTE y clase propia | Sí, de sus clases                  | No                     |
 
 La interfaz oculta menús, pero la protección decisiva está en middleware y services. Tener ADMINISTRADOR no concede automáticamente permiso para registrar la asistencia de cualquier docente. Los roles se acumulan; no hay elección obligatoria de un único rol activo.
 
@@ -405,34 +405,34 @@ Base local: **`http://localhost:3000/api/v1`**. JSON UTF-8. Respuesta normal `{ 
 
 ### 8.1 Inventario original y ampliación de rutas
 
-| #   | Método | Ruta relativa a /api/v1      | Acceso / efecto                                 |
-| --- | ------ | ---------------------------- | ----------------------------------------------- |
-| 1   | GET    | `/health`                    | Público, consulta real de PostgreSQL            |
-| 2   | GET    | `/instalacion`               | Público, devuelve `{requerido}`                 |
-| 3   | POST   | `/instalacion`               | Clave inicial; crea primer administrador        |
-| 4   | POST   | `/auth/login`                | Credenciales; cookie y usuario seguro           |
-| 5   | GET    | `/auth/me`                   | Sesión válida; usuario actual                   |
-| 6   | POST   | `/auth/logout`               | Sesión válida; revoca acceso                    |
-| 7   | GET    | `/sesiones`                  | DOCENTE; sus sesiones activas                   |
-| 8   | GET    | `/sesiones/:id`              | DOCENTE propietario; contexto de clase          |
-| 9   | GET    | `/sesiones/:id/alumnos`      | DOCENTE propietario; sesión y padrón            |
-| 10  | PUT    | `/sesiones/:id/asistencias`  | DOCENTE propietario; guardado completo          |
-| 11  | GET    | `/admin/usuarios`            | ADMINISTRADOR; cuentas seguras                  |
-| 12  | POST   | `/admin/usuarios`            | ADMINISTRADOR; alta multirrol                   |
-| 13  | PUT    | `/admin/usuarios/:id`        | ADMINISTRADOR; actualización mediante PUT       |
-| 14  | GET    | `/admin/catalogos`           | ADMINISTRADOR; catálogos y docentes habilitados |
-| 15  | POST   | `/admin/catalogos/anios`     | ADMINISTRADOR; año                              |
-| 16  | POST   | `/admin/catalogos/grados`    | ADMINISTRADOR; grado                            |
-| 17  | POST   | `/admin/catalogos/secciones` | ADMINISTRADOR; sección por grado/año            |
-| 18  | POST   | `/admin/catalogos/cursos`    | ADMINISTRADOR; curso                            |
-| 19  | POST   | `/admin/catalogos/aulas`     | ADMINISTRADOR; aula                             |
-| 20  | GET    | `/admin/estudiantes`         | ADMINISTRADOR; identidades y matrículas         |
-| 21  | POST   | `/admin/estudiantes`         | ADMINISTRADOR; registro sin cuenta              |
-| 22  | POST   | `/admin/matriculas`          | ADMINISTRADOR; matrícula por sección            |
-| 23  | GET    | `/admin/horarios`            | ADMINISTRADOR; bloques y sesiones               |
-| 24  | POST   | `/admin/bloques`             | ADMINISTRADOR; asignación y bloque              |
-| 25  | POST   | `/admin/sesiones`            | ADMINISTRADOR; clase fechada                    |
-| 26  | GET    | `/admin/auditoria`           | ADMINISTRADOR; últimos 100 eventos              |
+| #   | Método | Ruta relativa a /api/v1      | Acceso / efecto                                                |
+| --- | ------ | ---------------------------- | -------------------------------------------------------------- |
+| 1   | GET    | `/health`                    | Público, consulta real de PostgreSQL                           |
+| 2   | GET    | `/instalacion`               | Público, devuelve `{requerido, requiereClave}`                 |
+| 3   | POST   | `/instalacion`               | Crea primer administrador; clave solo en instalación protegida |
+| 4   | POST   | `/auth/login`                | Credenciales; cookie y usuario seguro                          |
+| 5   | GET    | `/auth/me`                   | Sesión válida; usuario actual                                  |
+| 6   | POST   | `/auth/logout`               | Sesión válida; revoca acceso                                   |
+| 7   | GET    | `/sesiones`                  | DOCENTE; sus sesiones activas                                  |
+| 8   | GET    | `/sesiones/:id`              | DOCENTE propietario; contexto de clase                         |
+| 9   | GET    | `/sesiones/:id/alumnos`      | DOCENTE propietario; sesión y padrón                           |
+| 10  | PUT    | `/sesiones/:id/asistencias`  | DOCENTE propietario; guardado completo                         |
+| 11  | GET    | `/admin/usuarios`            | ADMINISTRADOR; cuentas seguras                                 |
+| 12  | POST   | `/admin/usuarios`            | ADMINISTRADOR; alta multirrol                                  |
+| 13  | PUT    | `/admin/usuarios/:id`        | ADMINISTRADOR; actualización mediante PUT                      |
+| 14  | GET    | `/admin/catalogos`           | ADMINISTRADOR; catálogos y docentes habilitados                |
+| 15  | POST   | `/admin/catalogos/anios`     | ADMINISTRADOR; año                                             |
+| 16  | POST   | `/admin/catalogos/grados`    | ADMINISTRADOR; grado                                           |
+| 17  | POST   | `/admin/catalogos/secciones` | ADMINISTRADOR; sección por grado/año                           |
+| 18  | POST   | `/admin/catalogos/cursos`    | ADMINISTRADOR; curso                                           |
+| 19  | POST   | `/admin/catalogos/aulas`     | ADMINISTRADOR; aula                                            |
+| 20  | GET    | `/admin/estudiantes`         | ADMINISTRADOR; identidades y matrículas                        |
+| 21  | POST   | `/admin/estudiantes`         | ADMINISTRADOR; registro sin cuenta                             |
+| 22  | POST   | `/admin/matriculas`          | ADMINISTRADOR; matrícula por sección                           |
+| 23  | GET    | `/admin/horarios`            | ADMINISTRADOR; bloques y sesiones                              |
+| 24  | POST   | `/admin/bloques`             | ADMINISTRADOR; asignación y bloque                             |
+| 25  | POST   | `/admin/sesiones`            | ADMINISTRADOR; clase fechada                                   |
+| 26  | GET    | `/admin/auditoria`           | ADMINISTRADOR; últimos 100 eventos                             |
 
 La ampliación añade PUT /auth/contrasena, GET /horarios, GET /portal/estudiantes,
 GET /portal/estudiantes/:id/asistencias, PUT /admin/apoderados/estudiantes,
@@ -445,22 +445,22 @@ El contrato detallado está en [API.md](API.md).
 
 Los objetos JSON de negocio son estrictos: propiedades adicionales producen error. Usar los IDs devueltos por las altas/GET; no asumir que comienzan en 1.
 
-| Operación          | Cuerpo                                                                                 |
-| ------------------ | -------------------------------------------------------------------------------------- |
-| Instalación        | numeroDocumento, nombres, apellidos, identificador, contrasena, claveInstalacion       |
-| Login              | identificador, contrasena                                                              |
-| Alta de usuario    | numeroDocumento, nombres, apellidos, identificador, contrasena, roles; activo opcional |
-| Edición de usuario | identificador, roles y activo obligatorios; contrasena opcional                        |
-| Año                | codigo                                                                                 |
-| Grado              | nombre                                                                                 |
-| Sección            | nombre, gradoId, anioAcademicoId                                                       |
-| Curso              | codigo, nombre                                                                         |
-| Aula               | codigo                                                                                 |
-| Estudiante         | numeroDocumento, nombres, apellidos                                                    |
-| Matrícula          | estudianteId, seccionId                                                                |
-| Bloque             | cursoId, seccionId, docenteId, aulaId, diaSemana, horaInicio, horaFin                  |
-| Sesión de clase    | bloqueId, fecha                                                                        |
-| Asistencia         | asistencias: array de alumnoId, estado y observacion opcional                          |
+| Operación          | Cuerpo                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------ |
+| Instalación        | numeroDocumento, nombres, apellidos, identificador, contrasena; claveInstalacion solo si requiereClave |
+| Login              | identificador, contrasena                                                                              |
+| Alta de usuario    | numeroDocumento, nombres, apellidos, identificador, contrasena, roles; activo opcional                 |
+| Edición de usuario | identificador, roles y activo obligatorios; contrasena opcional                                        |
+| Año                | codigo                                                                                                 |
+| Grado              | nombre                                                                                                 |
+| Sección            | nombre, gradoId, anioAcademicoId                                                                       |
+| Curso              | codigo, nombre                                                                                         |
+| Aula               | codigo                                                                                                 |
+| Estudiante         | numeroDocumento, nombres, apellidos                                                                    |
+| Matrícula          | estudianteId, seccionId                                                                                |
+| Bloque             | cursoId, seccionId, docenteId, aulaId, diaSemana, horaInicio, horaFin                                  |
+| Sesión de clase    | bloqueId, fecha                                                                                        |
+| Asistencia         | asistencias: array de alumnoId, estado y observacion opcional                                          |
 
 Enviar explícitamente `activo` en una edición para no activar accidentalmente una cuenta por el valor predeterminado. Para conservar contraseña, **omitir** contrasena; enviarla vacía no equivale a omitirla.
 
@@ -559,7 +559,7 @@ Selección docente carga sesiones reales, distingue secciones por año, filtra c
 
 Guardar exige todos los estados; mientras guarda se deshabilitan controles. Un error conserva la edición; 409 ofrece recargar sesión. Cambios pendientes activan aviso `beforeunload` y confirmación en la navegación controlada por AppLayout. No hay un bloqueador general de historial del navegador: no atribuir garantía absoluta a cualquier cambio manual del hash o al botón Atrás.
 
-La API frontend dispara `sage:expired` ante 401 fuera de login/me para limpiar usuario y avisar. El backend aplica permisos actuales aunque el menú de una pestaña abierta pueda conservar momentáneamente roles antiguos hasta restaurar sesión.
+La API frontend dispara `sage:expired` ante 401 fuera de login/me/logout; AuthContext maneja esos tres casos. Al iniciar, cerrar o vencer una sesión se invalidan las consultas anteriores de autenticación para que una respuesta tardía no restaure un usuario ya desconectado. El backend aplica permisos actuales aunque el menú de una pestaña abierta pueda conservar momentáneamente roles antiguos hasta restaurar sesión.
 
 ### 9.3 Estilo y accesibilidad
 
@@ -624,30 +624,30 @@ Ejecutar cada comando de seguimiento en su propia terminal. Buscar `X-Request-Id
 
 Son archivos de parámetros, no datos que se deban programar en cada función. `.env.example` contiene plantillas compartibles; `.env` contiene valores de esa instalación. Git ignora `.env` reales, logs, node_modules, `.tools` y dist.
 
-| Archivo         | Parámetro         | Predeterminado o generación                                | Uso                                                              |
-| --------------- | ----------------- | ---------------------------------------------------------- | ---------------------------------------------------------------- |
-| `.env`          | POSTGRES_PASSWORD | `sage_password`, solo desarrollo                           | Contraseña inicial del usuario del contenedor                    |
-| `.env`          | POSTGRES_PORT     | `5432`                                                     | Puerto expuesto en la PC                                         |
-| `backend/.env`  | NODE_ENV          | `development`                                              | development/test/production                                      |
-| `backend/.env`  | HOST              | `127.0.0.1`                                                | Interfaz de escucha API                                          |
-| `backend/.env`  | PORT              | `3000`                                                     | Puerto API                                                       |
-| `backend/.env`  | DATABASE_URL      | `postgresql://sage:sage_password@localhost:5432/sage`      | Conexión de la aplicación                                        |
-| `backend/.env`  | TEST_DATABASE_URL | `postgresql://sage:sage_password@localhost:5432/sage_test` | Plantilla para pruebas aisladas                                  |
-| `backend/.env`  | FRONTEND_URL      | `http://localhost:5173`                                    | Origen permitido; HTTPS obligatorio en production                |
-| `backend/.env`  | JWT_SECRET        | Aleatorio: 48 bytes representados en hexadecimal           | Firma JWT; mínimo 32 caracteres; rechaza placeholder change_this |
-| `backend/.env`  | JWT_EXPIRES_IN    | `1h`                                                       | Duración; entero más unidad s/m/h/d                              |
-| `backend/.env`  | LOG_LEVEL         | `info`                                                     | error/warn/info/debug                                            |
-| `backend/.env`  | LOG_DIR           | `logs`                                                     | Resuelto respecto a backend; admite ruta absoluta                |
-| `backend/.env`  | DEMO_PASSWORD     | `Docente123!`, exclusivamente demo                         | Solo lo lee seed opcional, no login ni setup inicial             |
-| `backend/.env`  | INITIAL_SETUP_KEY | Aleatorio: 32 bytes representados en hexadecimal           | Autoriza alta del primer administrador; mínimo 32 caracteres     |
-| `frontend/.env` | VITE_API_URL      | `http://localhost:3000/api/v1`                             | Base HTTP usada por el cliente; visible en el bundle             |
+| Archivo         | Parámetro         | Predeterminado o generación                                | Uso                                                                            |
+| --------------- | ----------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `.env`          | POSTGRES_PASSWORD | `sage_password`, solo desarrollo                           | Contraseña inicial del usuario del contenedor                                  |
+| `.env`          | POSTGRES_PORT     | `5432`                                                     | Puerto expuesto en la PC                                                       |
+| `backend/.env`  | NODE_ENV          | `development`                                              | development/test/production                                                    |
+| `backend/.env`  | HOST              | `127.0.0.1`                                                | Interfaz de escucha API                                                        |
+| `backend/.env`  | PORT              | `3000`                                                     | Puerto API                                                                     |
+| `backend/.env`  | DATABASE_URL      | `postgresql://sage:sage_password@localhost:5432/sage`      | Conexión de la aplicación                                                      |
+| `backend/.env`  | TEST_DATABASE_URL | `postgresql://sage:sage_password@localhost:5432/sage_test` | Plantilla para pruebas aisladas                                                |
+| `backend/.env`  | FRONTEND_URL      | `http://localhost:5173`                                    | Origen permitido; HTTPS obligatorio en production                              |
+| `backend/.env`  | JWT_SECRET        | Aleatorio: 48 bytes representados en hexadecimal           | Firma JWT; mínimo 32 caracteres; rechaza placeholder change_this               |
+| `backend/.env`  | JWT_EXPIRES_IN    | `1h`                                                       | Duración; entero más unidad s/m/h/d                                            |
+| `backend/.env`  | LOG_LEVEL         | `info`                                                     | error/warn/info/debug                                                          |
+| `backend/.env`  | LOG_DIR           | `logs`                                                     | Resuelto respecto a backend; admite ruta absoluta                              |
+| `backend/.env`  | DEMO_PASSWORD     | `Docente123!`, exclusivamente demo                         | Solo lo lee seed opcional, no login ni setup inicial                           |
+| `backend/.env`  | INITIAL_SETUP_KEY | Aleatorio: 32 bytes representados en hexadecimal           | Protege alta inicial en producción/test o acceso por red; mínimo 32 caracteres |
+| `frontend/.env` | VITE_API_URL      | `http://localhost:3000/api/v1`                             | Base HTTP usada por el cliente; visible en el bundle                           |
 
 En Compose, `POSTGRES_DB=sage` y `POSTGRES_USER=sage` están fijados en YAML; no son parámetros leídos del `.env` raíz actual. Los valores públicos `sage_password` y `Docente123!` de las plantillas son ejemplos de desarrollo, no secretos privados ni contraseñas de administrador creadas por setup.
 
 **Diferencias que suelen causar confusión:**
 
 - `DEMO_PASSWORD` se copia de backend/.env.example cuando se crea backend/.env. `setup:key` no la genera ni cambia contraseñas de usuarios.
-- `setup:key` solo muestra INITIAL_SETUP_KEY del archivo existente. La clave inicial, JWT_SECRET, contraseña de BD y contraseñas de personas son cuatro cosas distintas.
+- `setup:key` solo muestra INITIAL_SETUP_KEY del archivo existente para instalaciones protegidas; no hace falta ejecutarlo en desarrollo local. La clave inicial, JWT_SECRET, contraseña de BD y contraseñas de personas son cuatro cosas distintas.
 - Cada PC nueva genera sus propios secretos JWT e instalación y tiene su propia base Docker. Hacer pull no descarga la BD ni los usuarios de otra PC.
 - Cambiar POSTGRES_PASSWORD en `.env` no cambia por sí solo la contraseña de un usuario que ya existe dentro de un volumen inicializado.
 - Si cambia puerto/contraseña de BD, hay que mantener DATABASE_URL y TEST_DATABASE_URL coherentes; setup no sincroniza automáticamente archivos existentes.
@@ -662,19 +662,16 @@ Requisitos: Git, Docker Desktop con motor Linux funcionando, Internet para prime
 ```powershell
 git clone --branch feat/prototipo-arquitectura-sage https://github.com/ElChinote04/Proyecto-Ingesoft.git
 cd Proyecto-Ingesoft
-powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Sage.ps1
-. .\scripts\Use-Node.ps1
-npm.cmd run setup:key
 powershell -ExecutionPolicy Bypass -File .\scripts\Start-Sage.ps1
 ```
 
-Copiar la clave inicial antes de iniciar servidores; abrir `http://localhost:5173`; pulsar **Configurar el primer administrador**, elegir identidad y contraseña e introducir esa clave. Después iniciar sesión con la cuenta elegida.
+Abrir `http://localhost:5173`; pulsar **Configurar el primer administrador** y elegir identidad y contraseña. En desarrollo local no aparece campo de clave ni hace falta ejecutar setup:key. Después iniciar sesión. El alta inicial se cierra automáticamente.
 
 Setup hace, en orden: preparar Node local 24.21.0, verificar SHA256 del archivo oficial descargado, crear `.env` ausentes, generar secretos necesarios, instalar tres lockfiles, `docker compose up -d --wait`, `prisma generate` y `prisma migrate deploy`. No ejecuta seed. Si ya hay `.env`, conserva sus valores y añade INITIAL_SETUP_KEY si falta o sustituye su marcador `generate_on_setup`.
 
 Node queda en `.tools/node-v24.21.0-win-x64`. Dot-sourcing Use-Node modifica PATH en esa terminal; no instala Node global ni modifica permanentemente el sistema. La política Bypass del comando de preparación aplica a ese proceso.
 
-Start prepara dependencias si detecta backend/frontend node_modules o backend/.env ausentes; de lo contrario solo levanta BD y desarrollo. **No es sustituto de Setup después de un pull con migraciones/dependencias nuevas.** Mantener abierta su terminal; Ctrl+C detiene frontend/backend. La BD conserva volumen.
+Start prepara dependencias si falta node_modules de raíz/backend/frontend o cualquiera de los tres archivos .env; con una instalación preparada levanta BD, genera Prisma, migra e inicia ambos servidores. Después de un pull con dependencias nuevas hay que ejecutar Setup para actualizar los lockfiles instalados; las migraciones se aplican desde Start. Mantener abierta su terminal; Ctrl+C detiene frontend/backend. La BD conserva volumen.
 
 ### 11.3 Inicio posterior y actualización
 
@@ -704,7 +701,6 @@ Los `.ps1` de descarga son para Windows x64. Con Node **24.21.0**, npm, Git y Do
 git clone --branch feat/prototipo-arquitectura-sage https://github.com/ElChinote04/Proyecto-Ingesoft.git
 cd Proyecto-Ingesoft
 npm run setup
-npm run setup:key
 npm run dev
 ```
 
@@ -714,25 +710,25 @@ Para siguiente inicio: `docker compose up -d --wait` y `npm run dev`. Se entreg�
 
 En PowerShell usar npm.cmd después de cargar Use-Node. En una shell con npm normal, omitir `.cmd`.
 
-| Desde raíz                           | Efecto                                                       |
-| ------------------------------------ | ------------------------------------------------------------ |
-| `npm run setup`                      | Preparación completa sin seed                                |
-| `npm run setup -- --env-only`        | Crear/preparar archivos de entorno sin instalar ni migrar    |
-| `npm run setup:key`                  | Mostrar clave inicial local                                  |
-| `npm run dev`                        | Backend en watch y frontend Vite juntos                      |
-| `npm run db:up`                      | Compose up con espera de health                              |
-| `npm run db:down`                    | `docker compose stop`; conserva datos                        |
-| `npm run db:generate`                | Generar Prisma Client                                        |
-| `npm run db:migrate`                 | Aplicar migraciones existentes; no crear una migración nueva |
-| `npm run db:seed`                    | Demo opcional; omitir en recorrido sin seed                  |
-| `npm test`                           | Dos suites backend con PostgreSQL real                       |
-| `npm run lint`                       | ESLint del frontend; no un lint backend                      |
-| `npm run build`                      | Compilar frontend a frontend/dist                            |
-| `npm run format:check`               | Comprobar formato                                            |
-| `npm run format`                     | Reescribir formato del proyecto; revisar diff                |
-| `npm --prefix backend run db:status` | Estado de migraciones                                        |
-| `npm --prefix backend start`         | Backend sin watch, sin build previo                          |
-| `npm --prefix frontend run preview`  | Vista previa del build; no infraestructura de producción     |
+| Desde raíz                           | Efecto                                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------ |
+| `npm run setup`                      | Preparación completa sin seed                                            |
+| `npm run setup -- --env-only`        | Crear/preparar archivos de entorno sin instalar ni migrar                |
+| `npm run setup:key`                  | Mostrar clave de instalación protegida (innecesaria en desarrollo local) |
+| `npm run dev`                        | Backend en watch y frontend Vite juntos                                  |
+| `npm run db:up`                      | Compose up con espera de health                                          |
+| `npm run db:down`                    | `docker compose stop`; conserva datos                                    |
+| `npm run db:generate`                | Generar Prisma Client                                                    |
+| `npm run db:migrate`                 | Aplicar migraciones existentes; no crear una migración nueva             |
+| `npm run db:seed`                    | Demo opcional; omitir en recorrido sin seed                              |
+| `npm test`                           | Cuatro suites backend con PostgreSQL real                                |
+| `npm run lint`                       | ESLint del frontend; no un lint backend                                  |
+| `npm run build`                      | Compilar frontend a frontend/dist                                        |
+| `npm run format:check`               | Comprobar formato                                                        |
+| `npm run format`                     | Reescribir formato del proyecto; revisar diff                            |
+| `npm --prefix backend run db:status` | Estado de migraciones                                                    |
+| `npm --prefix backend start`         | Backend sin watch, sin build previo                                      |
+| `npm --prefix frontend run preview`  | Vista previa del build; no infraestructura de producción                 |
 
 ### 11.6 Seed opcional y compatibilidad
 
@@ -785,21 +781,21 @@ En navegador, F12 → Network/Red → Fetch/XHR y conservar registro. Inspeccion
 
 Ejemplos ficticios reutilizables: docente `docente.verificacion@sage.local`, documento docente `VER-DOC-01`, estudiante `VER-EST-01`, año 2027, grado 4.°, sección V, curso Comunicación, aula V101, viernes 09:00–09:45, fecha **2027-10-01**. Si ya existen, reutilizarlos o elegir otro conjunto coherente; no borrar la base para repetir.
 
-| Paso | Acción en página                                                     | HTTP esperado                              | Qué debe existir después                                                          |
-| ---- | -------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
-| 1    | Configurar primer administrador con clave local y contraseña elegida | POST /instalacion 201; GET requerido=false | Persona, Usuario, cuatro Rol, UsuarioRol administrador, Instalacion(1), auditoría |
-| 2    | Iniciar sesión como administrador                                    | POST /auth/login 200                       | SesionAuth y cookie; log de login                                                 |
-| 3    | Usuarios: crear Elena Verificación, DOCENTE + APODERADO              | POST /admin/usuarios 201                   | Una Persona/Usuario, dos UsuarioRol, un Docente y evento                          |
-| 4    | Cerrar sesión e iniciar como docente                                 | Logout/login 200; GET /sesiones 200 con [] | Sesión auth vigente; pantalla sin clases todavía                                  |
-| 5    | Volver a administrador y crear año, grado, sección, curso y aula     | Cinco altas 201                            | Catálogos enlazados, sección con año y grado                                      |
-| 6    | Alumnos: registrar Lucía Verificación                                | POST /admin/estudiantes 201                | Persona + Estudiante, todavía sin matrícula                                       |
-| 7    | Matricularla en año/grado/sección seleccionados                      | POST /admin/matriculas 201                 | Matricula activa, mismo año de sección                                            |
-| 8    | Horarios: asignar curso, sección, docente, aula, viernes y horas     | POST /admin/bloques 201                    | CursoSeccionDocente + CursoSeccionDocenteAula; matriz actualizada                 |
-| 9    | Crear clase de ese bloque para 2027-10-01                            | POST /admin/sesiones 201                   | SesionClase con fecha/horas coherentes, sin contador de edición                   |
-| 10   | Entrar como docente, seleccionar clase y continuar                   | GET /sesiones y /sesiones/:id/alumnos 200  | Padrón con Lucía, estado null antes de guardar                                    |
-| 11   | Marcar Tardanza, observación y guardar todo el padrón                | PUT /sesiones/:id/asistencias 200          | AsistenciaEstudiante actualizada, evento y log de éxito                           |
-| 12   | Revisar asistencia y recargar F5                                     | Nuevo GET 200                              | Mismo estado/observación leídos de PostgreSQL                                     |
-| 13   | Volver como administrador a Auditoría                                | GET /admin/auditoria 200                   | Eventos visibles; detalle según tabla de sección 10                               |
+| Paso | Acción en página                                                                      | HTTP esperado                              | Qué debe existir después                                                          |
+| ---- | ------------------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
+| 1    | Configurar primer administrador con contraseña elegida, sin clave en desarrollo local | POST /instalacion 201; GET requerido=false | Persona, Usuario, cuatro Rol, UsuarioRol administrador, Instalacion(1), auditoría |
+| 2    | Iniciar sesión como administrador                                                     | POST /auth/login 200                       | SesionAuth y cookie; log de login                                                 |
+| 3    | Usuarios: crear Elena Verificación, DOCENTE + APODERADO                               | POST /admin/usuarios 201                   | Una Persona/Usuario, dos UsuarioRol, un Docente y evento                          |
+| 4    | Cerrar sesión e iniciar como docente                                                  | Logout/login 200; GET /sesiones 200 con [] | Sesión auth vigente; pantalla sin clases todavía                                  |
+| 5    | Volver a administrador y crear año, grado, sección, curso y aula                      | Cinco altas 201                            | Catálogos enlazados, sección con año y grado                                      |
+| 6    | Alumnos: registrar Lucía Verificación                                                 | POST /admin/estudiantes 201                | Persona + Estudiante, todavía sin matrícula                                       |
+| 7    | Matricularla en año/grado/sección seleccionados                                       | POST /admin/matriculas 201                 | Matricula activa, mismo año de sección                                            |
+| 8    | Horarios: asignar curso, sección, docente, aula, viernes y horas                      | POST /admin/bloques 201                    | CursoSeccionDocente + CursoSeccionDocenteAula; matriz actualizada                 |
+| 9    | Crear clase de ese bloque para 2027-10-01                                             | POST /admin/sesiones 201                   | SesionClase con fecha/horas coherentes, sin contador de edición                   |
+| 10   | Entrar como docente, seleccionar clase y continuar                                    | GET /sesiones y /sesiones/:id/alumnos 200  | Padrón con Lucía, estado null antes de guardar                                    |
+| 11   | Marcar Tardanza, observación y guardar todo el padrón                                 | PUT /sesiones/:id/asistencias 200          | AsistenciaEstudiante actualizada, evento y log de éxito                           |
+| 12   | Revisar asistencia y recargar F5                                                      | Nuevo GET 200                              | Mismo estado/observación leídos de PostgreSQL                                     |
+| 13   | Volver como administrador a Auditoría                                                 | GET /admin/auditoria 200                   | Eventos visibles; detalle según tabla de sección 10                               |
 
 Durante la comprobación de cuenta, no es necesario mostrar hashes de contraseñas. Los campos de contraseña viajan en requests para crear/verificar credenciales, pero nunca deben aparecer en respuestas ni documentación compartida.
 
@@ -849,21 +845,21 @@ Antes de completar altas, algunos SELECT no tendrán filas: eso es esperado. Los
 
 ### 12.5 Diagnóstico sin bucles
 
-| Síntoma                            | Comprobación inicial                                      | Interpretación/acción                                                   |
-| ---------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Docker no conecta                  | `docker info`, `docker compose ps`                        | Abrir motor y resolver error concreto; no repetir setup indefinidamente |
-| Puerto ocupado                     | Ver proceso que usa 5432/3000/5173                        | No cerrar procesos desconocidos; coordinar puerto y configuración       |
-| Node/npm no reconocido en Windows  | `. .\scripts\Use-Node.ps1`; `node --version`              | Debe indicar v24.21.0 en esa terminal                                   |
-| Health no conecta                  | Terminal de Start, Docker y error.log                     | Backend no arrancó o BD/configuración falló                             |
-| Frontend muestra error de red      | Health, VITE_API_URL, Network                             | Distinguir servidor caído de 401/403 reales                             |
-| CORS 403                           | Origin de la petición y FRONTEND_URL                      | localhost y 127.0.0.1 son orígenes distintos; usar URL configurada      |
-| Credenciales demo no funcionan     | Confirmar si se ejecutó seed                              | Sin seed no existen; entrar con cuentas creadas en formularios          |
-| Clave de instalación rechazada     | Obtenerla con setup:key en esa copia                      | No confundir clave con contraseña; reiniciar backend si cambió entorno  |
-| Docente sin clases                 | Ver perfil, rol, asignación, bloque y SesionClase         | El rol por sí solo no crea contexto académico                           |
-| Alumno ausente                     | Ver sección de matrícula y actividad de Persona/Matricula | El padrón procede de esas relaciones                                    |
-| Guardado 409                       | Código y mensaje del error                                | Corregir duplicados o conflictos de negocio indicados por el mensaje    |
-| Auditoría muestra {}               | Consultar tipo y entidadId                                | Limitación de payload conocida; no indica pérdida del alta              |
-| Cambiar .env no cambia acceso a PG | Volumen inicializado y contraseña efectiva                | Modificar plantilla no rota contraseña de la BD existente               |
+| Síntoma                            | Comprobación inicial                                             | Interpretación/acción                                                   |
+| ---------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Docker no conecta                  | `docker info`, `docker compose ps`                               | Abrir motor y resolver error concreto; no repetir setup indefinidamente |
+| Puerto ocupado                     | Ver proceso que usa 5432/3000/5173                               | No cerrar procesos desconocidos; coordinar puerto y configuración       |
+| Node/npm no reconocido en Windows  | `. .\scripts\Use-Node.ps1`; `node --version`                     | Debe indicar v24.21.0 en esa terminal                                   |
+| Health no conecta                  | Terminal de Start, Docker y error.log                            | Backend no arrancó o BD/configuración falló                             |
+| Frontend muestra error de red      | Health, VITE_API_URL, Network                                    | Distinguir servidor caído de 401/403 reales                             |
+| CORS 403                           | Origin de la petición y FRONTEND_URL                             | localhost y 127.0.0.1 son orígenes distintos; usar URL configurada      |
+| Credenciales demo no funcionan     | Confirmar si se ejecutó seed                                     | Sin seed no existen; entrar con cuentas creadas en formularios          |
+| Clave de instalación rechazada     | Solo instalación protegida: obtenerla con setup:key en esa copia | No confundir clave con contraseña; reiniciar backend si cambió entorno  |
+| Docente sin clases                 | Ver perfil, rol, asignación, bloque y SesionClase                | El rol por sí solo no crea contexto académico                           |
+| Alumno ausente                     | Ver sección de matrícula y actividad de Persona/Matricula        | El padrón procede de esas relaciones                                    |
+| Guardado 409                       | Código y mensaje del error                                       | Corregir duplicados o conflictos de negocio indicados por el mensaje    |
+| Auditoría muestra {}               | Consultar tipo y entidadId                                       | Limitación de payload conocida; no indica pérdida del alta              |
+| Cambiar .env no cambia acceso a PG | Volumen inicializado y contraseña efectiva                       | Modificar plantilla no rota contraseña de la BD existente               |
 
 El propietario pidió avisar ante problemas de programas en vez de gastar tiempo/tokens en intentos repetidos sin nueva evidencia.
 
@@ -894,8 +890,10 @@ La plantilla sage_test no necesita contener el esquema ni ser la base usada dire
 | ------------------------ | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `api.test.js`            | 20    | Health real, login/cookie, contraseña incorrecta, 401/403, propiedad, padrón de seed, guardado, enums, alumno ajeno, recuperación, duplicados/PUT repetido, entrada estricta, concurrencia, multirrol, actividad/tokens, CORS/JSON, repetición de seed, logout, error 500 seguro/logs                                                              |
 | `administracion.test.js` | 18    | Base vacía, instalación protegida y simultánea, multirrol/perfil/hash, duplicados sin huérfanos, permisos, catálogos, matrícula, reutilización de Persona ALUMNO, asignación, tres tipos de cruce, concurrencia/contigüidad, fechas, padrón, asistencia/auditoría, edición/roles/PUT repetido, revocación, protección admin y ausencia de secretos |
+| `perfiles.test.js`       | 8     | Acceso por perfiles, cambio inicial, bloqueo, inactividad, privacidad familiar, horario personal, año activo y auditoría de seguridad                                                                                                                                                                                                              |
+| `instalacion.test.js`    | 8     | Alta local sin clave, protección en producción/red, origen de conexión, loopback IPv4/IPv6 y cierre permanente                                                                                                                                                                                                                                     |
 
-Se añade `perfiles.test.js` con 8 casos de acceso, seguridad, privacidad y horario. Son **46 pruebas de integración**, no pruebas visuales ni cobertura exhaustiva de todas las ramas. Una suite conserva el seed opcional; administración y perfiles empiezan vacías y crean el contexto por HTTP.
+Son **54 pruebas de integración**, no pruebas visuales ni cobertura exhaustiva de todas las ramas. Una suite conserva el seed opcional; administración, perfiles e instalación empiezan vacías y crean el contexto por HTTP.
 
 ### 13.3 Resultado registrado y sus límites
 

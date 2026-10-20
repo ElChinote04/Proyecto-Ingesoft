@@ -46,5 +46,5 @@ run('docker', ['compose', 'up', '-d', '--wait']);
 for (const script of ['db:generate', 'db:migrate'])
   run(process.execPath, [npmCli, 'run', script], path.join(root, 'backend'));
 console.log(
-  'SAGE preparado SIN datos demo. Ejecuta npm run setup:key, luego npm run dev y crea el primer administrador desde la pantalla inicial.',
+  'SAGE preparado SIN datos demo. Ejecuta npm run dev y crea el primer administrador desde la página. En desarrollo local no necesitas clave de instalación.',
 );

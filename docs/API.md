@@ -250,11 +250,15 @@ No hay Swagger UI expuesta. Los contratos se describen en este documento y se ve
 
 ### GET /instalacion
 
-Público. 200 con `data: { requerido: true }` si no hay marcador de instalación ni un usuario con rol ADMINISTRADOR. No devuelve claves ni información de cuentas.
+Público. 200 con `data: { requerido, requiereClave }`. requerido es true si no hay
+marcador de instalación ni una cuenta ADMINISTRADOR. requiereClave es false solo
+en NODE_ENV=development, con HOST de loopback (127.0.0.1, ::1 o localhost) y una
+conexión local de loopback. En producción, modo test, escucha en red o conexión
+remota es true. No devuelve claves ni información de cuentas.
 
 ### POST /instalacion
 
-Público, con el mismo límite de intentos del login. Body estricto:
+Público, con el mismo límite de intentos del login. Body estricto para desarrollo local:
 
 ```json
 {
@@ -262,12 +266,22 @@ Público, con el mismo límite de intentos del login. Body estricto:
   "nombres": "María",
   "apellidos": "Dirección",
   "identificador": "admin@colegio.local",
-  "contrasena": "UnaClaveDeEjemplo123!",
-  "claveInstalacion": "valor-local-obtenido-con-setup:key"
+  "contrasena": "UnaClaveDeEjemplo123!"
 }
 ```
 
-201 con DTO seguro del usuario. Crea cuatro roles, Persona, Usuario ADMINISTRADOR activo, UsuarioRol, marcador Instalacion y evento de auditoría en una transacción. Rechaza clave inválida (403 INVALID_SETUP_KEY), configuración ausente (503 SETUP_NOT_CONFIGURED) o instalación completada (409 SETUP_COMPLETED). El bloqueo de PostgreSQL impide que dos solicitudes simultáneas creen dos administradores iniciales. La clave no aparece en respuestas, auditoría ni logs.
+201 con DTO seguro del usuario. Crea cuatro roles, Persona, Usuario ADMINISTRADOR
+activo, UsuarioRol, marcador Instalacion y auditoría en una transacción. El primer
+administrador elige su contraseña y puede iniciar sesión directamente.
+
+En instalaciones protegidas hay que añadir claveInstalacion con el valor de
+INITIAL_SETUP_KEY (el operador puede consultarlo mediante setup:key). Se rechaza
+clave ausente/incorrecta con 403 INVALID_SETUP_KEY y configuración ausente con
+503 SETUP_NOT_CONFIGURED. La excepción local se decide en servidor, no mediante
+un campo enviado por el navegador. Una instalación completada devuelve
+409 SETUP_COMPLETED y permanece cerrada aunque se retiren roles posteriormente.
+El bloqueo transaccional impide dos altas simultáneas. La clave nunca aparece
+en respuestas, auditoría ni logs. No cambia los datos de instalaciones existentes.
 
 ## Administración
 
