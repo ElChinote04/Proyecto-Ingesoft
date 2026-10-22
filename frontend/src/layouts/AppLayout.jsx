@@ -79,6 +79,22 @@ export default function AppLayout({
                 Control de asistencia
               </button>
             )}
+            {!user.requiereCambioContrasena && user.roles.includes('DOCENTE') && (
+              <button
+                className={section === 'Gestión Académica' ? 'nav-active' : 'nav-item'}
+                onClick={() =>
+                  onLeave(() => {
+                    window.location.hash = '/gestion';
+                  })
+                }
+              >
+                <img
+                  src={section === 'Gestión Académica' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                  alt=""
+                />
+                Gestión Académica
+              </button>
+            )}
             {!user.requiereCambioContrasena &&
               user.roles.some((rol) => ['DOCENTE', 'ALUMNO'].includes(rol)) && (
                 <button
