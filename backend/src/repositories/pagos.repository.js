@@ -69,7 +69,7 @@ export const marcarBoletaPagada = (id, fecha, db = prisma) =>
 // ------------------------------------------------------------ apoderado
 export const buscarApoderadoDeUsuario = (usuarioId, db = prisma) =>
   db.apoderado.findFirst({
-    where: { persona: { usuario: { id: usuarioId } } },
+    where: { persona: { usuario: { is: { id: usuarioId } } } },
     include: { estudiantes: { where: { activo: true } } },
   });
 

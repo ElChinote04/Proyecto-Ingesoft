@@ -3,9 +3,20 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 export const backendRoot = fileURLToPath(new URL('../../', import.meta.url));
 dotenv.config({ path: new URL('../../.env', import.meta.url), quiet: true });
+/**
+ * Una variable declarada pero vacía en .env (STRIPE_SECRET_KEY=) llega como
+ * cadena vacía, no como ausente, de modo que ni .optional() ni .default() se
+ * aplicarían. Esto la convierte en ausente antes de validar.
+ */
+const vacioEsAusente = (esquema) =>
+  z.preprocess(
+    (valor) => (typeof valor === 'string' && valor.trim() === '' ? undefined : valor),
+    esquema,
+  );
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  INITIAL_SETUP_KEY: z.string().min(32).optional(),
+  INITIAL_SETUP_KEY: vacioEsAusente(z.string().min(32).optional()),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().default('127.0.0.1'),
   DATABASE_URL: z.url(),
@@ -28,8 +39,8 @@ const schema = z.object({
   PAGOS_PROVEEDOR: z.enum(['simulada', 'stripe']).default('simulada'),
   PAGOS_MONEDA: z.string().length(3).default('PEN'),
   PAGOS_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(10000),
-  STRIPE_SECRET_KEY: z.string().min(20).optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().min(16).default('secreto_de_pruebas_simulada'),
+  STRIPE_SECRET_KEY: vacioEsAusente(z.string().min(20).optional()),
+  STRIPE_WEBHOOK_SECRET: vacioEsAusente(z.string().min(16).default('secreto_de_pruebas_simulada')),
 });
 const result = schema.safeParse(process.env);
 if (!result.success)

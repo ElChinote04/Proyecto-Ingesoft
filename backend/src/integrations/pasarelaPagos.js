@@ -170,6 +170,7 @@ const simulada = {
     return { idExterno, resultado: intento.resultado };
   },
   verificarNotificacion(cuerpoCrudo, cabecera) {
+    if (!cuerpoCrudo || !cabecera) throw firmaInvalida();
     const esperada = createHmac('sha256', env.STRIPE_WEBHOOK_SECRET)
       .update(cuerpoCrudo.toString('utf8'))
       .digest('hex');
