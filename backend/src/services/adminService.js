@@ -284,6 +284,8 @@ export function enroll(input, actor, requestId) {
       { ...matricula, anioAcademico: section.anioAcademico },
       input.planPago,
       db,
+      actor,
+      requestId,
     );
     return {
       data: matricula,

@@ -96,7 +96,9 @@ before(async () => {
     })
     .expect(200);
 
-  anio = await alta('catalogos/anios', { codigo: '2026' });
+  // Año futuro para que las boletas nazcan todas al día y la prueba de
+  // morosidad no dependa de la fecha en que se ejecute la suite.
+  anio = await alta('catalogos/anios', { codigo: '2030' });
   grado = await alta('catalogos/grados', { nombre: 'Primero' });
   seccion = await alta('catalogos/secciones', {
     nombre: 'A',
@@ -131,8 +133,8 @@ test('US-006: matricular con plan emite el cronograma completo en la misma trans
   });
   assert.ok(plan, 'la matrícula debe tener su plan de pago');
   assert.equal(plan.boletas.length, 10);
-  assert.equal(plan.boletas[0].periodo, '2026-03');
-  assert.equal(plan.boletas[9].periodo, '2026-12');
+  assert.equal(plan.boletas[0].periodo, '2030-03');
+  assert.equal(plan.boletas[9].periodo, '2030-12');
   assert.equal(Number(plan.boletas[0].monto), 350);
   assert.ok(plan.boletas.every((b) => b.estado === 'PENDIENTE'));
 });
@@ -175,7 +177,7 @@ test('US-007A: el apoderado ve el historial de su hijo, ordenado y con estado', 
   const respuesta = await apoderado.get(`${base}/compromisos-pago?limite=100`).expect(200);
   const { boletas, total } = respuesta.body.data;
   assert.equal(total, 10);
-  assert.equal(boletas[0].periodo, '2026-12', 'más reciente primero');
+  assert.equal(boletas[0].periodo, '2030-12', 'más reciente primero');
   for (const boleta of boletas) {
     assert.equal(boleta.estudiante.id, estudiante.id);
     assert.ok(['PENDIENTE', 'PAGADA', 'MOROSA'].includes(boleta.estado));
@@ -226,7 +228,9 @@ async function boletaPendiente() {
   return boleta;
 }
 
-const notificar = async (cuerpo, firma) =>
+// Sin async a propósito: debe devolver el Test de supertest para poder
+// encadenar .expect(). Con async devolvería una Promise, que no lo tiene.
+const notificar = (cuerpo, firma) =>
   request(app)
     .post(`${base}/pagos/notificaciones`)
     .set('x-sage-firma', firma ?? simulada.firmar(JSON.stringify(cuerpo)))

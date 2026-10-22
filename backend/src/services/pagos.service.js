@@ -17,7 +17,7 @@ const dinero = (valor) => Number(valor).toFixed(2);
  * Construye el plan y sus boletas. Se expone como función para que el registro
  * de matrícula la invoque dentro de su propia transacción (ADR-002, US-006).
  */
-export async function emitirCompromisos(matricula, plan, db) {
+export async function emitirCompromisos(matricula, plan, db, actor, requestId) {
   const anio = Number(matricula.anioAcademico.codigo);
   if (!Number.isInteger(anio))
     fail(409, 'ANIO_INVALIDO', 'El año académico de la matrícula no tiene un código numérico.');
@@ -29,7 +29,7 @@ export async function emitirCompromisos(matricula, plan, db) {
     montoPension: plan.montoPension,
     concepto: plan.concepto,
   });
-  return repository.crearPlanConBoletas(
+  const creado = await repository.crearPlanConBoletas(
     {
       matriculaId: matricula.id,
       montoPension: plan.montoPension,
@@ -40,6 +40,21 @@ export async function emitirCompromisos(matricula, plan, db) {
     cuotas,
     db,
   );
+  // La emisión se audita aquí y no en quien llama, para que quede registrada
+  // tanto si viene del registro de matrícula como del alta directa del plan.
+  await repository.audit(
+    db,
+    actor.id,
+    'COMPROMISO_PAGO_EMITIDO',
+    creado.id,
+    {
+      matriculaId: matricula.id,
+      cuotas: creado.boletas.length,
+      montoPension: dinero(plan.montoPension),
+    },
+    { requestId, entidad: 'PlanPago' },
+  );
+  return creado;
 }
 
 /** Alta del plan sobre una matrícula ya registrada. */
@@ -50,16 +65,7 @@ export async function crearPlanDePago(matriculaId, plan, actor, requestId) {
     if (!matricula.activo) fail(409, 'MATRICULA_INACTIVA', 'La matrícula no está activa.');
     if (await repository.buscarPlanPorMatricula(matriculaId, db))
       fail(409, 'PLAN_DUPLICADO', 'Esta matrícula ya tiene un compromiso de pago emitido.');
-    const creado = await emitirCompromisos(matricula, plan, db);
-    await repository.audit(
-      db,
-      actor.id,
-      'COMPROMISO_PAGO_EMITIDO',
-      creado.id,
-      { matriculaId, cuotas: creado.boletas.length, montoPension: dinero(plan.montoPension) },
-      { requestId, entidad: 'PlanPago' },
-    );
-    return creado;
+    return emitirCompromisos(matricula, plan, db, actor, requestId);
   });
   logger.info('COMPROMISO_PAGO_EMITIDO', {
     module: 'pagos',
