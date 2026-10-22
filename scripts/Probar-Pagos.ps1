@@ -1,4 +1,4 @@
-# Recorre a mano el flujo completo de pagos (US-006, US-007A, US-007B) contra un
+﻿# Recorre a mano el flujo completo de pagos (US-006, US-007A, US-007B) contra un
 # servidor ya levantado, usando la pasarela simulada. Crea sus propios datos con
 # un sufijo aleatorio, así que puede ejecutarse varias veces seguidas.
 #
