@@ -369,6 +369,39 @@ select {
   padding: 28px;
   min-height: 238px;
 }
+.grade-context {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px 12px;
+  padding: 24px 20px 36px;
+}
+.grading-scale {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+  padding: 14px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #5279d7;
+  font-size: 12px;
+}
+.grading-scale strong {
+  font-weight: 600;
+}
+.scale-badge {
+  min-width: 28px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+.scale-ad { background: var(--brand); color: #fff; }
+.scale-a { background: #ecfdf5; color: #65a878; }
+.scale-b { background: #fffbeb; color: #d59b22; }
+.scale-c { background: #fef2f2; color: #ef7777; }
 .table-card {
   background: #fff;
   border: 1px solid var(--border);
@@ -816,7 +849,8 @@ a {
   .admin-grid,
   .form-grid,
   .admin-grid .form-grid,
-  .schedule-filters {
+  .schedule-filters,
+  .grade-context {
     grid-template-columns: minmax(0, 1fr);
   }
   .sidebar nav {

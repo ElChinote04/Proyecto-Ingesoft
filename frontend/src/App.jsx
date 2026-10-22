@@ -11,6 +11,7 @@ import Setup from './pages/Setup';
 import Portal from './pages/Portal';
 import MiHorario from './pages/MiHorario';
 import CambiarContrasena from './pages/CambiarContrasena';
+import Gestion from './pages/Gestion';
 import './styles/app.css';
 function Screens() {
   const { user, loading, startupError, restore } = useAuth();
@@ -46,6 +47,7 @@ function Screens() {
     return <MiHorario key={perfiles} />;
   if (route === '/portal' && user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)))
     return <Portal key={perfiles} />;
+  if (route === '/gestion' && user.roles.includes('DOCENTE')) return <Gestion />;
   if (
     user.roles.includes('ADMINISTRADOR') &&
     (route.startsWith('/admin') || !user.roles.includes('DOCENTE'))
