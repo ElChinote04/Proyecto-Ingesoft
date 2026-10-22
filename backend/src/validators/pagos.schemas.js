@@ -36,3 +36,8 @@ export const boletasQuerySchema = z
     limite: z.coerce.number().int().min(1).max(100).default(20),
   })
   .strict();
+
+/** Solo para el entorno de desarrollo con la pasarela simulada. */
+export const simularSchema = z
+  .object({ resultado: z.enum(['PAGADO', 'RECHAZADO', 'EXPIRADO', 'PENDIENTE']).default('PAGADO') })
+  .strict();

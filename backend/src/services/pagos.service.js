@@ -302,3 +302,20 @@ export async function obtenerPago(id, actor) {
 }
 
 export { RESULTADO };
+
+/** Ver pagos.controller.simularResultado. No se expone en producción. */
+export async function simularResultadoPasarela(pagoId, resultado, actor, requestId) {
+  const { simulada } = await import('../integrations/pasarelaPagos.js');
+  const pago = await repository.buscarPago(pagoId);
+  if (!pago) fail(404, 'REFERENCE_NOT_FOUND', 'El pago no existe.');
+  simulada.marcar(pago.referenciaExterna, resultado);
+  logger.warn('PAGO_SIMULADO', {
+    module: 'pagos',
+    requestId,
+    userId: actor.id,
+    entidadId: pago.id,
+    resultado,
+  });
+  const aplicado = await confirmarDesdeNotificacion({ referencia: pago.referencia }, requestId);
+  return { pagoId, resultadoSimulado: resultado, ...aplicado };
+}

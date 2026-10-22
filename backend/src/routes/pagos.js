@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validate, idSchema } from '../validators/schemas.js';
 import * as schemas from '../validators/pagos.schemas.js';
 import * as controller from '../controllers/pagos.controller.js';
+import { env } from '../config/env.js';
 
 export const pagosRouter = Router();
 
@@ -37,3 +38,15 @@ pagosRouter.post(
   controller.iniciarPago,
 );
 pagosRouter.get('/pagos/:id', requireAuth, validate(idSchema, 'params'), controller.obtenerPago);
+
+// Atajo de desarrollo para recorrer el flujo a mano: fija el resultado de la
+// pasarela simulada y aplica la confirmación sin tener que firmar el webhook.
+// No existe en producción ni con un proveedor real.
+if (env.PAGOS_PROVEEDOR === 'simulada' && env.NODE_ENV !== 'production')
+  pagosRouter.post(
+    '/pagos/:id/simular',
+    requireAuth,
+    validate(idSchema, 'params'),
+    validate(schemas.simularSchema),
+    controller.simularResultado,
+  );

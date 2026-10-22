@@ -36,3 +36,19 @@ export const recibirNotificacion = async (req, res) => {
   const resultado = await service.confirmarDesdeNotificacion(evento, req.requestId);
   res.status(200).json({ data: { recibido: true, ...resultado } });
 };
+
+/**
+ * Atajo de desarrollo: fija el resultado que devolverá la pasarela simulada y
+ * aplica la confirmación, para poder recorrer el flujo a mano sin firmar el
+ * webhook. La ruta solo se registra con PAGOS_PROVEEDOR=simulada y fuera de
+ * producción; el camino real, con firma verificada, es /pagos/notificaciones.
+ */
+export const simularResultado = async (req, res) =>
+  res.json({
+    data: await service.simularResultadoPasarela(
+      req.validated.params.id,
+      req.validated.body.resultado,
+      req.user,
+      req.requestId,
+    ),
+  });
