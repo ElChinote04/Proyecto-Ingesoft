@@ -125,29 +125,54 @@ EsperaError 409 'no se permite un segundo pago en curso sobre la misma boleta' {
         -Body (Json @{ compromisoPagoId = $boleta.id }) -WebSession $apoderado
 }
 
-Paso 'La pasarela confirma el pago'
-$confirmacion = (Invoke-RestMethod "$Api/pagos/$($pago.pagoId)/simular" -Method Post `
-        -ContentType 'application/json' -Body (Json @{ resultado = 'PAGADO' }) `
-        -WebSession $apoderado).data
-if (-not $confirmacion.aplicado) { Mal "la confirmación no se aplicó: $($confirmacion.motivo)" }
-Ok 'confirmación aplicada'
+# A partir de aquí el recorrido depende del proveedor configurado en backend/.env.
+$esStripe = $pago.urlCheckout -like '*checkout.stripe.com*'
+
+if ($esStripe) {
+    Paso 'Completa el pago en la página de Stripe'
+    Write-Host '   Se abrirá el navegador. Paga con la tarjeta de prueba:' -ForegroundColor Yellow
+    Write-Host '     4242 4242 4242 4242 · cualquier fecha futura · cualquier CVC' -ForegroundColor Yellow
+    Write-Host '   Mientras tanto vigila la terminal de stripe listen: ahí verás llegar el evento.' -ForegroundColor DarkGray
+    Start-Process $pago.urlCheckout
+    $limite = (Get-Date).AddMinutes(5)
+    $estado = 'PROCESANDO'
+    do {
+        Start-Sleep -Seconds 3
+        $estado = (Invoke-RestMethod "$Api/pagos/$($pago.pagoId)" -WebSession $apoderado).data.estado
+        Write-Host "   esperando confirmación... estado = $estado"
+    } while ($estado -eq 'PROCESANDO' -and (Get-Date) -lt $limite)
+    if ($estado -ne 'CONFIRMADO') { Mal "el pago quedó en $estado" }
+    Ok 'Stripe confirmó el pago y el webhook lo aplicó'
+}
+else {
+    Paso 'La pasarela simulada confirma el pago'
+    $confirmacion = (Invoke-RestMethod "$Api/pagos/$($pago.pagoId)/simular" -Method Post `
+            -ContentType 'application/json' -Body (Json @{ resultado = 'PAGADO' }) `
+            -WebSession $apoderado).data
+    if (-not $confirmacion.aplicado) { Mal "la confirmación no se aplicó: $($confirmacion.motivo)" }
+    Ok 'confirmación aplicada'
+}
 
 $despues = (Invoke-RestMethod "$Api/compromisos-pago?limite=100" -WebSession $apoderado).data.boletas |
 Where-Object { $_.id -eq $boleta.id }
 if ($despues.estado -ne 'PAGADA') { Mal "la boleta quedó en $($despues.estado)" }
 Ok "la boleta pasó a PAGADA el $($despues.pagadaEn)"
 
-Paso 'QAS008: el reenvío de la misma confirmación no vuelve a aplicarse'
-$reenvio = (Invoke-RestMethod "$Api/pagos/$($pago.pagoId)/simular" -Method Post `
-        -ContentType 'application/json' -Body (Json @{ resultado = 'PAGADO' }) `
-        -WebSession $apoderado).data
-if ($reenvio.aplicado) { Mal 'el reenvío volvió a aplicar la confirmación' }
-Ok "reenvío ignorado con motivo $($reenvio.motivo)"
+if (-not $esStripe) {
+    Paso 'QAS008: el reenvío de la misma confirmación no vuelve a aplicarse'
+    $reenvio = (Invoke-RestMethod "$Api/pagos/$($pago.pagoId)/simular" -Method Post `
+            -ContentType 'application/json' -Body (Json @{ resultado = 'PAGADO' }) `
+            -WebSession $apoderado).data
+    if ($reenvio.aplicado) { Mal 'el reenvío volvió a aplicar la confirmación' }
+    Ok "reenvío ignorado con motivo $($reenvio.motivo)"
+}
 
 EsperaError 409 'no se puede volver a pagar una boleta ya pagada' {
     Invoke-RestMethod "$Api/pagos" -Method Post -ContentType 'application/json' `
         -Body (Json @{ compromisoPagoId = $boleta.id }) -WebSession $apoderado
 }
 
-Write-Host "`nTodo el recorrido de pagos funcionó." -ForegroundColor Green
+$proveedor = if ($esStripe) { 'Stripe (modo prueba)' } else { 'pasarela simulada' }
+Write-Host ""
+Write-Host "Todo el recorrido de pagos funcionó con $proveedor." -ForegroundColor Green
 Write-Host "Cuenta usada: apoderado-$sufijo@sage.local / $clave" -ForegroundColor DarkGray
