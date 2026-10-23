@@ -33,6 +33,25 @@ export default function Gestion() {
   const selectedCourse = courseId || courses[0]?.id || '';
   const selectedSection = sectionId || sections[0]?.id || '';
 
+  //Para conteo de alumnos, filtramos sesiones según curso y sección seleccionados
+  const matchingSessions = useMemo(
+    () => {
+      if (!sessions.data) return [];
+      return sessions.data.filter((session) => {
+        const matchCourse = String(session.curso?.id) == String(selectedCourse);
+        const matchSection = String(session.seccion?.id) == String(selectedSection);
+        return matchCourse && matchSection;
+      });
+    },
+    [sessions.data, selectedCourse, selectedSection],
+  );
+
+  //Luego extraemos y contamos alumnos únicos de sesiones filtradas
+  const studentCount = useMemo(() => {
+    const allStudents = matchingSessions.flatMap((session) => session.alumnos ?? []);
+    return uniqueById(allStudents).length;
+  }, [matchingSessions]);
+
   if (sessions.loading)
     return (
       <AppLayout section="Gestión Académica" step="Calificaciones">
@@ -126,7 +145,9 @@ export default function Gestion() {
             <span className="scale-badge scale-c">C</span>
             <span>No se admiten valores distintos.</span>
           </div>
-          <button type="button">Continuar con 32 alumnos</button>
+          <button type="button" disabled={studentCount === 0}>
+            {studentCount === 1 ? 'Continuar con 1 alumno' : `Continuar con ${studentCount} alumnos`}
+          </button>
         </>
       )}
     </AppLayout>

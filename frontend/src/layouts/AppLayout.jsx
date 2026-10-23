@@ -96,6 +96,25 @@ export default function AppLayout({
               </button>
             )}
             {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['ALUMNO'].includes(rol)) && (
+                <button
+                  className={section === 'Mis evaluaciones' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/evaluaciones';
+                    })
+                  }
+                >
+                  <img
+                    src={
+                      section === 'Mis evaluaciones' ? '/figma/nav-active.svg' : '/figma/nav.svg'
+                    }
+                    alt=""
+                  />
+                  Mis evaluaciones
+                </button>
+              )}
+            {!user.requiereCambioContrasena &&
               user.roles.some((rol) => ['DOCENTE', 'ALUMNO'].includes(rol)) && (
                 <button
                   className={section === 'Mi horario' ? 'nav-active' : 'nav-item'}
