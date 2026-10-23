@@ -72,6 +72,101 @@ export const createCompetenciaSchema = z
 export const updateCompetenciaSchema = z
   .object({ descripcion: text('la descripción de la competencia', 500) })
   .strict();
+
+const logro = z.enum(['AD', 'A', 'B', 'C']);
+const calificacionCompetenciaInput = z
+  .object({ competenciaId: id, nivelLogro: logro, conclusionDescriptiva: z.string().trim().max(500).optional() })
+  .strict();
+
+export const createCalificacionSchema = z
+  .object({
+    matriculaId: id,
+    bimestreId: id,
+    asignacionId: id,
+    reglaId: id,
+    conclusionDescriptiva: z.string().trim().max(500).optional(),
+    competencias: z.array(calificacionCompetenciaInput).min(1, 'Registra al menos una competencia.'),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const ids = value.competencias.map(({ competenciaId }) => competenciaId);
+    if (new Set(ids).size !== ids.length)
+      context.addIssue({ code: 'custom', path: ['competencias'], message: 'No repitas competencias.' });
+  });
+
+export const updateCalificacionSchema = z
+  .object({
+    conclusionDescriptiva: z.string().trim().max(500).optional(),
+    competencias: z.array(calificacionCompetenciaInput).min(1).optional(),
+  })
+  .strict()
+  .refine((value) => value.conclusionDescriptiva !== undefined || value.competencias !== undefined, {
+    message: 'Indica al menos un dato para actualizar.',
+  });
+
+const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa una fecha válida YYYY-MM-DD.');
+export const createReglaConsolidacionSchema = z
+  .object({
+    gradoId: id,
+    cursoId: id,
+    nombre: text('el nombre de la regla', 150),
+    version: z.number().int().positive(),
+    metodo: text('el método de consolidación', 100),
+    vigenteHasta: dateOnly.optional(),
+  })
+  .strict();
+export const updateReglaConsolidacionSchema = z
+  .object({ version: z.number().int().positive(), metodo: text('el método de consolidación', 100) })
+  .strict();
+
+const dateOnlyPlan = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa una fecha válida YYYY-MM-DD.');
+const competencyIds = z.array(id).refine((values) => new Set(values).size === values.length, 'No repitas competencias.');
+export const createPlanAcademicoSchema = z
+  .object({
+    bimestreId: id,
+    asignacionId: id,
+    titulo: text('el título del plan', 200),
+    objetivo: text('el objetivo del plan', 1000),
+    fechaFin: dateOnlyPlan.optional(),
+    competenciaIds: competencyIds.optional().default([]),
+  })
+  .strict();
+export const updatePlanAcademicoSchema = z
+  .object({
+    titulo: text('el título del plan', 200).optional(),
+    objetivo: text('el objetivo del plan', 1000).optional(),
+    competenciaIds: competencyIds.optional(),
+  })
+  .strict()
+  .refine((value) => value.titulo !== undefined || value.objetivo !== undefined || value.competenciaIds !== undefined, {
+    message: 'Indica al menos un dato para actualizar.',
+  });
+
+const evidenceDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa una fecha válida YYYY-MM-DD.');
+const evidenceFiles = z.array(z.string().trim().min(1)).min(1, 'Registra al menos un archivo.');
+export const createEvidenciaPedagogicaSchema = z
+  .object({
+    docenteId: id,
+    planId: id,
+    fechaEntrega: evidenceDate.optional(),
+    descripcionAvance: text('la descripción del avance', 2000),
+    archivos: evidenceFiles,
+  })
+  .strict();
+export const updateEvidenciaPedagogicaSchema = z
+  .object({ fechaEntrega: evidenceDate.optional(), descripcionAvance: text('la descripción del avance', 2000).optional(), archivos: evidenceFiles.optional() })
+  .strict()
+  .refine((value) => value.fechaEntrega !== undefined || value.descripcionAvance !== undefined || value.archivos !== undefined, { message: 'Indica al menos un dato para actualizar.' });
+export const reviewEvidenciaPedagogicaSchema = z
+  .object({ estadoRevision: z.enum(['PENDIENTE_REVISION', 'OBSERVADA', 'VALIDADA']), observacionesRevision: z.string().trim().max(2000).optional() })
+  .strict();
+
+export const createCalificacionCompetenciaSchema = z
+  .object({ calificacionId: id, competenciaId: id, nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional() })
+  .strict();
+export const updateCalificacionCompetenciaSchema = z
+  .object({ nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional() })
+  .strict();
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Usa una hora válida HH:mm.');
 export const blockSchema = z
   .object({

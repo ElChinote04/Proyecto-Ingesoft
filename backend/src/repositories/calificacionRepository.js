@@ -1,11 +1,11 @@
 import { prisma } from '../config/database.js';
 
 const include = {
-  matricula: { include: { estudiante: { include: { persona: true } }, seccion: true } },
+  matricula: { include: { estudiante: { include: { persona: true } }, seccion: { include: { grado: true, anioAcademico: true } } } },
   bimestre: true,
   asignacion: { include: { curso: true, seccion: true, docente: { include: { persona: true } } } },
   regla: true,
-  competencias: { include: { competencia: true } },
+  competencias: { where: { activo: true }, include: { competencia: { include: { curso: true } } } },
 };
 
 export const listCalificaciones = (where = {}, db = prisma) =>
@@ -28,3 +28,19 @@ export const updateCalificacion = (id, data, db = prisma) =>
 
 export const deleteCalificacion = (id, db = prisma) =>
   db.calificacion.update({ where: { id }, data: { activo: false }, include });
+
+export const transaction = (operation) => prisma.$transaction(operation);
+
+export const auditCalificacion = (db, { usuarioId, tipoEvento, calificacionId, valorAnterior, valorNuevo, requestId }) =>
+  db.registroAuditoria.create({
+    data: {
+      usuarioId,
+      tipoEvento,
+      resultado: 'EXITOSO',
+      tipoEntidad: 'Calificacion',
+      idEntidad: String(calificacionId),
+      valorAnterior: valorAnterior ? JSON.stringify(valorAnterior) : null,
+      valorNuevo: valorNuevo ? JSON.stringify(valorNuevo) : null,
+      observacion: requestId ? `requestId=${requestId}` : null,
+    },
+  });

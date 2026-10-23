@@ -14,6 +14,11 @@ import * as portal from '../controllers/portal.controller.js';
 import { horarioSchema, paginaSchema } from '../validators/portal.schemas.js';
 import { cursoRouter } from './curso.js';
 import { competenciaRouter } from './competencia.js';
+import { calificacionRouter } from './calificacion.js';
+import { reglaConsolidacionRouter } from './reglaConsolidacion.js';
+import { planAcademicoRouter } from './planAcademico.js';
+import { evidenciaPedagogicaRouter } from './evidenciaPedagogica.js';
+import { calificacionCompetenciaRouter } from './calificacionCompetencia.js';
 export const router = Router();
 const requirePortal = (req, res, next) => {
   if (!req.user.roles.some((role) => ['ALUMNO', 'APODERADO'].includes(role)))
@@ -40,6 +45,11 @@ router.post('/instalacion', loginLimit, validate(setupSchema), admin.initialize)
 router.use('/admin', adminRouter);
 router.use('/cursos', cursoRouter);
 router.use('/competencias', competenciaRouter);
+router.use('/calificaciones', calificacionRouter);
+router.use('/reglas-consolidacion', reglaConsolidacionRouter);
+router.use('/planes-academicos', planAcademicoRouter);
+router.use('/evidencias-pedagogicas', evidenciaPedagogicaRouter);
+router.use('/calificaciones-competencias', calificacionCompetenciaRouter);
 router.post('/auth/login', loginLimit, validate(loginSchema), auth.login);
 router.get('/auth/me', requireAuth, auth.me);
 router.put('/auth/contrasena', requireAuth, validate(passwordSchema), auth.cambiarContrasena);

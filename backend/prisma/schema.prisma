@@ -6,20 +6,103 @@ datasource db {
   provider = "postgresql"
 }
 
-enum NombreRol { ADMINISTRADOR DOCENTE ALUMNO APODERADO }
-enum TipoDocumento { DNI CARNET_EXTRANJERIA }
-enum SeveridadError { INFORMATIVA ADVERTENCIA ERROR CRITICA }
-enum EstadoAuditoria { EXITOSO PENDIENTE FALLIDO }
-enum TipoParentesco { MADRE PADRE ABUELO_ABUELA TIO_TIA HERMANO_HERMANA OTRO SIN_PARENTESCO }
-enum EstadoCompromisoPago { PENDIENTE PARCIALMENTE_PAGADO PAGADO ANULADO }
-enum EstadoPago { PENDIENTE CONFIRMADO ANULADO }
-enum MedioPago { EFECTIVO TRANSFERENCIA DEPOSITO TARJETA BILLETERA_DIGITAL }
-enum EstadoSolicitud { PENDIENTE APROBADA RECHAZADA }
-enum CondicionAsistencia { PRESENTE TARDANZA AUSENTE JUSTIFICADA }
-enum EstadoEvidenciaPedagogica { PENDIENTE_REVISION OBSERVADA VALIDADA }
-enum NivelLogro { AD A B C }
-enum EstadoSesionClase { PROGRAMADA REALIZADA CANCELADA }
-enum DiaSemana { LUNES MARTES MIERCOLES JUEVES VIERNES SABADO DOMINGO }
+enum NombreRol {
+  ADMINISTRADOR
+  DOCENTE
+  ALUMNO
+  APODERADO
+}
+
+enum TipoDocumento {
+  DNI
+  CARNET_EXTRANJERIA
+}
+
+enum SeveridadError {
+  INFORMATIVA
+  ADVERTENCIA
+  ERROR
+  CRITICA
+}
+
+enum EstadoAuditoria {
+  EXITOSO
+  PENDIENTE
+  FALLIDO
+}
+
+enum TipoParentesco {
+  MADRE
+  PADRE
+  ABUELO_ABUELA
+  TIO_TIA
+  HERMANO_HERMANA
+  OTRO
+  SIN_PARENTESCO
+}
+
+enum EstadoCompromisoPago {
+  PENDIENTE
+  PARCIALMENTE_PAGADO
+  PAGADO
+  ANULADO
+}
+
+enum EstadoPago {
+  PENDIENTE
+  CONFIRMADO
+  ANULADO
+}
+
+enum MedioPago {
+  EFECTIVO
+  TRANSFERENCIA
+  DEPOSITO
+  TARJETA
+  BILLETERA_DIGITAL
+}
+
+enum EstadoSolicitud {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
+enum CondicionAsistencia {
+  PRESENTE
+  TARDANZA
+  AUSENTE
+  JUSTIFICADA
+}
+
+enum EstadoEvidenciaPedagogica {
+  PENDIENTE_REVISION
+  OBSERVADA
+  VALIDADA
+}
+
+enum NivelLogro {
+  AD
+  A
+  B
+  C
+}
+
+enum EstadoSesionClase {
+  PROGRAMADA
+  REALIZADA
+  CANCELADA
+}
+
+enum DiaSemana {
+  LUNES
+  MARTES
+  MIERCOLES
+  JUEVES
+  VIERNES
+  SABADO
+  DOMINGO
+}
 
 model Persona {
   id              Int           @id @default(autoincrement())
@@ -82,7 +165,10 @@ model Rol {
   usuarios        Usuario[]
 }
 
-model Instalacion { id Int @id; completadaEn DateTime @default(now()) }
+model Instalacion {
+  id Int @id
+  completadaEn DateTime @default(now())
+}
 
 model SesionAuth {
   id              String   @id
@@ -351,7 +437,6 @@ model Curso {
 
 model Competencia {
   id Int @id @default(autoincrement())
-  cursoId Int
   codigo String @unique
   nombre String
   descripcion String?
@@ -360,7 +445,7 @@ model Competencia {
   creadoPorId Int?
   modificadoEn DateTime @updatedAt
   modificadoPorId Int?
-  curso Curso @relation(fields: [cursoId], references: [id])
+  cursos Curso[]
   planes PlanAcademico[]
   calificaciones CalificacionCompetencia[]
 }
