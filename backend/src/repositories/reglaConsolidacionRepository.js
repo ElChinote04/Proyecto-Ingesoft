@@ -18,4 +18,4 @@ export const updateReglaConsolidacion = (id, data, db = prisma) =>
   db.reglaConsolidacion.update({ where: { id }, data, include });
 
 export const deleteReglaConsolidacion = (id, db = prisma) =>
-  db.reglaConsolidacion.delete({ where: { id } });
+  db.reglaConsolidacion.update({ where: { id }, data: { activo: false }, include });

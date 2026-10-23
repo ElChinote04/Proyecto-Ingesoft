@@ -27,4 +27,4 @@ export const updateCalificacion = (id, data, db = prisma) =>
   db.calificacion.update({ where: { id }, data, include });
 
 export const deleteCalificacion = (id, db = prisma) =>
-  db.calificacion.delete({ where: { id } });
+  db.calificacion.update({ where: { id }, data: { activo: false }, include });

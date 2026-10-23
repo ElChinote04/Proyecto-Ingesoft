@@ -47,6 +47,31 @@ export const catalogSchemas = {
     .strict(),
   aulas: z.object({ codigo: text('el aula', 30).toUpperCase() }).strict(),
 };
+
+export const createCursoSchema = z
+  .object({
+    codigo: text('el código del curso', 30).toUpperCase(),
+    nombre: text('el nombre del curso', 150),
+    descripcion: text('la descripción del curso', 500),
+  })
+  .strict();
+
+export const updateCursoSchema = z
+  .object({ descripcion: text('la descripción del curso', 500) })
+  .strict();
+
+export const createCompetenciaSchema = z
+  .object({
+    cursoId: id,
+    codigo: text('el código de la competencia', 30).toUpperCase(),
+    nombre: text('el nombre de la competencia', 150),
+    descripcion: text('la descripción de la competencia', 500),
+  })
+  .strict();
+
+export const updateCompetenciaSchema = z
+  .object({ descripcion: text('la descripción de la competencia', 500) })
+  .strict();
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Usa una hora válida HH:mm.');
 export const blockSchema = z
   .object({

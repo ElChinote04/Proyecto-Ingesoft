@@ -20,4 +20,4 @@ export const updatePlanAcademico = (id, data, db = prisma) =>
   db.planAcademico.update({ where: { id }, data, include });
 
 export const deletePlanAcademico = (id, db = prisma) =>
-  db.planAcademico.delete({ where: { id } });
+  db.planAcademico.update({ where: { id }, data: { activo: false }, include });

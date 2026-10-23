@@ -12,6 +12,8 @@ import { passwordSchema } from '../validators/seguridad.schemas.js';
 import { setupSchema } from '../validators/adminSchemas.js';
 import * as portal from '../controllers/portal.controller.js';
 import { horarioSchema, paginaSchema } from '../validators/portal.schemas.js';
+import { cursoRouter } from './curso.js';
+import { competenciaRouter } from './competencia.js';
 export const router = Router();
 const requirePortal = (req, res, next) => {
   if (!req.user.roles.some((role) => ['ALUMNO', 'APODERADO'].includes(role)))
@@ -36,6 +38,8 @@ router.get('/health', health.check);
 router.get('/instalacion', admin.status);
 router.post('/instalacion', loginLimit, validate(setupSchema), admin.initialize);
 router.use('/admin', adminRouter);
+router.use('/cursos', cursoRouter);
+router.use('/competencias', competenciaRouter);
 router.post('/auth/login', loginLimit, validate(loginSchema), auth.login);
 router.get('/auth/me', requireAuth, auth.me);
 router.put('/auth/contrasena', requireAuth, validate(passwordSchema), auth.cambiarContrasena);

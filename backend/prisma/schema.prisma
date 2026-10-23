@@ -351,6 +351,7 @@ model Curso {
 
 model Competencia {
   id Int @id @default(autoincrement())
+  cursoId Int
   codigo String @unique
   nombre String
   descripcion String?
@@ -359,7 +360,7 @@ model Competencia {
   creadoPorId Int?
   modificadoEn DateTime @updatedAt
   modificadoPorId Int?
-  cursos Curso[]
+  curso Curso @relation(fields: [cursoId], references: [id])
   planes PlanAcademico[]
   calificaciones CalificacionCompetencia[]
 }

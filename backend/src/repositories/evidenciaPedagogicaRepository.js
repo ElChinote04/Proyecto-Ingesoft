@@ -19,4 +19,4 @@ export const updateEvidenciaPedagogica = (id, data, db = prisma) =>
   db.evidenciaPedagogica.update({ where: { id }, data, include });
 
 export const deleteEvidenciaPedagogica = (id, db = prisma) =>
-  db.evidenciaPedagogica.delete({ where: { id } });
+  db.evidenciaPedagogica.update({ where: { id }, data: { activo: false }, include });
