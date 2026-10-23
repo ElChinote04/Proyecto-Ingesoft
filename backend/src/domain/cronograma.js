@@ -88,8 +88,16 @@ export function construirCronograma({
 export function estadoVisible(boleta, ahora = new Date()) {
   if (boleta.estado !== 'PENDIENTE') return boleta.estado;
   const vence = new Date(boleta.fechaVencimiento);
-  return vence.getTime() < new Date(ahora).setUTCHours(0, 0, 0, 0) ? 'MOROSA' : 'PENDIENTE';
+  return vence < inicioDelDia(ahora) ? 'MOROSA' : 'PENDIENTE';
 }
+
+/**
+ * Corte de la morosidad: una boleta que vence hoy todavía no es morosa. Lo usan
+ * tanto estadoVisible como el filtro por estado, para que la etiqueta y el
+ * filtro nunca discrepen.
+ */
+export const inicioDelDia = (ahora = new Date()) =>
+  new Date(new Date(ahora).setUTCHours(0, 0, 0, 0));
 
 /**
  * Decide qué hacer ante la notificación de la pasarela (QAS008). Se mantiene

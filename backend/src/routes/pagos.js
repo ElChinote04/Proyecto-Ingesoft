@@ -38,6 +38,14 @@ pagosRouter.post(
   controller.iniciarPago,
 );
 pagosRouter.get('/pagos/:id', requireAuth, validate(idSchema, 'params'), controller.obtenerPago);
+// Da de baja un intento que el apoderado abandonó en la pasarela, para que
+// pueda volver a pagar la misma boleta sin esperar a que el proveedor lo expire.
+pagosRouter.delete(
+  '/pagos/:id',
+  requireAuth,
+  validate(idSchema, 'params'),
+  controller.cancelarPago,
+);
 
 // Atajo de desarrollo para recorrer el flujo a mano: fija el resultado de la
 // pasarela simulada y aplica la confirmación sin tener que firmar el webhook.

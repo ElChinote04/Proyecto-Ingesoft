@@ -23,7 +23,11 @@ export const buscarMatricula = (matriculaId, db = prisma) =>
     include: { anioAcademico: true, estudiante: { include: { persona: true } } },
   });
 
+const EN_CURSO = ['INICIADO', 'PROCESANDO'];
+
 const boletaInclude = {
+  // Como mucho uno, por el índice único parcial sobre los pagos en curso.
+  pagos: { where: { estado: { in: EN_CURSO } }, select: { id: true, iniciadoPorId: true } },
   planPago: {
     include: {
       matricula: {
@@ -36,16 +40,25 @@ const boletaInclude = {
   },
 };
 
-export async function listarBoletas({ estudianteIds, estudianteId, estado }, pagina, limite) {
+export async function listarBoletas(
+  { estudianteIds, estudianteId, estado, morosaAntesDe },
+  pagina,
+  limite,
+) {
   const where = {
     planPago: {
       matricula: {
         estudianteId: estudianteId ?? (estudianteIds ? { in: estudianteIds } : undefined),
       },
     },
-    ...(estado && estado !== 'MOROSA' && { estado }),
-    // MOROSA no es un estado almacenado: es una boleta PENDIENTE ya vencida.
-    ...(estado === 'MOROSA' && { estado: 'PENDIENTE', fechaVencimiento: { lt: new Date() } }),
+    ...(estado && !['PENDIENTE', 'MOROSA'].includes(estado) && { estado }),
+    // MOROSA no es un estado almacenado: es una boleta PENDIENTE ya vencida, y
+    // por eso PENDIENTE excluye las vencidas.
+    ...(estado === 'PENDIENTE' && {
+      estado: 'PENDIENTE',
+      fechaVencimiento: { gte: morosaAntesDe },
+    }),
+    ...(estado === 'MOROSA' && { estado: 'PENDIENTE', fechaVencimiento: { lt: morosaAntesDe } }),
   };
   const [total, registros] = await prisma.$transaction([
     prisma.compromisoPago.count({ where }),
@@ -84,7 +97,15 @@ export const buscarPago = (id, db = prisma) =>
 
 export const buscarPagoEnCurso = (compromisoPagoId, db = prisma) =>
   db.pago.findFirst({
-    where: { compromisoPagoId, estado: { in: ['INICIADO', 'PROCESANDO'] } },
+    where: { compromisoPagoId, estado: { in: EN_CURSO } },
   });
 
 export const actualizarPago = (id, data, db = prisma) => db.pago.update({ where: { id }, data });
+
+/**
+ * Cambia el estado solo si el pago sigue en uno de los estados de partida.
+ * Devuelve cuántas filas cambió: 0 significa que otra solicitud (el reenvío del
+ * webhook o una cancelación simultánea) ya lo cerró.
+ */
+export const cerrarPago = async (id, desde, data, db = prisma) =>
+  (await db.pago.updateMany({ where: { id, estado: { in: desde } }, data })).count;

@@ -22,6 +22,11 @@ export const iniciarPago = async (req, res) =>
 export const obtenerPago = async (req, res) =>
   res.json({ data: await service.obtenerPago(req.validated.params.id, req.user) });
 
+export const cancelarPago = async (req, res) =>
+  res.json({
+    data: await service.cancelarPago(req.validated.params.id, req.user, req.requestId),
+  });
+
 /**
  * Notificación de la pasarela. No lleva sesión de usuario: su control de acceso
  * es la firma del proveedor (ADR-001 y ADR-002). Responde 200 incluso cuando no

@@ -114,10 +114,17 @@ Arquitectura; en resumen:
 ## Módulo de pagos
 
 Implementa US-006 (emitir el compromiso), US-007A (historial de boletas) y
-US-007B (pagar por pasarela). Está verificado de extremo a extremo contra Stripe
-Checkout en modo de prueba. Detalles operativos en `docs/PRUEBAS_PAGOS.md`.
+US-007B (pagar por pasarela), con backend y pantallas. Está verificado de
+extremo a extremo contra Stripe Checkout en modo de prueba. Detalles operativos
+en `docs/PRUEBAS_PAGOS.md`.
 
-Cuatro decisiones que conviene no deshacer sin entenderlas:
+El frontend son dos pantallas: `pages/Pagos.jsx` (boletas, filtros y el botón
+que lleva al checkout) y `pages/ResultadoPago.jsx` (retorno de la pasarela, que
+sondea `GET /pagos/:id` hasta que el webhook aplica la confirmación). La
+aplicación enruta por hash, así que las URL de retorno que el backend entrega al
+proveedor llevan `/#/`.
+
+Cinco decisiones que conviene no deshacer sin entenderlas:
 
 **El pago ocurre en dos fases.** `POST /pagos` crea el pago en `INICIADO`
 _antes_ de llamar al proveedor y devuelve la URL de checkout; la boleta no
@@ -140,6 +147,13 @@ el SQL de la migración. Es la garantía real de «evita envíos duplicados».
 consultar. Si fuera un estado guardado haría falta un proceso programado que lo
 actualice, y entre el vencimiento y esa ejecución el sistema mentiría.
 
+**Un intento abandonado se cierra a mano.** Si el apoderado sale del checkout
+sin pagar, el índice parcial le impide volver a intentarlo hasta que el pago
+anterior deje de estar en curso, y Stripe tarda 24 horas en expirar la sesión
+por su cuenta. Por eso existe `DELETE /pagos/:id`: consulta primero al proveedor
+—si resulta que sí cobró, confirma en vez de cancelar— y solo entonces cierra el
+intento.
+
 El proveedor está detrás del adaptador `integrations/pasarelaPagos.js`, con dos
 implementaciones de la misma interfaz: `stripe` y `simulada`. `PAGOS_PROVEEDOR`
 elige. Las pruebas usan siempre la simulada, así que corren sin credenciales ni
@@ -152,7 +166,7 @@ Implementado: acceso y roles, gestión de usuarios, catálogos, estudiantes,
 matrícula, horarios, sesiones, asistencia, auditoría y el módulo de pagos.
 
 Pendiente: evaluación por competencias, justificaciones de inasistencia,
-reportes, y el frontend de pagos.
+reportes, y la boleta en PDF (US-009).
 
 ## Cosas que no hay que hacer
 

@@ -276,21 +276,55 @@ servicio puede perder la carrera entre dos clics simultáneos, el índice no.
 
 ---
 
+## 4. Desde la pantalla, como lo hará el apoderado
+
+Los recorridos anteriores llaman a la API directamente. Esta es la misma
+secuencia, pero por la interfaz, que es lo que conviene enseñar en la
+sustentación.
+
+1. Levanta todo con `npm run dev` (backend en 3000 y frontend en 5173).
+2. Entra en `http://localhost:5173` con la cuenta de un apoderado que tenga un
+   estudiante matriculado y con plan de pago emitido. Si no tienes una,
+   `scripts\Probar-Pagos.ps1` crea una y te imprime sus credenciales al final.
+3. En el menú lateral aparece **Pagos y boletas**. Verás el saldo pendiente, las
+   boletas vencidas, el próximo vencimiento y el cronograma completo con sus
+   filtros.
+4. Pulsa **Pagar** en cualquier boleta pendiente. Un diálogo muestra alumno,
+   concepto, vencimiento, estado y monto; al confirmar, el navegador sale hacia
+   la pasarela. La boleta sigue en «Pendiente» mientras tanto, que es lo
+   correcto, y en el historial aparece «Pago en proceso · ver» en lugar del
+   botón, para retomar o cancelar ese intento.
+5. Al volver, la pantalla de resultado consulta el pago cada tres segundos hasta
+   que llega la confirmación del webhook. Con `PAGOS_PROVEEDOR=simulada` no hay
+   cobro real, así que esa pantalla muestra en desarrollo dos botones para fijar
+   el resultado y cerrar el recorrido.
+
+Si vuelves sin pagar (el botón «atrás» de Stripe), la pantalla lo detecta y
+ofrece **retomar el pago** con el mismo enlace o **cancelar el intento**.
+Cancelar es lo que permite volver a pagar esa boleta enseguida: sin eso habría
+que esperar a que Stripe expire la sesión, que son 24 horas. Antes de cancelar,
+el servidor le pregunta al proveedor si el cobro se hizo; si se hizo, confirma
+el pago en lugar de cancelarlo y responde 409.
+
+---
+
 ## Problemas frecuentes
 
-| Síntoma                                          | Causa y solución                                                                                          |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `npm` no se reconoce                             | Ejecuta `. .\scripts\Use-Node.ps1` en esa terminal (con el punto y el espacio al inicio).                 |
-| `Docker no esta disponible`                      | Abre Docker Desktop y espera a que termine de iniciar.                                                    |
-| `TEST_DATABASE_URL debe terminar en _test`       | Falta la variable en `backend/.env`. Cópiala de `backend/.env.example`.                                   |
-| El puerto 5432, 3000 o 5173 está ocupado         | Tienes el repositorio original corriendo. Deténlo con Ctrl+C.                                             |
-| `PASARELA_NO_DISPONIBLE` (503) con Stripe        | La llave es incorrecta o no hay salida a internet. Con `PAGOS_PROVEEDOR=simulada` no debería ocurrir.     |
-| La boleta no pasa a PAGADA                       | Es el comportamiento correcto hasta que la pasarela confirme. Usa `/pagos/{id}/simular` o paga en Stripe. |
-| `PAGO_EN_CURSO` (409) al reintentar              | Ya hay un pago `INICIADO` o `PROCESANDO` sobre esa boleta. Conclúyelo o márcalo como `RECHAZADO`.         |
-| `scripts\...ps1 no existe`                       | Estás fuera de la carpeta del proyecto. Haz `cd` a `Proyecto-Ingesoft-pagos` o usa la ruta completa.      |
-| `la ejecución de scripts está deshabilitada`     | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` en esa terminal.                             |
-| `stripe` no se reconoce                          | La CLI no está instalada o no está en el PATH. Ejecútala con su ruta completa.                            |
-| `must specify events to forward`                 | Falta `--events` con la lista completa de la sección 3.2.                                                 |
-| El pago queda en `PROCESANDO` para siempre       | La ventana de `stripe listen` no estaba abierta al pagar, o el `whsec_` no coincide. Mira su salida.      |
-| `stripe listen` responde `[401]`                 | El `whsec_` del backend no es el de esa sesión de la CLI. Revisa el `.env` y las variables de entorno.    |
-| Acentos rotos (`Pensi?n`) en la página de Stripe | PowerShell 5.1 envía el cuerpo en ISO-8859-1 si el `Content-Type` no declara `charset=utf-8`.             |
+| Síntoma                                            | Causa y solución                                                                                              |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `npm` no se reconoce                               | Ejecuta `. .\scripts\Use-Node.ps1` en esa terminal (con el punto y el espacio al inicio).                     |
+| `Docker no esta disponible`                        | Abre Docker Desktop y espera a que termine de iniciar.                                                        |
+| `TEST_DATABASE_URL debe terminar en _test`         | Falta la variable en `backend/.env`. Cópiala de `backend/.env.example`.                                       |
+| El puerto 5432, 3000 o 5173 está ocupado           | Tienes el repositorio original corriendo. Deténlo con Ctrl+C.                                                 |
+| `PASARELA_NO_DISPONIBLE` (503) con Stripe          | La llave es incorrecta o no hay salida a internet. Con `PAGOS_PROVEEDOR=simulada` no debería ocurrir.         |
+| La boleta no pasa a PAGADA                         | Es el comportamiento correcto hasta que la pasarela confirme. Usa `/pagos/{id}/simular` o paga en Stripe.     |
+| `PAGO_EN_CURSO` (409) al reintentar                | Ya hay un pago `INICIADO` o `PROCESANDO` sobre esa boleta. Conclúyelo o márcalo como `RECHAZADO`.             |
+| `scripts\...ps1 no existe`                         | Estás fuera de la carpeta del proyecto. Haz `cd` a `Proyecto-Ingesoft-pagos` o usa la ruta completa.          |
+| `la ejecución de scripts está deshabilitada`       | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` en esa terminal.                                 |
+| `stripe` no se reconoce                            | La CLI no está instalada o no está en el PATH. Ejecútala con su ruta completa.                                |
+| `must specify events to forward`                   | Falta `--events` con la lista completa de la sección 3.2.                                                     |
+| El pago queda en `PROCESANDO` para siempre         | La ventana de `stripe listen` no estaba abierta al pagar, o el `whsec_` no coincide. Mira su salida.          |
+| `stripe listen` responde `[401]`                   | El `whsec_` del backend no es el de esa sesión de la CLI. Revisa el `.env` y las variables de entorno.        |
+| Acentos rotos (`Pensi?n`) en la página de Stripe   | PowerShell 5.1 envía el cuerpo en ISO-8859-1 si el `Content-Type` no declara `charset=utf-8`.                 |
+| Vuelves de la pasarela a la portada, sin resultado | Tu `FRONTEND_URL` apunta a otro puerto, o el backend es anterior al arreglo de las URL con `/#/`.             |
+| `PAGO_EN_CURSO` (409) tras salir del checkout      | Entra al pago desde la pantalla de resultado y pulsa «Cancelar este intento», o llama a `DELETE /pagos/{id}`. |

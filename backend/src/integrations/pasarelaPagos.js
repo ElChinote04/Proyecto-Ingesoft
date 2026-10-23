@@ -108,6 +108,22 @@ const stripe = {
     return { idExterno: sesion.id, resultado: traducirStripe(sesion) };
   },
   /**
+   * Cierra en el proveedor una sesión que el usuario abandonó, para que el
+   * enlace deje de poder pagarse. No propaga el fallo: si no se pudo cerrar, un
+   * pago posterior por ese enlace sigue llegando por el webhook y se aplica
+   * igual (resolverConfirmacion confirma aunque el pago esté CANCELADO).
+   */
+  async expirarIntento(idExterno) {
+    try {
+      await llamarStripe(`/checkout/sessions/${encodeURIComponent(idExterno)}/expire`, {
+        metodo: 'POST',
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  /**
    * Verifica la firma del evento según el esquema de Stripe:
    * cabecera "t=<unix>,v1=<hmac>" y carga firmada "<t>.<cuerpo crudo>".
    * Devuelve la referencia de SAGE, nunca confía en el estado que trae el
@@ -168,6 +184,12 @@ const simulada = {
     const intento = memoria.get(idExterno);
     if (!intento) throw noDisponible({ causa: 'INTENTO_INEXISTENTE' });
     return { idExterno, resultado: intento.resultado };
+  },
+  async expirarIntento(idExterno) {
+    const intento = memoria.get(idExterno);
+    if (intento && intento.resultado === RESULTADO.PENDIENTE)
+      intento.resultado = RESULTADO.EXPIRADO;
+    return true;
   },
   verificarNotificacion(cuerpoCrudo, cabecera) {
     if (!cuerpoCrudo || !cabecera) throw firmaInvalida();

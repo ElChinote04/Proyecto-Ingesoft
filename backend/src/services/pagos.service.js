@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import * as repository from '../repositories/pagos.repository.js';
 import { pasarela, RESULTADO } from '../integrations/pasarelaPagos.js';
-import { construirCronograma, estadoVisible, resolverConfirmacion } from '../domain/cronograma.js';
+import {
+  construirCronograma,
+  estadoVisible,
+  inicioDelDia,
+  resolverConfirmacion,
+} from '../domain/cronograma.js';
 import { AppError } from '../errors/AppError.js';
 import { logger } from '../logging/logger.js';
 import { env } from '../config/env.js';
@@ -11,6 +16,8 @@ const fail = (status, code, message) => {
 };
 
 const dinero = (valor) => Number(valor).toFixed(2);
+
+const EN_CURSO = ['INICIADO', 'PROCESANDO'];
 
 // ------------------------------------------------------------------ US-006
 /**
@@ -97,8 +104,17 @@ const boletaResumenDto = (b) => ({
   pagadaEn: b.pagadaEn?.toISOString() ?? null,
 });
 
-const boletaDetalleDto = (b) => ({
+/**
+ * pagoEnCursoId permite a la pantalla ofrecer «retomar o cancelar» en lugar de
+ * un botón Pagar que respondería 409. Solo se expone a quien puede abrir ese
+ * pago (GET /pagos/:id): el administrador o quien lo inició.
+ */
+const boletaDetalleDto = (b, actor) => ({
   ...boletaResumenDto(b),
+  pagoEnCursoId:
+    (b.pagos ?? []).find(
+      (p) => actor?.roles.includes('ADMINISTRADOR') || p.iniciadoPorId === actor?.id,
+    )?.id ?? null,
   estudiante: {
     id: b.planPago.matricula.estudianteId,
     nombres: b.planPago.matricula.estudiante.persona.nombres,
@@ -125,12 +141,17 @@ export async function listarBoletas(filtros, actor) {
     if (estudianteIds.length === 0) return { boletas: [], total: 0, pagina: filtros.pagina };
   }
   const { total, registros } = await repository.listarBoletas(
-    { estudianteIds, estudianteId: filtros.estudianteId, estado: filtros.estado },
+    {
+      estudianteIds,
+      estudianteId: filtros.estudianteId,
+      estado: filtros.estado,
+      morosaAntesDe: inicioDelDia(),
+    },
     filtros.pagina,
     filtros.limite,
   );
   return {
-    boletas: registros.map(boletaDetalleDto),
+    boletas: registros.map((b) => boletaDetalleDto(b, actor)),
     total,
     pagina: filtros.pagina,
     limite: filtros.limite,
@@ -189,13 +210,25 @@ export async function iniciarPago({ compromisoPagoId }, actor, requestId) {
     throw error;
   }
 
-  const intento = await pasarela.crearIntento({
-    referencia,
-    montoSoles: String(boleta.monto),
-    concepto: `${boleta.concepto} · ${boleta.planPago.matricula.estudiante.persona.apellidos}`,
-    urlExito: `${env.FRONTEND_URL}/pagos/${pago.id}/resultado`,
-    urlCancelacion: `${env.FRONTEND_URL}/pagos/${pago.id}/cancelado`,
-  });
+  let intento;
+  try {
+    intento = await pasarela.crearIntento({
+      referencia,
+      montoSoles: String(boleta.monto),
+      concepto: `${boleta.concepto} · ${boleta.planPago.matricula.estudiante.persona.apellidos}`,
+      urlExito: `${env.FRONTEND_URL}/#/pagos/${pago.id}/resultado`,
+      urlCancelacion: `${env.FRONTEND_URL}/#/pagos/${pago.id}/cancelado`,
+    });
+  } catch (error) {
+    // Sin cerrarlo, el índice parcial dejaría la boleta bloqueada. Si el
+    // proveedor sí llegó a crear la sesión y luego notifica el cobro,
+    // resolverConfirmacion confirma igualmente un pago RECHAZADO.
+    await repository.cerrarPago(pago.id, EN_CURSO, {
+      estado: 'RECHAZADO',
+      motivoRechazo: 'La pasarela no respondió al crear el pago',
+    });
+    throw error;
+  }
 
   const actualizado = await repository.transaction(async (db) => {
     const p = await repository.actualizarPago(
@@ -252,9 +285,18 @@ export async function confirmarDesdeNotificacion({ referencia }, requestId) {
     return { aplicado: false, motivo: decision.motivo };
 
   const ahora = new Date();
-  await repository.transaction(async (db) => {
+  // El cambio es condicional al estado de partida: si dos notificaciones (o una
+  // notificación y una cancelación) llegan a la vez, solo una lo aplica y la
+  // otra no vuelve a marcar la boleta ni duplica la auditoría.
+  const aplicado = await repository.transaction(async (db) => {
     if (decision.accion === 'CONFIRMAR') {
-      await repository.actualizarPago(pago.id, { estado: 'CONFIRMADO', confirmadoEn: ahora }, db);
+      const cambiados = await repository.cerrarPago(
+        pago.id,
+        [...EN_CURSO, 'RECHAZADO', 'CANCELADO'],
+        { estado: 'CONFIRMADO', confirmadoEn: ahora },
+        db,
+      );
+      if (!cambiados) return false;
       await repository.marcarBoletaPagada(pago.compromisoPagoId, ahora, db);
       await repository.audit(
         db,
@@ -264,14 +306,16 @@ export async function confirmarDesdeNotificacion({ referencia }, requestId) {
         { compromisoPagoId: pago.compromisoPagoId, referencia, monto: dinero(pago.monto) },
         { requestId, entidad: 'Pago' },
       );
-      return;
+      return true;
     }
     const estado = decision.accion === 'CANCELAR' ? 'CANCELADO' : 'RECHAZADO';
-    await repository.actualizarPago(
+    const cambiados = await repository.cerrarPago(
       pago.id,
+      EN_CURSO,
       { estado, motivoRechazo: `Resultado del proveedor: ${resultado}` },
       db,
     );
+    if (!cambiados) return false;
     await repository.audit(
       db,
       pago.iniciadoPorId,
@@ -280,7 +324,9 @@ export async function confirmarDesdeNotificacion({ referencia }, requestId) {
       { compromisoPagoId: pago.compromisoPagoId, referencia, estado },
       { requestId, entidad: 'Pago', resultado: 'FALLO' },
     );
+    return true;
   });
+  if (!aplicado) return { aplicado: false, motivo: 'YA_APLICADO' };
 
   logger.info(decision.accion === 'CONFIRMAR' ? 'PAGO_CONFIRMADO' : 'PAGO_NO_COMPLETADO', {
     module: 'pagos',
@@ -303,8 +349,74 @@ export async function obtenerPago(id, actor) {
     referencia: pago.referencia,
     confirmadoEn: pago.confirmadoEn?.toISOString() ?? null,
     motivoRechazo: pago.motivoRechazo,
-    boleta: boletaDetalleDto(pago.compromisoPago),
+    boleta: boletaDetalleDto(pago.compromisoPago, actor),
   };
+}
+
+/**
+ * El apoderado abandona el checkout y quiere volver a intentarlo. El índice
+ * parcial impide un segundo pago en curso sobre la misma boleta, así que hay
+ * que cerrar el anterior de forma explícita en lugar de esperar a que la
+ * pasarela lo expire por su cuenta (en Stripe, 24 horas).
+ */
+export async function cancelarPago(id, actor, requestId) {
+  const pago = await repository.buscarPago(id);
+  if (!pago) fail(404, 'REFERENCE_NOT_FOUND', 'El pago no existe.');
+  if (!actor.roles.includes('ADMINISTRADOR') && pago.iniciadoPorId !== actor.id)
+    fail(403, 'FORBIDDEN', 'Solo puedes cancelar los pagos que tú iniciaste.');
+  if (pago.estado === 'CONFIRMADO')
+    fail(409, 'PAGO_CONFIRMADO', 'Este pago ya fue confirmado por la pasarela.');
+  if (!EN_CURSO.includes(pago.estado)) return { id: pago.id, estado: pago.estado, yaCerrado: true };
+
+  // Antes de cerrarlo hay que preguntarle al proveedor. Si el apoderado sí
+  // pagó y la notificación todavía no ha llegado, cancelar aquí dejaría la
+  // boleta impaga con el dinero ya cobrado.
+  if (pago.referenciaExterna) {
+    const { resultado } = await pasarela.consultarIntento(pago.referenciaExterna);
+    if (resultado === RESULTADO.PAGADO) {
+      await confirmarDesdeNotificacion({ referencia: pago.referencia }, requestId);
+      fail(409, 'PAGO_CONFIRMADO', 'La pasarela confirmó este pago; la boleta quedó pagada.');
+    }
+    const cerrado = await pasarela.expirarIntento(pago.referenciaExterna);
+    if (!cerrado)
+      logger.warn('PAGO_INTENTO_NO_EXPIRADO', {
+        module: 'pagos',
+        requestId,
+        entidadId: pago.id,
+      });
+  }
+
+  const cancelado = await repository.transaction(async (db) => {
+    const cambiados = await repository.cerrarPago(
+      pago.id,
+      EN_CURSO,
+      { estado: 'CANCELADO', motivoRechazo: 'Cancelado por el usuario' },
+      db,
+    );
+    if (!cambiados) return false;
+    await repository.audit(
+      db,
+      actor.id,
+      'PAGO_NO_COMPLETADO',
+      pago.id,
+      { compromisoPagoId: pago.compromisoPagoId, referencia: pago.referencia, estado: 'CANCELADO' },
+      { requestId, entidad: 'Pago', resultado: 'FALLO' },
+    );
+    return true;
+  });
+  if (!cancelado) {
+    // Otra solicitud lo cerró entre la lectura y este punto.
+    const actual = await repository.buscarPago(id);
+    return { id: actual.id, estado: actual.estado, yaCerrado: true };
+  }
+
+  logger.info('PAGO_NO_COMPLETADO', {
+    module: 'pagos',
+    requestId,
+    userId: actor.id,
+    entidadId: pago.id,
+  });
+  return { id: pago.id, estado: 'CANCELADO' };
 }
 
 export { RESULTADO };

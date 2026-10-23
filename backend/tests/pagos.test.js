@@ -9,6 +9,7 @@ import { prisma } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
 import { logger } from '../src/logging/logger.js';
 import { simulada, RESULTADO } from '../src/integrations/pasarelaPagos.js';
+import { AppError } from '../src/errors/AppError.js';
 
 const base = '/api/v1';
 const claveInicial = 'InicialTemporal123!';
@@ -371,4 +372,158 @@ test('la respuesta no expone campos internos del pago', async () => {
   const respuesta = await admin.get(`${base}/pagos/${pago.id}`).expect(200);
   assert.equal('referenciaExterna' in respuesta.body.data, false);
   assert.equal('iniciadoPorId' in respuesta.body.data, false);
+});
+
+// ---------------------------------------------- US-007B: intento abandonado
+// Una boleta PENDIENTE sin ningún pago en curso: el índice parcial impide
+// iniciar otro mientras quede uno vivo, así que cada caso necesita la suya.
+const boletaLibre = () =>
+  prisma.compromisoPago.findFirst({
+    where: {
+      planPago: { matriculaId: matricula.id },
+      estado: 'PENDIENTE',
+      pagos: { none: { estado: { in: ['INICIADO', 'PROCESANDO'] } } },
+    },
+    orderBy: { numeroCuota: 'desc' },
+  });
+
+test('US-007B: cancelar un intento abandonado libera la boleta para pagarla de nuevo', async () => {
+  const boleta = await boletaLibre();
+  const primero = (
+    await apoderado.post(`${base}/pagos`).send({ compromisoPagoId: boleta.id }).expect(201)
+  ).body.data;
+
+  const cancelado = await apoderado.delete(`${base}/pagos/${primero.pagoId}`).expect(200);
+  assert.equal(cancelado.body.data.estado, 'CANCELADO');
+
+  const guardada = await prisma.compromisoPago.findUnique({ where: { id: boleta.id } });
+  assert.equal(guardada.estado, 'PENDIENTE', 'cancelar el intento no toca la boleta');
+
+  // El motivo de existir del endpoint: sin él habría que esperar a que la
+  // pasarela expire la sesión por su cuenta.
+  const segundo = await apoderado
+    .post(`${base}/pagos`)
+    .send({ compromisoPagoId: boleta.id })
+    .expect(201);
+  assert.equal(segundo.body.data.estado, 'PROCESANDO');
+  await apoderado.delete(`${base}/pagos/${segundo.body.data.pagoId}`).expect(200);
+});
+
+test('US-007B: cancelar es idempotente y no revive un intento ya cerrado', async () => {
+  const pago = await prisma.pago.findFirst({ where: { estado: 'CANCELADO' } });
+  const repetido = await apoderado.delete(`${base}/pagos/${pago.id}`).expect(200);
+  assert.equal(repetido.body.data.yaCerrado, true);
+  assert.equal(repetido.body.data.estado, 'CANCELADO');
+});
+
+test('US-007B: no se cancela un pago que la pasarela ya cobró; se confirma', async () => {
+  const boleta = await boletaLibre();
+  const pago = (
+    await apoderado.post(`${base}/pagos`).send({ compromisoPagoId: boleta.id }).expect(201)
+  ).body.data;
+
+  // El apoderado pagó y pulsa «cancelar» antes de que llegue la notificación.
+  const guardado = await prisma.pago.findUnique({ where: { id: pago.pagoId } });
+  simulada.marcar(guardado.referenciaExterna, RESULTADO.PAGADO);
+
+  const respuesta = await apoderado.delete(`${base}/pagos/${pago.pagoId}`).expect(409);
+  assert.equal(respuesta.body.error.code, 'PAGO_CONFIRMADO');
+
+  const despues = await prisma.pago.findUnique({ where: { id: pago.pagoId } });
+  assert.equal(despues.estado, 'CONFIRMADO', 'el cobro real manda sobre la intención de cancelar');
+  const pagada = await prisma.compromisoPago.findUnique({ where: { id: boleta.id } });
+  assert.equal(pagada.estado, 'PAGADA');
+});
+
+test('US-007B: solo quien inició el pago puede cancelarlo', async () => {
+  const boleta = await boletaLibre();
+  const pago = (
+    await apoderado.post(`${base}/pagos`).send({ compromisoPagoId: boleta.id }).expect(201)
+  ).body.data;
+  await otroApoderado.delete(`${base}/pagos/${pago.pagoId}`).expect(403);
+  await request(app).delete(`${base}/pagos/${pago.pagoId}`).expect(401);
+  await apoderado.delete(`${base}/pagos/999999`).expect(404);
+  await apoderado.delete(`${base}/pagos/abc`).expect(400);
+  await apoderado.delete(`${base}/pagos/${pago.pagoId}`).expect(200);
+});
+
+// ------------------------------------------- US-007A/B: estados en el listado
+test('US-007A: el filtro PENDIENTE no incluye las boletas ya vencidas', async () => {
+  const todas = (await apoderado.get(`${base}/compromisos-pago?limite=100`).expect(200)).body.data;
+  assert.ok(
+    todas.boletas.some((b) => b.estado === 'MOROSA'),
+    'la suite deja una boleta morosa',
+  );
+  const pendientes = (
+    await apoderado.get(`${base}/compromisos-pago?estado=PENDIENTE&limite=100`).expect(200)
+  ).body.data;
+  assert.ok(pendientes.total > 0);
+  assert.ok(pendientes.boletas.every((b) => b.estado === 'PENDIENTE'));
+  await apoderado.get(`${base}/compromisos-pago?estado=VENCIDA`).expect(400);
+});
+
+test('US-007B: el historial indica el pago en curso solo a quien puede abrirlo', async () => {
+  const boleta = await boletaLibre();
+  const pago = (
+    await apoderado.post(`${base}/pagos`).send({ compromisoPagoId: boleta.id }).expect(201)
+  ).body.data;
+  const buscar = async (agente) =>
+    (await agente.get(`${base}/compromisos-pago?limite=100`).expect(200)).body.data.boletas.find(
+      (b) => b.id === boleta.id,
+    );
+
+  assert.equal((await buscar(apoderado)).pagoEnCursoId, pago.pagoId);
+  assert.equal((await buscar(admin)).pagoEnCursoId, pago.pagoId);
+
+  await apoderado.delete(`${base}/pagos/${pago.pagoId}`).expect(200);
+  assert.equal((await buscar(apoderado)).pagoEnCursoId, null);
+});
+
+test('US-007B: si la pasarela falla al crear el pago, la boleta no queda bloqueada', async () => {
+  const boleta = await boletaLibre();
+  const original = simulada.crearIntento;
+  simulada.crearIntento = async () => {
+    throw new AppError(503, 'PASARELA_NO_DISPONIBLE', 'La pasarela no está disponible.');
+  };
+  try {
+    const fallo = await apoderado
+      .post(`${base}/pagos`)
+      .send({ compromisoPagoId: boleta.id })
+      .expect(503);
+    assert.equal(fallo.body.error.code, 'PASARELA_NO_DISPONIBLE');
+  } finally {
+    simulada.crearIntento = original;
+  }
+  const cerrado = await prisma.pago.findFirst({
+    where: { compromisoPagoId: boleta.id },
+    orderBy: { id: 'desc' },
+  });
+  assert.equal(cerrado.estado, 'RECHAZADO');
+  const intacta = await prisma.compromisoPago.findUnique({ where: { id: boleta.id } });
+  assert.equal(intacta.estado, 'PENDIENTE');
+
+  const reintento = await apoderado
+    .post(`${base}/pagos`)
+    .send({ compromisoPagoId: boleta.id })
+    .expect(201);
+  await apoderado.delete(`${base}/pagos/${reintento.body.data.pagoId}`).expect(200);
+});
+
+test('QAS008: dos notificaciones simultáneas confirman y auditan una sola vez', async () => {
+  const boleta = await boletaLibre();
+  const inicio = (
+    await apoderado.post(`${base}/pagos`).send({ compromisoPagoId: boleta.id }).expect(201)
+  ).body.data;
+  const pago = await prisma.pago.findUnique({ where: { id: inicio.pagoId } });
+  simulada.marcar(pago.referenciaExterna, RESULTADO.PAGADO);
+  const cuerpo = { referencia: pago.referencia, idExterno: pago.referenciaExterna, tipo: 'pago' };
+
+  const respuestas = await Promise.all([notificar(cuerpo), notificar(cuerpo)]);
+  assert.ok(respuestas.every((r) => r.status === 200));
+  assert.equal(respuestas.filter((r) => r.body.data.aplicado).length, 1);
+
+  const auditoria = await prisma.registroAuditoria.count({
+    where: { tipoEvento: 'PAGO_CONFIRMADO', entidadId: pago.id },
+  });
+  assert.equal(auditoria, 1);
 });

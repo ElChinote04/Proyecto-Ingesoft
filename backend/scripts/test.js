@@ -26,6 +26,9 @@ try {
       INITIAL_SETUP_KEY: randomBytes(32).toString('hex'),
       LOG_DIR: `logs/tests/${databaseName}`,
       DEMO_PASSWORD: 'Docente123!',
+      // Las pruebas nunca salen a la pasarela real, aunque el .env local apunte a
+      // Stripe para la demostración.
+      PAGOS_PROVEEDOR: 'simulada',
     };
     // Cada suite tiene una BD efímera propia. La administrativa comienza SIN seed.
     try {
