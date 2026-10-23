@@ -50,6 +50,8 @@ model Usuario {
   eventos                  RegistroAuditoria[]
   asistenciasCreadas       AsistenciaEstudiante[] @relation("Creador")
   asistenciasModificadas   AsistenciaEstudiante[] @relation("Modificador")
+  reglasCreadas            ReglaConsolidacion[]   @relation("ReglaCreador")
+  reglasModificadas        ReglaConsolidacion[]   @relation("ReglaModificador")
 }
 
 model Instalacion {
@@ -133,6 +135,7 @@ model Grado {
   id        Int       @id @default(autoincrement())
   nombre    String    @unique
   secciones Seccion[]
+  reglas    ReglaConsolidacion[]
 }
 
 model Seccion {
@@ -170,6 +173,7 @@ model Curso {
   codigo       String                @unique
   nombre       String
   asignaciones CursoSeccionDocente[]
+  reglas       ReglaConsolidacion[]
 }
 
 model CursoSeccionDocente {
@@ -238,6 +242,29 @@ model AsistenciaEstudiante {
 
   @@unique([sesionId, matriculaId])
   @@index([matriculaId])
+}
+
+model ReglaConsolidacion {
+  id              Int         @id @default(autoincrement())
+  gradoId         Int
+  grado           Grado       @relation(fields: [gradoId], references: [id])
+  cursoId         Int
+  curso           Curso       @relation(fields: [cursoId], references: [id])
+  nombre          String
+  version         Int
+  metodo          String
+  vigenteDesde    DateTime    @default(now())
+  vigenteHasta    DateTime?
+  activo          Boolean     @default(true)
+  creadoPorId     Int
+  creadoPor       Usuario     @relation("ReglaCreador", fields: [creadoPorId], references: [id])
+  modificadoPorId Int
+  modificadoPor   Usuario     @relation("ReglaModificador", fields: [modificadoPorId], references: [id])
+  creadoEn        DateTime    @default(now())
+  modificadoEn   DateTime    @updatedAt
+
+  @@unique([gradoId, cursoId, version])
+  @@index([gradoId, cursoId, activo])
 }
 
 model RegistroAuditoria {

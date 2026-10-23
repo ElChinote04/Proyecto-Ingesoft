@@ -3,7 +3,6 @@ import { prisma } from '../config/database.js';
 const include = {
   grado: true,
   curso: true,
-  calificaciones: { where: { activo: true }, include: { matricula: { include: { estudiante: { include: { persona: true } } } }, bimestre: true } },
 };
 
 export const listReglasConsolidacion = (where = {}, db = prisma) =>
@@ -28,11 +27,13 @@ export const auditReglaConsolidacion = (db, { usuarioId, tipoEvento, reglaId, va
     data: {
       usuarioId,
       tipoEvento,
-      resultado: 'EXITOSO',
-      tipoEntidad: 'ReglaConsolidacion',
-      idEntidad: String(reglaId),
-      valorAnterior: valorAnterior ? JSON.stringify(valorAnterior) : null,
-      valorNuevo: valorNuevo ? JSON.stringify(valorNuevo) : null,
-      observacion: requestId ? `requestId=${requestId}` : null,
+      entidad: 'ReglaConsolidacion',
+      entidadId: reglaId,
+      resultado: 'EXITO',
+      requestId,
+      detalle: {
+        valorAnterior: valorAnterior ?? null,
+        valorNuevo: valorNuevo ?? null,
+      },
     },
   });

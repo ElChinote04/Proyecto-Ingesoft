@@ -39,16 +39,21 @@ export default function AppLayout({
                 ['catalogos', 'Catálogos académicos'],
                 ['matriculas', 'Alumnos y matrículas'],
                 ['horarios', 'Horarios y sesiones'],
+                ['reglas', 'Gestión académica'],
                 ['auditoria', 'Auditoría'],
               ].map(([route, label]) => (
                 <button
                   key={route}
                   className={
-                    window.location.hash === `#/admin/${route}` ? 'nav-active' : 'nav-item'
+                    (route === 'reglas'
+                      ? window.location.hash.startsWith('#/gestion')
+                      : window.location.hash === `#/admin/${route}`)
+                      ? 'nav-active'
+                      : 'nav-item'
                   }
                   onClick={() =>
                     onLeave(() => {
-                      window.location.hash = `/admin/${route}`;
+                      window.location.hash = route === 'reglas' ? '/gestion' : `/admin/${route}`;
                     })
                   }
                 >

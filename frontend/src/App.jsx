@@ -48,7 +48,11 @@ function Screens() {
     return <MiHorario key={perfiles} />;
   if (route === '/portal' && user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)))
     return <Portal key={perfiles} />;
-  if (route === '/gestion' && user.roles.includes('DOCENTE')) return <Gestion />;
+  if (
+    (route === '/gestion' || route === '/gestion/nueva' || /^\/gestion\/editar\/\d+$/.test(route)) &&
+    user.roles.some((rol) => ['DOCENTE', 'ADMINISTRADOR'].includes(rol))
+  )
+    return <Gestion />;
   if (
     route === '/evaluaciones' &&
     user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol))

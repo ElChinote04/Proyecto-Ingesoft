@@ -13,7 +13,9 @@ function vigenteWhere() {
   return { activo: true, vigenteDesde: { lte: hoy }, OR: [{ vigenteHasta: null }, { vigenteHasta: { gte: hoy } }] };
 }
 
-export async function listarReglas() { return repository.listReglasConsolidacion(vigenteWhere()); }
+export async function listarReglas() {
+  return repository.listReglasConsolidacion({});
+}
 export async function obtenerRegla(id) {
   const regla = await repository.findReglaConsolidacion(id);
   const where = vigenteWhere();
@@ -27,8 +29,8 @@ async function validateReferences(input, db) {
     db.grado.findUnique({ where: { id: input.gradoId } }),
     db.curso.findUnique({ where: { id: input.cursoId } }),
   ]);
-  if (!grado?.activo) fail(404, 'GRADE_NOT_FOUND', 'El grado no existe o está inactivo.');
-  if (!curso?.activo) fail(404, 'COURSE_NOT_FOUND', 'El curso no existe o está inactivo.');
+  if (!grado) fail(404, 'GRADE_NOT_FOUND', 'El grado no existe.');
+  if (!curso) fail(404, 'COURSE_NOT_FOUND', 'El curso no existe.');
 }
 
 export async function crearRegla(input, actor, requestId) {
