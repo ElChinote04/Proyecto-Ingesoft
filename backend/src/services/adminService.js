@@ -212,14 +212,6 @@ export async function updateUser(id, input, actor, requestId) {
   });
 }
 export const catalogs = () => repository.catalogs();
-function eventoPublico(event) {
-  if (event.tipoEvento !== 'ASISTENCIA_GUARDADA' || !event.detalle) return event;
-  return {
-    ...event,
-    detalle: Object.fromEntries(Object.entries(event.detalle).filter(([key]) => key !== 'version')),
-  };
-}
-export const auditEvents = async () => (await repository.audits()).map(eventoPublico);
 export function createCatalog(type, input, actor, requestId) {
   return mutation(actor, requestId, 'CATALOGO_CREADO', async (db) => {
     if (type === 'secciones') {

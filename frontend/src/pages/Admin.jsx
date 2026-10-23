@@ -1,5 +1,6 @@
 import { VincularApoderado, AdministrarAnio } from '../components/AdministrarPerfiles';
 import GestionBloques from '../components/GestionBloques';
+import ConsultaAuditoria from '../components/ConsultaAuditoria';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { userFormBody } from '../utils/userForm';
@@ -724,36 +725,6 @@ function Schedule() {
     </Data>
   );
 }
-function Audits() {
-  const resource = useAdminData('auditoria');
-  return (
-    <>
-      <p className="muted">
-        Últimos 100 eventos, del más reciente al más antiguo. Horas de Lima. Los datos completos
-        permanecen en PostgreSQL.
-      </p>
-      <button className="secondary" onClick={resource.retry}>
-        Actualizar auditoría
-      </button>
-      <Data resource={resource}>
-        {([events]) => (
-          <Table
-            headers={['ID / Fecha', 'Usuario', 'Evento / Entidad', 'Detalle']}
-            rows={events.map((e) => [
-              `#${e.id} · ${new Date(e.fechaHora).toLocaleString('es-PE', { timeZone: 'America/Lima' })}`,
-              e.usuario?.identificador ?? 'Cuenta no identificada',
-              `${e.tipoEvento} · #${e.entidadId}`,
-              <details key="details">
-                <summary>Ver detalle</summary>
-                <pre>{JSON.stringify(e.detalle, null, 2)}</pre>
-              </details>,
-            ])}
-          />
-        )}
-      </Data>
-    </>
-  );
-}
 export default function Admin({ page }) {
   const pages = {
     inicio: Home,
@@ -763,7 +734,7 @@ export default function Admin({ page }) {
     horarios: Schedule,
     asistenciaDocentes: TeacherAttendance,
     reportesAsistencia: StudentAttendanceReport,
-    auditoria: Audits,
+    auditoria: ConsultaAuditoria,
   };
   const Page = pages[page] || Home;
   return (

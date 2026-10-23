@@ -349,11 +349,18 @@ POST `/admin/sesiones`: `{ "bloqueId": 1, "fecha": "2027-10-01" }`. Devuelve la 
 
 ### Auditoría
 
-GET `/admin/auditoria`: últimos 100 eventos, id descendente, con usuario.identificador
-(usuario puede ser nulo), fechaHora, tipoEvento, entidad, entidadId, resultado,
-requestId y detalle JSON. Incluye LOGIN_EXITOSO, LOGIN_FALLIDO y ACCESO_DENEGADO.
-El historial completo permanece en BD. No hay rutas para alterar eventos y SQL rechaza
-UPDATE/DELETE mediante trigger. Esto no implementa la auditoría de notas/pagos de US-003.
+GET `/admin/auditoria?tipoEvento&entidad&entidadId&usuarioId&resultado&desde&hasta&pagina&limite`:
+todos los filtros son opcionales; `resultado` ∈ EXITO|DENEGADO|FALLO; `desde`/`hasta` son
+fechas `YYYY-MM-DD` de Lima (ambas inclusive); `limite` ∈ 10|25|50 (10 por defecto). Responde
+`{ total, pagina, limite, tiposEvento[], registros[{ id, fechaHora, usuario, tipoEvento,
+entidad, entidadId, resultado, requestId, detalle }] }`, del más reciente al más antiguo.
+`usuario` es el identificador de la cuenta o null. Un filtro inválido o un campo extra devuelve
+400 VALIDATION_ERROR. No hay rutas para alterar eventos y SQL rechaza UPDATE/DELETE mediante trigger.
+
+Las transacciones críticas de notas y pagos (US-003) se registran con
+`registrarTransaccionCritica` dentro de la transacción de cada módulo; su `detalle` es
+`{ anterior, nuevo, motivo?, contexto? }`. Contrato y catálogo de eventos en
+[AUDITORIA_TRANSACCIONES.md](AUDITORIA_TRANSACCIONES.md).
 
 Eventos administrativos: ADMINISTRADOR_INICIAL_CREADO, USUARIO_CREADO, USUARIO_ACTUALIZADO, CATALOGO_CREADO, ESTUDIANTE_REGISTRADO, MATRICULA_REGISTRADA, BLOQUE_ASIGNADO y SESION_CLASE_CREADA. La asistencia conserva ASISTENCIA_GUARDADA. CATALOGO_CREADO indica el tipo en detalle.catalogo; los restantes tipos identifican el dominio del entidadId.
 

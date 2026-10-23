@@ -1041,6 +1041,31 @@ a {
   font-size: 12px;
   max-width: 420px;
 }
+.auditoria-filtros {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.auditoria-cambio {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.portal-table pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  max-width: 420px;
+}
+@media (max-width: 1279px) {
+  .auditoria-filtros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .schedule-filters {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
