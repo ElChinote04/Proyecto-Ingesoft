@@ -41,10 +41,7 @@ export async function crearCompetencia(input, actor, requestId) {
     ]);
     if (existente) fail(409, 'COMPETENCY_CODE_EXISTS', 'Ya existe una competencia con ese código.');
     if (!curso?.activo) fail(404, 'COURSE_NOT_FOUND', 'El curso no existe o está inactivo.');
-    const competencia = await repository.createCompetencia(
-      { ...input, creadoPorId: actor.id, modificadoPorId: actor.id },
-      db,
-    );
+    const competencia = await repository.createCompetencia(input, db);
     await repository.auditCompetencia(db, {
       usuarioId: actor.id,
       tipoEvento: 'COMPETENCIA_CREADA',
@@ -64,7 +61,7 @@ export async function modificarCompetencia(id, input, actor, requestId) {
       fail(404, 'COMPETENCY_NOT_FOUND', 'La competencia no existe o está inactiva.');
     const competencia = await repository.updateCompetencia(
       id,
-      { descripcion: input.descripcion, modificadoPorId: actor.id },
+      { descripcion: input.descripcion },
       db,
     );
     await repository.auditCompetencia(db, {

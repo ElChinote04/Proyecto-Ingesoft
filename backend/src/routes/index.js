@@ -48,11 +48,11 @@ router.use('/cursos', cursoRouter);
 router.use('/competencias', competenciaRouter);
 router.use('/calificaciones', calificacionRouter);
 router.get('/bimestres', requireAuth, async (_req, res) => {
-  const anio = await prisma.anioAcademico.findFirst({
-    where: { activo: true },
-    include: { bimestres: { where: { activo: true }, orderBy: { numero: 'asc' } } },
+  const bimestres = await prisma.bimestreAcademico.findMany({
+    where: { activo: true, anioAcademico: { activo: true } },
+    orderBy: [{ anioAcademicoId: 'asc' }, { numero: 'asc' }],
   });
-  res.json({ data: anio?.bimestres ?? [] });
+  res.json({ data: bimestres });
 });
 router.use('/reglas-consolidacion', reglaConsolidacionRouter);
 router.use('/planes-academicos', planAcademicoRouter);

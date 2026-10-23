@@ -139,7 +139,16 @@ const models = {
 export async function createCatalog(type, data, db) {
   if (type === 'anios') {
     const activo = !(await db.anioAcademico.findFirst({ where: { activo: true } }));
-    return db.anioAcademico.create({ data: { ...data, activo } });
+    const anio = await db.anioAcademico.create({ data: { ...data, activo } });
+    await db.bimestreAcademico.createMany({
+      data: [
+        { anioAcademicoId: anio.id, numero: 1, nombre: 'I Bimestre' },
+        { anioAcademicoId: anio.id, numero: 2, nombre: 'II Bimestre' },
+        { anioAcademicoId: anio.id, numero: 3, nombre: 'III Bimestre' },
+        { anioAcademicoId: anio.id, numero: 4, nombre: 'IV Bimestre' },
+      ],
+    });
+    return anio;
   }
   return db[models[type]].create({ data });
 }

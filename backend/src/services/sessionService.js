@@ -25,8 +25,13 @@ function dto(session) {
   return {
     id: session.id,
     curso: { id: curso.id, nombre: curso.nombre },
-    seccion: { id: seccion.id, gradoId: seccion.gradoId, nombre: `${seccion.grado.nombre} ${seccion.nombre}` },
+    seccion: {
+      id: seccion.id,
+      gradoId: seccion.gradoId,
+      nombre: `${seccion.grado.nombre} ${seccion.nombre}`,
+    },
     docente: { id: docente.id, nombre: `${docente.persona.nombres} ${docente.persona.apellidos}` },
+    anioAcademicoId: seccion.anioAcademico.id,
     anioAcademico: seccion.anioAcademico.codigo,
     fecha: session.fecha.toISOString().slice(0, 10),
     horaInicio: session.horaInicio,
