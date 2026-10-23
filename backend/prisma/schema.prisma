@@ -64,6 +64,9 @@ model Usuario {
   eventos                  RegistroAuditoria[]
   asistenciasCreadas       AsistenciaEstudiante[] @relation("Creador")
   asistenciasModificadas   AsistenciaEstudiante[] @relation("Modificador")
+
+  asistenciasDocentesCreadas     AsistenciaDocente[] @relation("CreadorAsistenciaDocente")
+  asistenciasDocentesModificadas AsistenciaDocente[] @relation("ModificadorAsistenciaDocente")
   pagosIniciados           Pago[]                 @relation("PagoIniciador")
 }
 
@@ -104,6 +107,8 @@ model Docente {
   persona       Persona               @relation(fields: [personaId], references: [id])
   codigoDocente String                @unique
   asignaciones  CursoSeccionDocente[]
+
+  asistencias AsistenciaDocente[]
 }
 
 model Estudiante {
@@ -325,4 +330,26 @@ model RegistroAuditoria {
 
   @@index([entidadId, fechaHora])
   @@index([tipoEvento, fechaHora], map: "RegistroAuditoria_tipo_fecha")
+}
+
+model AsistenciaDocente {
+  id        Int     @id @default(autoincrement())
+  docenteId Int
+  docente   Docente @relation(fields: [docenteId], references: [id])
+
+  fecha       DateTime            @db.Date
+  condicion   CondicionAsistencia
+  observacion String              @default("") @db.VarChar(300)
+
+  creadoEn     DateTime @default(now())
+  modificadoEn DateTime @updatedAt
+
+  creadoPorId Int
+  creadoPor   Usuario @relation("CreadorAsistenciaDocente", fields: [creadoPorId], references: [id])
+
+  modificadoPorId Int
+  modificadoPor   Usuario @relation("ModificadorAsistenciaDocente", fields: [modificadoPorId], references: [id])
+
+  @@unique([docenteId, fecha])
+  @@index([fecha])
 }
