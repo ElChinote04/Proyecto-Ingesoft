@@ -385,7 +385,6 @@ test('17 protege al administrador y al cambiar contraseña revoca el acceso ante
     .expect(200);
 });
 test('18 auditoría administrativa y logs físicos registran el recorrido sin secretos', async () => {
-  const events = (await admin.get(`${base}/admin/auditoria`).expect(200)).body.data;
   for (const event of [
     'ADMINISTRADOR_INICIAL_CREADO',
     'USUARIO_CREADO',
@@ -396,11 +395,15 @@ test('18 auditoría administrativa y logs físicos registran el recorrido sin se
     'SESION_CLASE_CREADA',
     'ASISTENCIA_GUARDADA',
     'USUARIO_ACTUALIZADO',
-  ])
+  ]) {
+    const page = (await admin.get(`${base}/admin/auditoria?tipoEvento=${event}`).expect(200)).body
+      .data;
+    assert.ok(page.total > 0, event);
     assert.ok(
-      events.some((e) => e.tipoEvento === event),
+      page.registros.every((e) => e.tipoEvento === event),
       event,
     );
+  }
   // Simula un evento histórico: la API omite el contador sin reescribir evidencia.
   const legacy = await prisma.registroAuditoria.create({
     data: {
@@ -418,7 +421,7 @@ test('18 auditoría administrativa y logs físicos registran el recorrido sin se
     assert.equal('success' in response.body, false);
     assert.doesNotMatch(JSON.stringify(response.body), /"version":/);
   }
-  const history = (await admin.get(`${base}/admin/auditoria`)).body.data;
+  const history = (await admin.get(`${base}/admin/auditoria?limite=50`)).body.data.registros;
   assert.deepEqual(history.find((e) => e.id === legacy.id).detalle, {
     cambios: legacy.detalle.cambios,
   });
@@ -449,7 +452,7 @@ test('18 auditoría administrativa y logs físicos registran el recorrido sin se
     stored.hashContrasena,
   ]) {
     assert.ok(!logs.includes(secret));
-    assert.ok(!JSON.stringify({ events, users }).includes(secret));
+    assert.ok(!JSON.stringify({ history, users }).includes(secret));
   }
   assert.equal(readFileSync(path.join(logDirectory, 'error.log'), 'utf8'), '');
 });

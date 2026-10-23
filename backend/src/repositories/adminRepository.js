@@ -74,12 +74,6 @@ export const ensureStudent = (personaId, db) =>
   });
 export const audit = (db, usuarioId, tipoEvento, entidadId, detalle = {}, contexto = {}) =>
   db.registroAuditoria.create({ data: { usuarioId, tipoEvento, entidadId, detalle, ...contexto } });
-export const audits = () =>
-  prisma.registroAuditoria.findMany({
-    take: 100,
-    orderBy: { id: 'desc' },
-    include: { usuario: { select: { identificador: true } } },
-  });
 export async function catalogs() {
   const [anios, grados, secciones, cursos, aulas, docentes, apoderados, vinculos] =
     await Promise.all([
