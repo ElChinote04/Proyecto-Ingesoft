@@ -1,5 +1,17 @@
 # Registro de cambios
 
+## Auditoría de transacciones críticas (US-003) — 2026-10-23
+
+- `registrarTransaccionCritica(db, datos)` en `auditoria.service.js`: los módulos de notas y pagos
+  registran cada cambio dentro de su transacción, con usuario, fecha, valor anterior, valor nuevo,
+  motivo y requestId. Catálogo cerrado `EVENTOS_CRITICOS`; las modificaciones y anulaciones exigen
+  motivo. Contrato en `docs/AUDITORIA_TRANSACCIONES.md`.
+- `GET /admin/auditoria` con filtros (tipo de evento, entidad, usuario, resultado, rango de fechas)
+  y paginación 10/25/50; responde `{ total, pagina, limite, tiposEvento, registros }` en lugar de
+  la lista de los últimos 100 eventos.
+- Pantalla de auditoría con filtros, paginación y detalle de valores anterior/nuevo.
+- Nueva suite `tests/auditoria.test.js` (AUD-01 a AUD-06). Sin cambios de esquema ni migraciones.
+
 ## Administración y recorrido completo sin seed — 2026-10-01
 
 La preparación académica ya no depende del seed. Un administrador puede crear las cuentas, catálogos, alumnos, matrículas, asignaciones y sesiones necesarios para que un docente registre asistencia de principio a fin. Amplía el alcance inicial de US-001/US-014 con gestión de US-002, registro/matrícula de US-005 y asignación/validaciones de US-021/US-022.
