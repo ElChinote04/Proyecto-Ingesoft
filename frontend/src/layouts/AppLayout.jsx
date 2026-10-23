@@ -39,6 +39,8 @@ export default function AppLayout({
                 ['catalogos', 'Catálogos académicos'],
                 ['matriculas', 'Alumnos y matrículas'],
                 ['horarios', 'Horarios y sesiones'],
+                ['asistenciaDocentes', 'Asistencia docente'],
+                ['reportesAsistencia', 'Reportes de asistencia'],
                 ['auditoria', 'Auditoría'],
               ].map(([route, label]) => (
                 <button

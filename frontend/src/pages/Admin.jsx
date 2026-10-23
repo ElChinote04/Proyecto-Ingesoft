@@ -8,6 +8,8 @@ import { useAuth } from '../hooks/useAuth';
 import AppLayout from '../layouts/AppLayout';
 import { AdminForm, Field, PersonFields, Select } from '../components/AdminForm';
 import { Loading, ResourceError } from '../components/Feedback';
+import TeacherAttendance from './TeacherAttendance';
+import StudentAttendanceReport from './StudentAttendanceReport';
 
 const roles = ['ADMINISTRADOR', 'DOCENTE', 'ALUMNO', 'APODERADO'];
 const sectionLabel = (s) => `${s.anioAcademico.codigo} · ${s.grado.nombre} ${s.nombre}`;
@@ -23,6 +25,8 @@ const titles = {
   catalogos: 'Catálogos académicos',
   matriculas: 'Alumnos y matrículas',
   horarios: 'Horarios y sesiones',
+  asistenciaDocentes: 'Asistencia docente',
+  reportesAsistencia: 'Reportes de asistencia',
   auditoria: 'Auditoría',
 };
 
@@ -637,6 +641,8 @@ export default function Admin({ page }) {
     catalogos: Catalogs,
     matriculas: Enrollments,
     horarios: Schedule,
+    asistenciaDocentes: TeacherAttendance,
+    reportesAsistencia: StudentAttendanceReport,
     auditoria: Audits,
   };
   const Page = pages[page] || Home;
