@@ -135,15 +135,40 @@ export default function Portal() {
               </p>
             </article>
           </section>
-          {user.roles.includes('ALUMNO') && (
+          {(user.roles.includes('ALUMNO') || esApoderado) && (
+            <section className="portal-historial">
+              <h2>Acciones frecuentes</h2>
+              <div className="actions">
+                {user.roles.includes('ALUMNO') && (
+                  <button
+                    onClick={() => {
+                      window.location.hash = '/horario';
+                    }}
+                  >
+                    Ver mi horario
+                  </button>
+                )}
+                {esApoderado && (
+                  <button
+                    onClick={() => {
+                      window.location.hash = '/pagos';
+                    }}
+                  >
+                    Ver pagos y boletas
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
+          {user.roles.includes('APODERADO') && (
             <section className="portal-historial">
               <h2>Acciones frecuentes</h2>
               <button
                 onClick={() => {
-                  window.location.hash = '/horario';
+                  window.location.hash = '/evaluaciones';
                 }}
               >
-                Ver mi horario
+                Ver y descargar libreta
               </button>
             </section>
           )}

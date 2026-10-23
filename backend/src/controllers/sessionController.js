@@ -9,3 +9,12 @@ export const save = async (req, res) =>
   res.json({
     data: await service.save(req.validated.params.id, req.validated.body, req.user, req.requestId),
   });
+
+export const report = async (req, res) =>
+res.json({
+  data: await service.report(
+    req.validated.query,
+    req.user,
+    req.requestId
+  ),
+});

@@ -39,16 +39,23 @@ export default function AppLayout({
                 ['catalogos', 'Catálogos académicos'],
                 ['matriculas', 'Alumnos y matrículas'],
                 ['horarios', 'Horarios y sesiones'],
+                ['reglas', 'Gestión académica'],
+                ['asistenciaDocentes', 'Asistencia docente'],
+                ['reportesAsistencia', 'Reportes de asistencia'],
                 ['auditoria', 'Auditoría'],
               ].map(([route, label]) => (
                 <button
                   key={route}
                   className={
-                    window.location.hash === `#/admin/${route}` ? 'nav-active' : 'nav-item'
+                    (route === 'reglas'
+                      ? window.location.hash.startsWith('#/gestion')
+                      : window.location.hash === `#/admin/${route}`)
+                      ? 'nav-active'
+                      : 'nav-item'
                   }
                   onClick={() =>
                     onLeave(() => {
-                      window.location.hash = `/admin/${route}`;
+                      window.location.hash = route === 'reglas' ? '/gestion' : `/admin/${route}`;
                     })
                   }
                 >
@@ -79,6 +86,41 @@ export default function AppLayout({
                 Control de asistencia
               </button>
             )}
+            {!user.requiereCambioContrasena && user.roles.includes('DOCENTE') && (
+              <button
+                className={section === 'Gestión Académica' ? 'nav-active' : 'nav-item'}
+                onClick={() =>
+                  onLeave(() => {
+                    window.location.hash = '/gestion';
+                  })
+                }
+              >
+                <img
+                  src={section === 'Gestión Académica' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                  alt=""
+                />
+                Gestión Académica
+              </button>
+            )}
+            {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)) && (
+                <button
+                  className={section === 'Mis evaluaciones' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/evaluaciones';
+                    })
+                  }
+                >
+                  <img
+                    src={
+                      section === 'Mis evaluaciones' ? '/figma/nav-active.svg' : '/figma/nav.svg'
+                    }
+                    alt=""
+                  />
+                  Mis evaluaciones
+                </button>
+              )}
             {!user.requiereCambioContrasena &&
               user.roles.some((rol) => ['DOCENTE', 'ALUMNO'].includes(rol)) && (
                 <button
@@ -113,6 +155,23 @@ export default function AppLayout({
                     alt=""
                   />
                   Inicio
+                </button>
+              )}
+            {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['APODERADO', 'ADMINISTRADOR'].includes(rol)) && (
+                <button
+                  className={section === 'Pagos' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/pagos';
+                    })
+                  }
+                >
+                  <img
+                    src={section === 'Pagos' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                    alt=""
+                  />
+                  Pagos y boletas
                 </button>
               )}
             <button
