@@ -115,6 +115,23 @@ export default function AppLayout({
                   Inicio
                 </button>
               )}
+            {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['APODERADO', 'ADMINISTRADOR'].includes(rol)) && (
+                <button
+                  className={section === 'Pagos' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/pagos';
+                    })
+                  }
+                >
+                  <img
+                    src={section === 'Pagos' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                    alt=""
+                  />
+                  Pagos y boletas
+                </button>
+              )}
             <button
               className={section === 'Seguridad' ? 'nav-active' : 'nav-item'}
               onClick={() =>
