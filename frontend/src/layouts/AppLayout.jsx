@@ -101,7 +101,7 @@ export default function AppLayout({
               </button>
             )}
             {!user.requiereCambioContrasena &&
-              user.roles.some((rol) => ['ALUMNO'].includes(rol)) && (
+              user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)) && (
                 <button
                   className={section === 'Mis evaluaciones' ? 'nav-active' : 'nav-item'}
                   onClick={() =>

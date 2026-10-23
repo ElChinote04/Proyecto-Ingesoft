@@ -147,6 +147,18 @@ export default function Portal() {
               </button>
             </section>
           )}
+          {user.roles.includes('APODERADO') && (
+            <section className="portal-historial">
+              <h2>Acciones frecuentes</h2>
+              <button
+                onClick={() => {
+                  window.location.hash = '/evaluaciones';
+                }}
+              >
+                Ver y descargar libreta
+              </button>
+            </section>
+          )}
           <Historial key={estudiante.id} estudiante={estudiante} />
         </>
       )}
