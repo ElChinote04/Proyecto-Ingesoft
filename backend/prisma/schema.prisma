@@ -6,71 +6,83 @@ datasource db {
   provider = "postgresql"
 }
 
-enum NombreRol {
-  ADMINISTRADOR
-  DOCENTE
-  ALUMNO
-  APODERADO
-}
-
-enum CondicionAsistencia {
-  PRESENTE
-  TARDANZA
-  AUSENTE
-}
+enum NombreRol { ADMINISTRADOR DOCENTE ALUMNO APODERADO }
+enum TipoDocumento { DNI CARNET_EXTRANJERIA }
+enum SeveridadError { INFORMATIVA ADVERTENCIA ERROR CRITICA }
+enum EstadoAuditoria { EXITOSO PENDIENTE FALLIDO }
+enum TipoParentesco { MADRE PADRE ABUELO_ABUELA TIO_TIA HERMANO_HERMANA OTRO SIN_PARENTESCO }
+enum EstadoCompromisoPago { PENDIENTE PARCIALMENTE_PAGADO PAGADO ANULADO }
+enum EstadoPago { PENDIENTE CONFIRMADO ANULADO }
+enum MedioPago { EFECTIVO TRANSFERENCIA DEPOSITO TARJETA BILLETERA_DIGITAL }
+enum EstadoSolicitud { PENDIENTE APROBADA RECHAZADA }
+enum CondicionAsistencia { PRESENTE TARDANZA AUSENTE JUSTIFICADA }
+enum EstadoEvidenciaPedagogica { PENDIENTE_REVISION OBSERVADA VALIDADA }
+enum NivelLogro { AD A B C }
+enum EstadoSesionClase { PROGRAMADA REALIZADA CANCELADA }
+enum DiaSemana { LUNES MARTES MIERCOLES JUEVES VIERNES SABADO DOMINGO }
 
 model Persona {
-  apoderado       Apoderado?
-  id              Int         @id @default(autoincrement())
-  numeroDocumento String      @unique
+  id              Int           @id @default(autoincrement())
+  tipoDocumento   TipoDocumento?
+  numeroDocumento String        @unique
   nombres         String
   apellidos       String
-  activo          Boolean     @default(true)
-  creadoEn        DateTime    @default(now())
-  modificadoEn    DateTime    @updatedAt
+  fechaNacimiento DateTime?     @db.Date
+  telefono        String?
+  correo          String?
+  direccion       String?
+  activo          Boolean       @default(true)
+  creadoEn        DateTime      @default(now())
+  creadoPorId     Int?
+  modificadoEn    DateTime      @updatedAt
+  modificadoPorId Int?
   usuario         Usuario?
+  administrador   Administrador?
   docente         Docente?
   estudiante      Estudiante?
+  apoderado       Apoderado?
 }
 
 model Usuario {
   id                       Int                    @id @default(autoincrement())
   personaId                Int                    @unique
   persona                  Persona                @relation(fields: [personaId], references: [id])
+  codigo                   String?                @unique
   identificador            String                 @unique
   hashContrasena           String
+  ultimoAcceso             DateTime?
   activo                   Boolean                @default(true)
   intentosFallidos         Int                    @default(0)
   bloqueadoHasta           DateTime?
   requiereCambioContrasena Boolean                @default(false)
   creadoEn                 DateTime               @default(now())
+  creadoPorId              Int?
   modificadoEn             DateTime               @updatedAt
-  roles                    UsuarioRol[]
+  modificadoPorId          Int?
+  roles                    Rol[]
   sesiones                 SesionAuth[]
   eventos                  RegistroAuditoria[]
+  errores                  ErrorUsuario[]
+  justificacionesResueltas Justificacion[]       @relation("JustificacionResolutor")
+  solicitudesResueltas     SolicitudReprogramacion[] @relation("SolicitudResolutor")
+  evidenciasRevisadas      EvidenciaPedagogica[] @relation("EvidenciaRevisor")
   asistenciasCreadas       AsistenciaEstudiante[] @relation("Creador")
   asistenciasModificadas   AsistenciaEstudiante[] @relation("Modificador")
 }
 
-model Instalacion {
-  id           Int      @id
-  completadaEn DateTime @default(now())
-}
-
 model Rol {
-  id       Int          @id @default(autoincrement())
-  nombre   NombreRol    @unique
-  usuarios UsuarioRol[]
+  id              Int      @id @default(autoincrement())
+  nombre          String   @unique
+  descripcion     String?
+  activo          Boolean  @default(true)
+  creadoEn        DateTime @default(now())
+  creadoPorId     Int?
+  modificadoEn    DateTime @updatedAt
+  modificadoPorId Int?
+  usuarios        Usuario[]
 }
 
-model UsuarioRol {
-  usuarioId Int
-  rolId     Int
-  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  rol       Rol     @relation(fields: [rolId], references: [id])
-
-  @@id([usuarioId, rolId])
-}
+model Instalacion { id Int @id; completadaEn DateTime @default(now()) }
 
 model SesionAuth {
   id              String   @id
@@ -79,179 +91,559 @@ model SesionAuth {
   ultimaActividad DateTime @default(now())
   expiraEn        DateTime
   creadoEn        DateTime @default(now())
-
   @@index([expiraEn])
 }
 
+model Administrador {
+  id Int @id @default(autoincrement())
+  personaId Int @unique
+  cargo String
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  persona Persona @relation(fields: [personaId], references: [id])
+}
+
 model Docente {
-  id            Int                   @id @default(autoincrement())
-  personaId     Int                   @unique
-  persona       Persona               @relation(fields: [personaId], references: [id])
-  codigoDocente String                @unique
-  asignaciones  CursoSeccionDocente[]
+  id Int @id @default(autoincrement())
+  personaId Int @unique
+  especialidad String?
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  persona Persona @relation(fields: [personaId], references: [id])
+  asignaciones CursoSeccionDocente[]
+  evidencias EvidenciaPedagogica[]
+  asistencias AsistenciaDocente[]
 }
 
 model Estudiante {
-  id               Int                   @id @default(autoincrement())
-  personaId        Int                   @unique
-  persona          Persona               @relation(fields: [personaId], references: [id])
-  codigoEstudiante String                @unique
-  apoderados       ApoderadoEstudiante[]
-  matriculas       Matricula[]
+  id Int @id @default(autoincrement())
+  personaId Int @unique
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  persona Persona @relation(fields: [personaId], references: [id])
+  apoderados ApoderadoEstudiante[]
+  matriculas Matricula[]
 }
 
 model Apoderado {
-  id          Int                   @id @default(autoincrement())
-  personaId   Int                   @unique
-  persona     Persona               @relation(fields: [personaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id Int @id @default(autoincrement())
+  personaId Int @unique
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  persona Persona @relation(fields: [personaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   estudiantes ApoderadoEstudiante[]
+  justificaciones Justificacion[]
+  reprogramaciones SolicitudReprogramacion[]
 }
 
 model ApoderadoEstudiante {
-  apoderadoId  Int
+  apoderadoId Int
   estudianteId Int
-  apoderado    Apoderado  @relation(fields: [apoderadoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  estudiante   Estudiante @relation(fields: [estudianteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  parentesco   String     @db.VarChar(50)
-  activo       Boolean    @default(true)
-  creadoEn     DateTime   @default(now())
-
+  parentesco TipoParentesco
+  esResponsablePrincipal Boolean
+  fechaInicio DateTime @db.Date
+  fechaFin DateTime? @db.Date
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  apoderado Apoderado @relation(fields: [apoderadoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  estudiante Estudiante @relation(fields: [estudianteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   @@id([apoderadoId, estudianteId])
 }
 
+model RegistroAuditoria {
+  id Int @id @default(autoincrement())
+  usuarioId Int?
+  fechaInicio DateTime @default(now())
+  fechaFin DateTime?
+  tipoEvento String
+  resultado EstadoAuditoria
+  tipoEntidad String
+  idEntidad String
+  valorAnterior String?
+  valorNuevo String?
+  direccionIp String?
+  observacion String?
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  @@index([tipoEntidad, idEntidad, fechaInicio])
+  @@index([tipoEvento, fechaInicio], map: "RegistroAuditoria_tipo_fecha")
+}
+
+model RegistroError {
+  id Int @id @default(autoincrement())
+  fechaHora DateTime @default(now())
+  severidad SeveridadError
+  codigoError String
+  mensajeSeguro String
+  errores ErrorUsuario[]
+}
+
+model ErrorUsuario {
+  id Int @id @default(autoincrement())
+  usuarioId Int?
+  registroErrorId Int
+  fechaError DateTime @default(now())
+  detalleTecnico String?
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+  registroError RegistroError @relation(fields: [registroErrorId], references: [id])
+}
+
 model AnioAcademico {
-  id          Int         @id @default(autoincrement())
-  codigo      String      @unique
-  activo      Boolean     @default(false)
-  fechaInicio DateTime?   @db.Date
-  fechaFin    DateTime?   @db.Date
-  secciones   Seccion[]
-  matriculas  Matricula[]
+  id Int @id @default(autoincrement())
+  codigo String @unique
+  fechaInicio DateTime @db.Date
+  fechaFin DateTime @db.Date
+  activo Boolean @default(false)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  secciones Seccion[]
+  matriculas Matricula[]
+  bimestres BimestreAcademico[]
+  asignaciones CursoSeccionDocente[]
+}
+
+model BimestreAcademico {
+  id Int @id @default(autoincrement())
+  anioAcademicoId Int
+  numero Int
+  nombre String
+  fechaInicio DateTime @db.Date
+  fechaFin DateTime @db.Date
+  fechaCierre DateTime? @db.Date
+  fechaPublicacion DateTime? @db.Date
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  anioAcademico AnioAcademico @relation(fields: [anioAcademicoId], references: [id])
+  calificaciones Calificacion[]
+  planes PlanAcademico[]
+  sesiones SesionClase[]
+  @@unique([anioAcademicoId, numero])
 }
 
 model Grado {
-  id        Int       @id @default(autoincrement())
-  nombre    String    @unique
+  id Int @id @default(autoincrement())
+  nombre String @unique
+  orden Int
+  nivelEducativo String
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
   secciones Seccion[]
+  reglas ReglaConsolidacion[]
 }
 
 model Seccion {
-  id              Int                   @id @default(autoincrement())
-  nombre          String
-  gradoId         Int
-  grado           Grado                 @relation(fields: [gradoId], references: [id])
+  id Int @id @default(autoincrement())
+  nombre String
+  capacidadMaxima Int
+  gradoId Int
   anioAcademicoId Int
-  anioAcademico   AnioAcademico         @relation(fields: [anioAcademicoId], references: [id])
-  matriculas      Matricula[]
-  asignaciones    CursoSeccionDocente[]
-
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  grado Grado @relation(fields: [gradoId], references: [id])
+  anioAcademico AnioAcademico @relation(fields: [anioAcademicoId], references: [id])
+  matriculas Matricula[]
+  asignaciones CursoSeccionDocente[]
   @@unique([gradoId, anioAcademicoId, nombre])
 }
 
 model Matricula {
-  id              Int                    @id @default(autoincrement())
-  estudianteId    Int
-  estudiante      Estudiante             @relation(fields: [estudianteId], references: [id])
-  seccionId       Int
-  seccion         Seccion                @relation(fields: [seccionId], references: [id])
+  id Int @id @default(autoincrement())
+  estudianteId Int
+  seccionId Int
   anioAcademicoId Int
-  anioAcademico   AnioAcademico          @relation(fields: [anioAcademicoId], references: [id])
-  activo          Boolean                @default(true)
-  creadoEn        DateTime               @default(now())
-  modificadoEn    DateTime               @updatedAt
-  asistencias     AsistenciaEstudiante[]
-
+  fechaMatricula DateTime @db.Date
+  fechaBaja DateTime? @db.Date
+  motivoBaja String?
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  estudiante Estudiante @relation(fields: [estudianteId], references: [id])
+  seccion Seccion @relation(fields: [seccionId], references: [id])
+  anioAcademico AnioAcademico @relation(fields: [anioAcademicoId], references: [id])
+  compromisos CompromisoPago[]
+  asistencias AsistenciaEstudiante[]
+  reprogramaciones SolicitudReprogramacion[]
+  calificaciones Calificacion[]
   @@unique([estudianteId, anioAcademicoId])
   @@index([seccionId, activo])
 }
 
-model Curso {
-  id           Int                   @id @default(autoincrement())
-  codigo       String                @unique
-  nombre       String
-  asignaciones CursoSeccionDocente[]
+model CompromisoPago {
+  id Int @id @default(autoincrement())
+  matriculaId Int
+  numero String
+  concepto String
+  mesCorrespondiente String
+  fechaEmision DateTime @db.Date
+  fechaVencimiento DateTime @db.Date
+  monto Decimal @db.Decimal(10, 2)
+  estado EstadoCompromisoPago
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  matricula Matricula @relation(fields: [matriculaId], references: [id])
+  pagos Pago[]
 }
 
-model CursoSeccionDocente {
-  id        Int                       @id @default(autoincrement())
-  cursoId   Int
-  curso     Curso                     @relation(fields: [cursoId], references: [id])
-  seccionId Int
-  seccion   Seccion                   @relation(fields: [seccionId], references: [id])
-  docenteId Int
-  docente   Docente                   @relation(fields: [docenteId], references: [id])
-  bloques   CursoSeccionDocenteAula[]
+model Pago {
+  id Int @id @default(autoincrement())
+  compromisoId Int
+  idTransaccion String
+  fechaPago DateTime @db.Date
+  fechaConfirmacion DateTime? @db.Date
+  monto Decimal @db.Decimal(10, 2)
+  medioPago MedioPago
+  numeroOperacion String?
+  estado EstadoPago
+  detalleTransaccion Json?
+  archivoBoleta String?
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  compromiso CompromisoPago @relation(fields: [compromisoId], references: [id])
+}
 
-  @@unique([cursoId, seccionId, docenteId])
+model Curso {
+  id Int @id @default(autoincrement())
+  codigo String @unique
+  nombre String
+  descripcion String?
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  asignaciones CursoSeccionDocente[]
+  competencias Competencia[]
+  reglas ReglaConsolidacion[]
+}
+
+model Competencia {
+  id Int @id @default(autoincrement())
+  codigo String @unique
+  nombre String
+  descripcion String?
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  cursos Curso[]
+  planes PlanAcademico[]
+  calificaciones CalificacionCompetencia[]
+}
+
+model Calificacion {
+  id Int @id @default(autoincrement())
+  matriculaId Int
+  bimestreId Int
+  asignacionId Int
+  reglaId Int?
+  nivelLogro NivelLogro
+  conclusionDescriptiva String?
+  fechaPublicacion DateTime? @db.Date
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  matricula Matricula @relation(fields: [matriculaId], references: [id])
+  bimestre BimestreAcademico @relation(fields: [bimestreId], references: [id])
+  asignacion CursoSeccionDocente @relation(fields: [asignacionId], references: [id])
+  regla ReglaConsolidacion? @relation(fields: [reglaId], references: [id])
+  competencias CalificacionCompetencia[]
+  @@unique([matriculaId, bimestreId, asignacionId])
+}
+
+model CalificacionCompetencia {
+  id Int @id @default(autoincrement())
+  calificacionId Int
+  competenciaId Int
+  nivelLogro NivelLogro
+  conclusionDescriptiva String?
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  calificacion Calificacion @relation(fields: [calificacionId], references: [id])
+  competencia Competencia @relation(fields: [competenciaId], references: [id])
+  @@unique([calificacionId, competenciaId])
+}
+
+model ReglaConsolidacion {
+  id Int @id @default(autoincrement())
+  gradoId Int
+  cursoId Int
+  nombre String
+  version Int
+  metodo String
+  vigenteDesde DateTime @db.Date
+  vigenteHasta DateTime? @db.Date
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  grado Grado @relation(fields: [gradoId], references: [id])
+  curso Curso @relation(fields: [cursoId], references: [id])
+  calificaciones Calificacion[]
+}
+
+model PlanAcademico {
+  id Int @id @default(autoincrement())
+  bimestreId Int
+  asignacionId Int
+  titulo String
+  objetivo String
+  fechaInicio DateTime @db.Date
+  fechaFin DateTime @db.Date
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  bimestre BimestreAcademico @relation(fields: [bimestreId], references: [id])
+  asignacion CursoSeccionDocente @relation(fields: [asignacionId], references: [id])
+  competencias Competencia[]
+  evidencias EvidenciaPedagogica[]
+}
+
+model EvidenciaPedagogica {
+  id Int @id @default(autoincrement())
+  docenteId Int
+  planId Int
+  revisorId Int?
+  fechaRegistro DateTime @db.Date
+  fechaEntrega DateTime? @db.Date
+  descripcionAvance String
+  archivos String[]
+  observacionesRevision String?
+  estadoRevision EstadoEvidenciaPedagogica
+  fechaRevision DateTime? @db.Date
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  docente Docente @relation(fields: [docenteId], references: [id])
+  plan PlanAcademico @relation(fields: [planId], references: [id])
+  revisor Usuario? @relation("EvidenciaRevisor", fields: [revisorId], references: [id])
 }
 
 model Aula {
-  id      Int                       @id @default(autoincrement())
-  codigo  String                    @unique
+  id Int @id @default(autoincrement())
+  codigo String @unique
+  nombre String
+  ubicacion String?
+  capacidad Int
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
   bloques CursoSeccionDocenteAula[]
 }
 
-model CursoSeccionDocenteAula {
-  activo       Boolean             @default(true)
-  id           Int                 @id @default(autoincrement())
-  asignacionId Int
-  asignacion   CursoSeccionDocente @relation(fields: [asignacionId], references: [id])
-  aulaId       Int
-  aula         Aula                @relation(fields: [aulaId], references: [id])
-  diaSemana    Int
-  horaInicio   String
-  horaFin      String
-  sesiones     SesionClase[]
+model CursoSeccionDocente {
+  id Int @id @default(autoincrement())
+  cursoId Int
+  seccionId Int
+  docenteId Int
+  anioAcademicoId Int
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  curso Curso @relation(fields: [cursoId], references: [id])
+  seccion Seccion @relation(fields: [seccionId], references: [id])
+  docente Docente @relation(fields: [docenteId], references: [id])
+  anioAcademico AnioAcademico @relation(fields: [anioAcademicoId], references: [id])
+  bloques CursoSeccionDocenteAula[]
+  calificaciones Calificacion[]
+  planes PlanAcademico[]
+  @@unique([cursoId, seccionId, docenteId, anioAcademicoId])
+}
 
-  // La unicidad solo de bloques activos se aplica mediante índice parcial en SQL.
+model CursoSeccionDocenteAula {
+  id Int @id @default(autoincrement())
+  asignacionId Int
+  aulaId Int
+  diaSemana DiaSemana
+  horaInicio String
+  horaFin String
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  asignacion CursoSeccionDocente @relation(fields: [asignacionId], references: [id])
+  aula Aula @relation(fields: [aulaId], references: [id])
+  sesiones SesionClase[]
 }
 
 model SesionClase {
-  id           Int                     @id @default(autoincrement())
-  bloqueId     Int
-  bloque       CursoSeccionDocenteAula @relation(fields: [bloqueId], references: [id])
-  fecha        DateTime                @db.Date
-  horaInicio   String
-  horaFin      String
-  activo       Boolean                 @default(true)
-  creadoEn     DateTime                @default(now())
-  modificadoEn DateTime                @updatedAt
-  asistencias  AsistenciaEstudiante[]
-
+  id Int @id @default(autoincrement())
+  bloqueId Int
+  bimestreId Int
+  fecha DateTime @db.Date
+  horaInicio String
+  horaFin String
+  estado EstadoSesionClase
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  bloque CursoSeccionDocenteAula @relation(fields: [bloqueId], references: [id])
+  bimestre BimestreAcademico @relation(fields: [bimestreId], references: [id])
+  asistenciasEstudiante AsistenciaEstudiante[]
+  asistenciasDocente AsistenciaDocente[]
   @@unique([bloqueId, fecha])
 }
 
 model AsistenciaEstudiante {
-  id              Int                 @id @default(autoincrement())
-  sesionId        Int
-  sesion          SesionClase         @relation(fields: [sesionId], references: [id])
-  matriculaId     Int
-  matricula       Matricula           @relation(fields: [matriculaId], references: [id])
-  condicion       CondicionAsistencia
-  observacion     String              @default("") @db.VarChar(300)
-  creadoEn        DateTime            @default(now())
-  modificadoEn    DateTime            @updatedAt
-  creadoPorId     Int
-  creadoPor       Usuario             @relation("Creador", fields: [creadoPorId], references: [id])
-  modificadoPorId Int
-  modificadoPor   Usuario             @relation("Modificador", fields: [modificadoPorId], references: [id])
-
+  id Int @id @default(autoincrement())
+  sesionId Int
+  matriculaId Int
+  condicion CondicionAsistencia
+  observacion String @default("") @db.VarChar(300)
+  horaLlegada DateTime?
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  creadoPor Usuario? @relation("Creador", fields: [creadoPorId], references: [id])
+  modificadoPor Usuario? @relation("Modificador", fields: [modificadoPorId], references: [id])
+  sesion SesionClase @relation(fields: [sesionId], references: [id])
+  matricula Matricula @relation(fields: [matriculaId], references: [id])
+  inasistencia Inasistencia?
   @@unique([sesionId, matriculaId])
   @@index([matriculaId])
 }
 
-model RegistroAuditoria {
-  id         Int      @id @default(autoincrement())
-  usuarioId  Int?
-  usuario    Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
-  fechaHora  DateTime @default(now())
-  tipoEvento String
-  entidad    String   @default("Registro")
-  resultado  String   @default("EXITO")
-  requestId  String?
-  entidadId  Int
-  detalle    Json
+model AsistenciaDocente {
+  id Int @id @default(autoincrement())
+  docenteId Int
+  sesionId Int
+  condicion CondicionAsistencia
+  observacion String?
+  horaEntrada DateTime?
+  horaSalida DateTime?
+  horasDictadas Decimal? @db.Decimal(5, 2)
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  docente Docente @relation(fields: [docenteId], references: [id])
+  sesion SesionClase @relation(fields: [sesionId], references: [id])
+  @@unique([docenteId, sesionId])
+}
 
-  @@index([entidadId, fechaHora])
-  @@index([tipoEvento, fechaHora], map: "RegistroAuditoria_tipo_fecha")
+model Justificacion {
+  id Int @id @default(autoincrement())
+  apoderadoId Int
+  resolutorId Int?
+  fechaSolicitud DateTime @db.Date
+  motivo String
+  archivos String[]
+  estado EstadoSolicitud
+  fechaResolucion DateTime? @db.Date
+  observacionResolucion String?
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  apoderado Apoderado @relation(fields: [apoderadoId], references: [id])
+  resolutor Usuario? @relation("JustificacionResolutor", fields: [resolutorId], references: [id])
+  inasistencias Inasistencia[]
+}
+
+model Inasistencia {
+  id Int @id @default(autoincrement())
+  asistenciaId Int @unique
+  fechaRegistro DateTime @db.Date
+  descripcion String
+  observacionAusencia String?
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  asistencia AsistenciaEstudiante @relation(fields: [asistenciaId], references: [id])
+  justificaciones Justificacion[]
+  reprogramaciones SolicitudReprogramacion[]
+}
+
+model Suspension {
+  id Int @id @default(autoincrement())
+  fechaInicio DateTime @db.Date
+  fechaFin DateTime @db.Date
+  fechaRegistro DateTime @db.Date
+  descripcion String
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+}
+
+model SolicitudReprogramacion {
+  id Int @id @default(autoincrement())
+  apoderadoId Int
+  resolutorId Int?
+  matriculaId Int
+  inasistenciaId Int?
+  referenciaActividad String
+  motivo String
+  fechaSolicitud DateTime @db.Date
+  fechaOriginal DateTime @db.Date
+  fechaPropuesta DateTime @db.Date
+  fechaReprogramada DateTime? @db.Date
+  estado EstadoSolicitud
+  fechaResolucion DateTime? @db.Date
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  creadoPorId Int?
+  modificadoEn DateTime @updatedAt
+  modificadoPorId Int?
+  apoderado Apoderado @relation(fields: [apoderadoId], references: [id])
+  resolutor Usuario? @relation("SolicitudResolutor", fields: [resolutorId], references: [id])
+  matricula Matricula @relation(fields: [matriculaId], references: [id])
+  inasistencia Inasistencia? @relation(fields: [inasistenciaId], references: [id])
 }
