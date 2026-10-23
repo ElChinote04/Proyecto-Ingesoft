@@ -20,7 +20,7 @@ function AttendanceForm({ data, onSaved }) {
     alumnos.map((a) => ({
       alumnoId: a.alumnoId,
       estado: a.estado ?? '',
-      observacion: a.observacion,
+      observacion: a.observacion ?? '',
     })),
   );
   const [dirty, setDirty] = useState(false);
