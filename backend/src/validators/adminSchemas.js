@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { planPagoSchema } from './pagos.schemas.js';
 const id = z.number().int().positive().max(2147483647);
 const text = (label, max = 100) => z.string().trim().min(1, `Ingresa ${label}.`).max(max);
 const password = z
@@ -33,7 +34,9 @@ export const setupSchema = z
   })
   .strict();
 export const studentSchema = z.object(person).strict();
-export const enrollmentSchema = z.object({ estudianteId: id, seccionId: id }).strict();
+export const enrollmentSchema = z
+  .object({ estudianteId: id, seccionId: id, planPago: planPagoSchema.optional() })
+  .strict();
 export const catalogSchemas = {
   anios: z
     .object({ codigo: z.string().regex(/^(19|20|21)\d{2}$/, 'Ingresa un año entre 1900 y 2199.') })

@@ -40,6 +40,8 @@ export default function AppLayout({
                 ['matriculas', 'Alumnos y matrículas'],
                 ['horarios', 'Horarios y sesiones'],
                 ['reglas', 'Gestión académica'],
+                ['asistenciaDocentes', 'Asistencia docente'],
+                ['reportesAsistencia', 'Reportes de asistencia'],
                 ['auditoria', 'Auditoría'],
               ].map(([route, label]) => (
                 <button
@@ -153,6 +155,23 @@ export default function AppLayout({
                     alt=""
                   />
                   Inicio
+                </button>
+              )}
+            {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['APODERADO', 'ADMINISTRADOR'].includes(rol)) && (
+                <button
+                  className={section === 'Pagos' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/pagos';
+                    })
+                  }
+                >
+                  <img
+                    src={section === 'Pagos' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                    alt=""
+                  />
+                  Pagos y boletas
                 </button>
               )}
             <button

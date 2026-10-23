@@ -1300,3 +1300,92 @@ a {
 .password-card > .text-button {
   margin-top: 16px;
 }
+
+/* Pagos y boletas (US-007A y US-007B). Reutiliza las superficies del portal. */
+.pagos-filtros {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 320px));
+  gap: 12px;
+  margin: 24px 0 0;
+}
+.pagos-nota {
+  margin-top: 24px;
+}
+.pago-resultado {
+  max-width: 720px;
+  gap: 20px;
+}
+.pago-detalle {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0 0 16px;
+}
+.pago-detalle dt {
+  color: var(--muted);
+}
+.pago-detalle dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.pago-en-curso {
+  white-space: nowrap;
+}
+.pago-simulacion {
+  border-top: 1px dashed var(--border);
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (max-width: 700px) {
+  .pagos-filtros {
+    grid-template-columns: 1fr;
+  }
+}
+/* En pantallas angostas cada boleta se lee como una tarjeta, para que el
+   monto, el estado y el botón Pagar no queden fuera de la vista. */
+@media (max-width: 700px) {
+  .tabla-apilable {
+    background: transparent;
+    border: 0;
+  }
+  .tabla-apilable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .tabla-apilable tbody tr {
+    display: block;
+    margin-bottom: 12px;
+    padding: 12px 16px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .tabla-apilable td,
+  .tabla-apilable td:last-child {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    width: auto;
+    padding: 6px 0;
+    border: 0;
+    text-align: right;
+  }
+  .tabla-apilable td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    text-align: left;
+  }
+  .tabla-apilable td[colspan] {
+    display: block;
+    text-align: left;
+  }
+  .tabla-apilable td[colspan]::before {
+    content: none;
+  }
+}

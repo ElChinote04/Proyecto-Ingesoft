@@ -10,6 +10,8 @@ import Admin from './pages/Admin';
 import Setup from './pages/Setup';
 import Portal from './pages/Portal';
 import MiHorario from './pages/MiHorario';
+import Pagos from './pages/Pagos';
+import ResultadoPago from './pages/ResultadoPago';
 import CambiarContrasena from './pages/CambiarContrasena';
 import Gestion from './pages/ReglasConsolidacion';
 import Libreta from './pages/Libreta';
@@ -48,6 +50,15 @@ function Screens() {
     return <MiHorario key={perfiles} />;
   if (route === '/portal' && user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)))
     return <Portal key={perfiles} />;
+  // El retorno de la pasarela puede traer parámetros detrás de la ruta, por eso
+  // la expresión no está anclada al final.
+  const retorno = route.match(/^\/pagos\/(\d+)\/(resultado|cancelado)/);
+  if (retorno)
+    return (
+      <ResultadoPago key={retorno[1]} id={retorno[1]} cancelado={retorno[2] === 'cancelado'} />
+    );
+  if (route === '/pagos' && user.roles.some((rol) => ['APODERADO', 'ADMINISTRADOR'].includes(rol)))
+    return <Pagos key={perfiles} />;
   if (
     (route === '/gestion' || route === '/gestion/nueva' || /^\/gestion\/editar\/\d+$/.test(route)) &&
     user.roles.some((rol) => ['DOCENTE', 'ADMINISTRADOR'].includes(rol))

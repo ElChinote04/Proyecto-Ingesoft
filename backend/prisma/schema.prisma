@@ -14,61 +14,61 @@ datasource db {
 }
 
 model BimestreAcademico {
-  id              Int       @id @default(autoincrement())
+  id              Int            @id @default(autoincrement())
   anioAcademicoId Int
-  anioAcademico   AnioAcademico @relation(fields: [anioAcademicoId], references: [id])
+  anioAcademico   AnioAcademico  @relation(fields: [anioAcademicoId], references: [id])
   numero          Int
   nombre          String
-  activo          Boolean   @default(true)
+  activo          Boolean        @default(true)
   calificaciones  Calificacion[]
 
   @@unique([anioAcademicoId, numero])
 }
 
 model Competencia {
-  id          Int      @id @default(autoincrement())
-  cursoId     Int
-  curso       Curso    @relation(fields: [cursoId], references: [id])
-  codigo      String   @unique
-  nombre      String
-  descripcion String
-  activo      Boolean  @default(true)
+  id             Int                       @id @default(autoincrement())
+  cursoId        Int
+  curso          Curso                     @relation(fields: [cursoId], references: [id])
+  codigo         String                    @unique
+  nombre         String
+  descripcion    String
+  activo         Boolean                   @default(true)
   calificaciones CalificacionCompetencia[]
 }
 
 model Calificacion {
-  id              Int      @id @default(autoincrement())
+  id              Int                       @id @default(autoincrement())
   matriculaId     Int
-  matricula       Matricula @relation(fields: [matriculaId], references: [id])
+  matricula       Matricula                 @relation(fields: [matriculaId], references: [id])
   bimestreId      Int
-  bimestre        BimestreAcademico @relation(fields: [bimestreId], references: [id])
+  bimestre        BimestreAcademico         @relation(fields: [bimestreId], references: [id])
   asignacionId    Int
-  asignacion      CursoSeccionDocente @relation(fields: [asignacionId], references: [id])
+  asignacion      CursoSeccionDocente       @relation(fields: [asignacionId], references: [id])
   reglaId         Int
-  regla            ReglaConsolidacion @relation(fields: [reglaId], references: [id])
-  activo          Boolean  @default(true)
+  regla           ReglaConsolidacion        @relation(fields: [reglaId], references: [id])
+  activo          Boolean                   @default(true)
   creadoPorId     Int
   modificadoPorId Int
   competencias    CalificacionCompetencia[]
-  creadoEn        DateTime @default(now())
-  modificadoEn    DateTime @updatedAt
+  creadoEn        DateTime                  @default(now())
+  modificadoEn    DateTime                  @updatedAt
 
   @@unique([matriculaId, bimestreId, asignacionId])
 }
 
 model CalificacionCompetencia {
-  id                    Int       @id @default(autoincrement())
+  id                    Int          @id @default(autoincrement())
   calificacionId        Int
   calificacion          Calificacion @relation(fields: [calificacionId], references: [id])
   competenciaId         Int
-  competencia           Competencia @relation(fields: [competenciaId], references: [id])
+  competencia           Competencia  @relation(fields: [competenciaId], references: [id])
   nivelLogro            NivelLogro
   conclusionDescriptiva String?
-  activo                Boolean   @default(true)
+  activo                Boolean      @default(true)
   creadoPorId           Int
   modificadoPorId       Int
-  creadoEn              DateTime  @default(now())
-  modificadoEn          DateTime  @updatedAt
+  creadoEn              DateTime     @default(now())
+  modificadoEn          DateTime     @updatedAt
 
   @@unique([calificacionId, competenciaId])
 }
@@ -78,6 +78,20 @@ enum NombreRol {
   DOCENTE
   ALUMNO
   APODERADO
+}
+
+enum EstadoBoleta {
+  PENDIENTE
+  PAGADA
+  ANULADA
+}
+
+enum EstadoPago {
+  INICIADO
+  PROCESANDO
+  CONFIRMADO
+  RECHAZADO
+  CANCELADO
 }
 
 enum CondicionAsistencia {
@@ -119,6 +133,10 @@ model Usuario {
   asistenciasModificadas   AsistenciaEstudiante[] @relation("Modificador")
   reglasCreadas            ReglaConsolidacion[]   @relation("ReglaCreador")
   reglasModificadas        ReglaConsolidacion[]   @relation("ReglaModificador")
+
+  asistenciasDocentesCreadas     AsistenciaDocente[] @relation("CreadorAsistenciaDocente")
+  asistenciasDocentesModificadas AsistenciaDocente[] @relation("ModificadorAsistenciaDocente")
+  pagosIniciados                 Pago[]              @relation("PagoIniciador")
 }
 
 model Instalacion {
@@ -158,6 +176,8 @@ model Docente {
   persona       Persona               @relation(fields: [personaId], references: [id])
   codigoDocente String                @unique
   asignaciones  CursoSeccionDocente[]
+
+  asistencias AsistenciaDocente[]
 }
 
 model Estudiante {
@@ -189,19 +209,19 @@ model ApoderadoEstudiante {
 }
 
 model AnioAcademico {
-  id          Int         @id @default(autoincrement())
-  codigo      String      @unique
-  activo      Boolean     @default(false)
-  fechaInicio DateTime?   @db.Date
-  fechaFin    DateTime?   @db.Date
+  id          Int                 @id @default(autoincrement())
+  codigo      String              @unique
+  activo      Boolean             @default(false)
+  fechaInicio DateTime?           @db.Date
+  fechaFin    DateTime?           @db.Date
   secciones   Seccion[]
   matriculas  Matricula[]
   bimestres   BimestreAcademico[]
 }
 
 model Grado {
-  id        Int       @id @default(autoincrement())
-  nombre    String    @unique
+  id        Int                  @id @default(autoincrement())
+  nombre    String               @unique
   secciones Seccion[]
   reglas    ReglaConsolidacion[]
 }
@@ -232,6 +252,7 @@ model Matricula {
   modificadoEn    DateTime               @updatedAt
   asistencias     AsistenciaEstudiante[]
   calificaciones  Calificacion[]
+  planPago        PlanPago?
 
   @@unique([estudianteId, anioAcademicoId])
   @@index([seccionId, activo])
@@ -248,14 +269,14 @@ model Curso {
 }
 
 model CursoSeccionDocente {
-  id        Int                       @id @default(autoincrement())
-  cursoId   Int
-  curso     Curso                     @relation(fields: [cursoId], references: [id])
-  seccionId Int
-  seccion   Seccion                   @relation(fields: [seccionId], references: [id])
-  docenteId Int
-  docente   Docente                   @relation(fields: [docenteId], references: [id])
-  bloques   CursoSeccionDocenteAula[]
+  id             Int                       @id @default(autoincrement())
+  cursoId        Int
+  curso          Curso                     @relation(fields: [cursoId], references: [id])
+  seccionId      Int
+  seccion        Seccion                   @relation(fields: [seccionId], references: [id])
+  docenteId      Int
+  docente        Docente                   @relation(fields: [docenteId], references: [id])
+  bloques        CursoSeccionDocenteAula[]
   calificaciones Calificacion[]
 
   @@unique([cursoId, seccionId, docenteId])
@@ -316,25 +337,80 @@ model AsistenciaEstudiante {
   @@index([matriculaId])
 }
 
+/// Cronograma de pensiones pactado al matricular (US-006).
+model PlanPago {
+  id             Int              @id @default(autoincrement())
+  matriculaId    Int              @unique
+  matricula      Matricula        @relation(fields: [matriculaId], references: [id])
+  montoPension   Decimal          @db.Decimal(10, 2)
+  numeroCuotas   Int
+  diaVencimiento Int
+  mesInicio      Int
+  creadoEn       DateTime         @default(now())
+  boletas        CompromisoPago[]
+}
+
+/// Boleta de pensión emitida a partir del plan (US-006, US-007A).
+/// El estado MOROSA no se almacena: se deriva de fechaVencimiento al consultar.
+model CompromisoPago {
+  id               Int          @id @default(autoincrement())
+  planPagoId       Int
+  planPago         PlanPago     @relation(fields: [planPagoId], references: [id])
+  numeroCuota      Int
+  concepto         String       @db.VarChar(120)
+  periodo          String       @db.VarChar(7)
+  monto            Decimal      @db.Decimal(10, 2)
+  fechaVencimiento DateTime     @db.Date
+  estado           EstadoBoleta @default(PENDIENTE)
+  pagadaEn         DateTime?
+  creadoEn         DateTime     @default(now())
+  modificadoEn     DateTime     @updatedAt
+  pagos            Pago[]
+
+  @@unique([planPagoId, numeroCuota])
+  @@index([estado, fechaVencimiento])
+}
+
+/// Intento de pago de una boleta a través de la pasarela externa (US-007B).
+/// Un índice parcial en SQL garantiza un único pago en curso por boleta.
+model Pago {
+  id                Int            @id @default(autoincrement())
+  compromisoPagoId  Int
+  compromisoPago    CompromisoPago @relation(fields: [compromisoPagoId], references: [id])
+  referencia        String         @unique @db.VarChar(64)
+  referenciaExterna String?        @unique @db.VarChar(255)
+  monto             Decimal        @db.Decimal(10, 2)
+  estado            EstadoPago     @default(INICIADO)
+  proveedor         String         @db.VarChar(40)
+  motivoRechazo     String?        @db.VarChar(200)
+  confirmadoEn      DateTime?
+  iniciadoPorId     Int
+  iniciadoPor       Usuario        @relation("PagoIniciador", fields: [iniciadoPorId], references: [id])
+  creadoEn          DateTime       @default(now())
+  modificadoEn      DateTime       @updatedAt
+
+  @@index([compromisoPagoId, estado])
+}
+
 model ReglaConsolidacion {
-  id              Int         @id @default(autoincrement())
+  id              Int            @id @default(autoincrement())
   gradoId         Int
-  grado           Grado       @relation(fields: [gradoId], references: [id])
+  grado           Grado          @relation(fields: [gradoId], references: [id])
   cursoId         Int
-  curso           Curso       @relation(fields: [cursoId], references: [id])
+  curso           Curso          @relation(fields: [cursoId], references: [id])
   nombre          String
   version         Int
   metodo          String
-  vigenteDesde    DateTime    @default(now())
+  vigenteDesde    DateTime       @default(now())
   vigenteHasta    DateTime?
-  activo          Boolean     @default(true)
+  activo          Boolean        @default(true)
   creadoPorId     Int
-  creadoPor       Usuario     @relation("ReglaCreador", fields: [creadoPorId], references: [id])
+  creadoPor       Usuario        @relation("ReglaCreador", fields: [creadoPorId], references: [id])
   modificadoPorId Int
-  modificadoPor   Usuario     @relation("ReglaModificador", fields: [modificadoPorId], references: [id])
-  creadoEn        DateTime    @default(now())
-  modificadoEn   DateTime    @updatedAt
-  calificaciones Calificacion[]
+  modificadoPor   Usuario        @relation("ReglaModificador", fields: [modificadoPorId], references: [id])
+  creadoEn        DateTime       @default(now())
+  modificadoEn    DateTime       @updatedAt
+  calificaciones  Calificacion[]
 
   @@unique([gradoId, cursoId, version])
   @@index([gradoId, cursoId, activo])
@@ -354,4 +430,26 @@ model RegistroAuditoria {
 
   @@index([entidadId, fechaHora])
   @@index([tipoEvento, fechaHora], map: "RegistroAuditoria_tipo_fecha")
+}
+
+model AsistenciaDocente {
+  id        Int     @id @default(autoincrement())
+  docenteId Int
+  docente   Docente @relation(fields: [docenteId], references: [id])
+
+  fecha       DateTime            @db.Date
+  condicion   CondicionAsistencia
+  observacion String              @default("") @db.VarChar(300)
+
+  creadoEn     DateTime @default(now())
+  modificadoEn DateTime @updatedAt
+
+  creadoPorId Int
+  creadoPor   Usuario @relation("CreadorAsistenciaDocente", fields: [creadoPorId], references: [id])
+
+  modificadoPorId Int
+  modificadoPor   Usuario @relation("ModificadorAsistenciaDocente", fields: [modificadoPorId], references: [id])
+
+  @@unique([docenteId, fecha])
+  @@index([fecha])
 }
