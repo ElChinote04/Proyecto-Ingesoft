@@ -5,11 +5,11 @@ import { useResource } from '../hooks/useResource';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
 
-const periods = ['I Bimestre', 'II Bimestre', 'III Bimestre', 'IV Bimestre'];
-const INITIAL_COMPETENCIES = [
-  'Resuelve problemas de cantidad',
-  'Resuelve problemas de regularidad',
-  'Resuelve problemas de forma',
+const periods = [
+  { id: 1, label: 'I Bimestre' },
+  { id: 2, label: 'II Bimestre' },
+  { id: 3, label: 'III Bimestre' },
+  { id: 4, label: 'IV Bimestre' },
 ];
 
 function uniqueById(items) {
@@ -164,81 +164,92 @@ function AdminRules() {
 
 function DocenteGestion() {
   const sessions = useResource('/sesiones');
+  const rules = useResource('/reglas-consolidacion');
+  const bimesters = useResource('/bimestres');
   const [courseId, setCourseId] = useState('');
   const [sectionId, setSectionId] = useState('');
-  const [period, setPeriod] = useState(periods[2]);
-
-  // Lista dinámica de competencias y competencia seleccionada (inicialmente vacía para la opción por defecto)
-  const [competenciesList, setCompetenciesList] = useState(INITIAL_COMPETENCIES);
-  const [competency, setCompetency] = useState('');
-
-  // Estados para controlar la adición de una nueva competencia
-  const [isAddingCompetency, setIsAddingCompetency] = useState(false);
-  const [newCompetencyText, setNewCompetencyText] = useState('');
-
-  const [evaluation, setEvaluation] = useState('Práctica 03 · Fracciones');
-  const [date, setDate] = useState('2026-09-16');
+  const [period, setPeriod] = useState('');
+  const [competencyId, setCompetencyId] = useState('');
+  const [evaluation, setEvaluation] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [screen, setScreen] = useState('context');
+  const [grading, setGrading] = useState(null);
+  const [levels, setLevels] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [summary, setSummary] = useState(null);
 
   const courses = useMemo(
     () => uniqueById((sessions.data ?? []).map((session) => session.curso)),
     [sessions.data],
   );
   const sections = useMemo(
-    () => uniqueById((sessions.data ?? []).map((session) => session.seccion)),
-    [sessions.data],
+    () => uniqueById(
+      (sessions.data ?? [])
+        .filter((session) => String(session.curso?.id) === String(courseId || courses[0]?.id))
+        .map((session) => session.seccion),
+    ),
+    [sessions.data, courseId, courses],
   );
   const selectedCourse = courseId || courses[0]?.id || '';
   const selectedSection = sectionId || sections[0]?.id || '';
-
-  const matchingSessions = useMemo(() => {
-    if (!sessions.data) return [];
-    return sessions.data.filter((session) => {
-      const matchCourse = String(session.curso?.id) === String(selectedCourse);
-      const matchSection = String(session.seccion?.id) === String(selectedSection);
-      return matchCourse && matchSection;
-    });
-  }, [sessions.data, selectedCourse, selectedSection]);
-
-  const studentCount = useMemo(() => {
-    const allStudents = matchingSessions.flatMap((session) => session.alumnos ?? []);
-    return uniqueById(allStudents).length;
-  }, [matchingSessions]);
-
-  // Manejador del cambio en el select de competencias
-  const handleCompetencyChange = (event) => {
-    const value = event.target.value;
-    if (value === '__ADD_NEW__') {
-      setIsAddingCompetency(true);
-      setCompetency('');
-    } else {
-      setIsAddingCompetency(false);
-      setCompetency(value);
+  const selectedPeriod = period || bimesters.data?.[0]?.id || periods[0].id;
+  const selectedSectionData = sections.find((section) => String(section.id) === String(selectedSection));
+  const courseRules = useMemo(
+    () => (rules.data ?? []).filter((item) => (
+      item.activo &&
+      String(item.cursoId) === String(selectedCourse) &&
+      String(item.gradoId) === String(selectedSectionData?.gradoId)
+    )),
+    [rules.data, selectedCourse, selectedSectionData],
+  );
+  const selectedCompetency = courseRules.find((item) => String(item.id) === String(competencyId));
+  async function continueToGrading() {
+    setError(null);
+    try {
+      const context = await api(
+        `/calificaciones/contexto?cursoId=${selectedCourse}&seccionId=${selectedSection}&bimestreId=${selectedPeriod}&competenciaId=${competencyId}`,
+      );
+      setGrading(context);
+      setLevels(Object.fromEntries(context.alumnos.map((student) => [student.matriculaId, student.nivelLogro ?? ''])));
+      setScreen('grading');
+    } catch (reason) {
+      setError(reason);
     }
-  };
-
-  // Guardar la nueva competencia ingresada en la lista
-  const handleSaveCompetency = () => {
-    const trimmed = newCompetencyText.trim();
-    if (trimmed) {
-      if (!competenciesList.includes(trimmed)) {
-        setCompetenciesList((prev) => [...prev, trimmed]);
-      }
-      setCompetency(trimmed);
+  }
+  async function saveGrades() {
+    setSaving(true);
+    setError(null);
+    try {
+      const calificaciones = grading.alumnos.map((student) => ({
+        matriculaId: student.matriculaId,
+        nivelLogro: levels[student.matriculaId],
+      }));
+      if (calificaciones.some((item) => !item.nivelLogro)) throw new Error('Registra un nivel para cada alumno.');
+      const result = await api('/calificaciones/competencias/bulk', {
+        method: 'POST',
+        body: { cursoId: Number(selectedCourse), seccionId: Number(selectedSection), bimestreId: Number(selectedPeriod), competenciaId: Number(competencyId), calificaciones },
+      });
+      setSummary(result);
+      setScreen('summary');
+    } catch (reason) {
+      setError(reason);
+    } finally {
+      setSaving(false);
     }
-    setNewCompetencyText('');
-    setIsAddingCompetency(false);
-  };
+  }
+  const counts = Object.values(levels).reduce((result, level) => ({ ...result, [level]: (result[level] ?? 0) + 1 }), {});
 
-  if (sessions.loading)
+  if (sessions.loading || rules.loading)
     return (
       <AppLayout section="Gestión Académica" step="Calificaciones">
         <Loading>Cargando cursos y secciones…</Loading>
       </AppLayout>
     );
-  if (sessions.error)
+  if (sessions.error || rules.error)
     return (
       <AppLayout section="Gestión Académica" step="Calificaciones">
-        <ResourceError {...sessions} />
+        <ResourceError error={sessions.error || rules.error} retry={() => { sessions.retry(); rules.retry(); }} />
       </AppLayout>
     );
 
@@ -248,11 +259,21 @@ function DocenteGestion() {
       step="Calificaciones"
       anioAcademico={sessions.data?.[0]?.anioAcademico}
     >
-      <div className="page-heading">
-        <h1>Registro por competencias</h1>
-        <p className="muted">Selecciona el contexto de evaluación y la competencia a calificar.</p>
-      </div>
-      {!courses.length || !sections.length ? (
+      {error && <Feedback title={error.message} />}
+      {screen === 'summary' ? (
+        <>
+          <div className="page-heading"><h1>Calificaciones guardadas</h1><p className="muted">El sistema registró los resultados de la competencia seleccionada.</p></div>
+          <div className="card summary-card"><h2>Distribución del nivel de logro</h2><div className="summary-grid">{['AD', 'A', 'B', 'C'].map((level) => <div className="summary-item" key={level}><span className={`achievement achievement-${level.toLowerCase()}`}>{level}</span><strong>{counts[level] ?? 0} alumnos</strong></div>)}</div><p className="muted">Registrado por {summary?.registradoPor ?? 'el docente'} el {new Date().toLocaleDateString('es-PE')}.</p></div>
+          <button type="button" onClick={() => { setScreen('context'); setSummary(null); }}>Registrar otra evaluación</button>
+        </>
+      ) : screen === 'grading' ? (
+        <>
+          <div className="page-heading"><h1>{evaluation}</h1><p className="muted">{grading.curso.nombre} · {grading.seccion.nombre} · {selectedCompetency?.nombre}</p></div>
+          <div className="table-card grading-table"><table><thead><tr><th>Estudiante</th><th>Nivel de logro</th><th>Resultado</th></tr></thead><tbody>{grading.alumnos.map((student) => <tr key={student.matriculaId}><td>{student.nombre}</td><td><div className="level-options">{['AD', 'A', 'B', 'C'].map((level) => <label key={level}><input type="radio" name={`student-${student.matriculaId}`} checked={levels[student.matriculaId] === level} onChange={() => setLevels((current) => ({ ...current, [student.matriculaId]: level }))} />{level}</label>)}</div></td><td><span className={`achievement achievement-${(levels[student.matriculaId] || 'a').toLowerCase()}`}>{levels[student.matriculaId] || '—'}</span></td></tr>)}</tbody></table></div>
+          <p className="muted">{grading.alumnos.length} alumnos · AD: {counts.AD ?? 0} · A: {counts.A ?? 0} · B: {counts.B ?? 0} · C: {counts.C ?? 0}</p>
+          <div className="actions"><button type="button" className="secondary" onClick={() => setScreen('context')}>Volver</button><button type="button" disabled={saving} onClick={saveGrades}>{saving ? 'Guardando…' : 'Guardar calificaciones'}</button></div>
+        </>
+      ) : !courses.length || !sections.length ? (
         <Feedback intent="info" title="Sin cursos o secciones disponibles">
           No tienes cursos y secciones asignados para registrar calificaciones.
         </Feedback>
@@ -261,7 +282,7 @@ function DocenteGestion() {
           <div className="card grade-context">
             <label className="field">
               Curso
-              <select value={selectedCourse} onChange={(event) => setCourseId(event.target.value)}>
+              <select value={selectedCourse} onChange={(event) => { setCourseId(event.target.value); setCompetencyId(''); }}>
                 {courses.map((course) => (
                   <option key={course.id} value={course.id}>
                     {course.nombre}
@@ -284,76 +305,39 @@ function DocenteGestion() {
             </label>
             <label className="field">
               Periodo
-              <select value={period} onChange={(event) => setPeriod(event.target.value)}>
-                {periods.map((item) => (
-                  <option key={item}>{item}</option>
+              <select value={selectedPeriod} onChange={(event) => setPeriod(Number(event.target.value))}>
+                {(bimesters.data?.length ? bimesters.data : periods).map((item) => (
+                  <option key={item.id} value={item.id}>{item.nombre || item.label}</option>
                 ))}
               </select>
             </label>
 
-            {/* Dropdown de Competencias */}
-            <label className="field">
-              Competencia
-              <select
-                value={isAddingCompetency ? '__ADD_NEW__' : competency}
-                onChange={handleCompetencyChange}
-              >
-                <option value="" disabled>
-                  Seleccionar competencia
-                </option>
-                {competenciesList.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
+              <label className="field">
+                Competencia
+                <select value={competencyId} onChange={(event) => setCompetencyId(event.target.value)} required>
+                  <option value="" disabled>
+                    Seleccionar competencia
                   </option>
-                ))}
-                <option value="__ADD_NEW__">+ Agregar competencia</option>
-              </select>
-            </label>
+                  {courseRules.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.nombre} · versión {item.version}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            {/* Input dinámico para agregar nueva competencia */}
-            {isAddingCompetency && (
-              <div className="field inline-add">
-                <input
-                  type="text"
-                  placeholder="Ingrese la nueva competencia"
-                  value={newCompetencyText}
-                  onChange={(e) => setNewCompetencyText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleSaveCompetency();
-                    }
-                  }}
-                  autoFocus
-                />
-                <div className="inline-buttons">
-                  <button type="button" onClick={handleSaveCompetency}>
-                    Añadir
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddingCompetency(false);
-                      setNewCompetencyText('');
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <label className="field">
-              Evaluación
-              <select value={evaluation} onChange={(event) => setEvaluation(event.target.value)}>
-                <option>Práctica 03 · Fracciones</option>
-                <option>Evaluación de proceso</option>
-                <option>Actividad de aprendizaje</option>
+              <label className="field">
+                Evaluación
+                <select required value={evaluation} onChange={(event) => setEvaluation(event.target.value)}>
+                  <option value="" disabled>Seleccionar evaluación</option>
+                  <option>Evaluación de proceso</option>
+                  <option>Actividad de aprendizaje</option>
+                  <option>Práctica calificada</option>
               </select>
-            </label>
-            <label className="field">
-              Fecha
-              <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+              </label>
+              <label className="field">
+                Fecha
+                <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
             </label>
           </div>
 
@@ -365,8 +349,8 @@ function DocenteGestion() {
             <span className="scale-badge scale-c">C</span>
             <span>No se admiten valores distintos.</span>
           </div>
-          <button type="button" disabled={studentCount === 0 || !competency}>
-            {studentCount === 1 ? 'Continuar con 1 alumno' : `Continuar con ${studentCount} alumnos`}
+          <button type="button" disabled={!competencyId || !evaluation} onClick={continueToGrading}>
+            Continuar a calificar
           </button>
         </>
       )}

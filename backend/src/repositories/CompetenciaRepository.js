@@ -2,10 +2,6 @@ import { prisma } from '../config/database.js';
 
 const include = {
   curso: true,
-  planes: {
-    where: { activo: true },
-    include: { bimestre: true, asignacion: { include: { curso: true, seccion: true, docente: { include: { persona: true } } } } },
-  },
   calificaciones: {
     where: { activo: true },
     include: {

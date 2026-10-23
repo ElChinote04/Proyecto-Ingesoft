@@ -2,8 +2,75 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum NivelLogro {
+  AD
+  A
+  B
+  C
+}
+
 datasource db {
   provider = "postgresql"
+}
+
+model BimestreAcademico {
+  id              Int       @id @default(autoincrement())
+  anioAcademicoId Int
+  anioAcademico   AnioAcademico @relation(fields: [anioAcademicoId], references: [id])
+  numero          Int
+  nombre          String
+  activo          Boolean   @default(true)
+  calificaciones  Calificacion[]
+
+  @@unique([anioAcademicoId, numero])
+}
+
+model Competencia {
+  id          Int      @id @default(autoincrement())
+  cursoId     Int
+  curso       Curso    @relation(fields: [cursoId], references: [id])
+  codigo      String   @unique
+  nombre      String
+  descripcion String
+  activo      Boolean  @default(true)
+  calificaciones CalificacionCompetencia[]
+}
+
+model Calificacion {
+  id              Int      @id @default(autoincrement())
+  matriculaId     Int
+  matricula       Matricula @relation(fields: [matriculaId], references: [id])
+  bimestreId      Int
+  bimestre        BimestreAcademico @relation(fields: [bimestreId], references: [id])
+  asignacionId    Int
+  asignacion      CursoSeccionDocente @relation(fields: [asignacionId], references: [id])
+  reglaId         Int
+  regla            ReglaConsolidacion @relation(fields: [reglaId], references: [id])
+  activo          Boolean  @default(true)
+  creadoPorId     Int
+  modificadoPorId Int
+  competencias    CalificacionCompetencia[]
+  creadoEn        DateTime @default(now())
+  modificadoEn    DateTime @updatedAt
+
+  @@unique([matriculaId, bimestreId, asignacionId])
+}
+
+model CalificacionCompetencia {
+  id                    Int       @id @default(autoincrement())
+  calificacionId        Int
+  calificacion          Calificacion @relation(fields: [calificacionId], references: [id])
+  competenciaId         Int
+  competencia           Competencia @relation(fields: [competenciaId], references: [id])
+  nivelLogro            NivelLogro
+  conclusionDescriptiva String?
+  activo                Boolean   @default(true)
+  creadoPorId           Int
+  modificadoPorId       Int
+  creadoEn              DateTime  @default(now())
+  modificadoEn          DateTime  @updatedAt
+
+  @@unique([calificacionId, competenciaId])
 }
 
 enum NombreRol {
@@ -129,6 +196,7 @@ model AnioAcademico {
   fechaFin    DateTime?   @db.Date
   secciones   Seccion[]
   matriculas  Matricula[]
+  bimestres   BimestreAcademico[]
 }
 
 model Grado {
@@ -163,6 +231,7 @@ model Matricula {
   creadoEn        DateTime               @default(now())
   modificadoEn    DateTime               @updatedAt
   asistencias     AsistenciaEstudiante[]
+  calificaciones  Calificacion[]
 
   @@unique([estudianteId, anioAcademicoId])
   @@index([seccionId, activo])
@@ -172,8 +241,10 @@ model Curso {
   id           Int                   @id @default(autoincrement())
   codigo       String                @unique
   nombre       String
+  activo       Boolean               @default(true)
   asignaciones CursoSeccionDocente[]
   reglas       ReglaConsolidacion[]
+  competencias Competencia[]
 }
 
 model CursoSeccionDocente {
@@ -185,6 +256,7 @@ model CursoSeccionDocente {
   docenteId Int
   docente   Docente                   @relation(fields: [docenteId], references: [id])
   bloques   CursoSeccionDocenteAula[]
+  calificaciones Calificacion[]
 
   @@unique([cursoId, seccionId, docenteId])
 }
@@ -262,6 +334,7 @@ model ReglaConsolidacion {
   modificadoPor   Usuario     @relation("ReglaModificador", fields: [modificadoPorId], references: [id])
   creadoEn        DateTime    @default(now())
   modificadoEn   DateTime    @updatedAt
+  calificaciones Calificacion[]
 
   @@unique([gradoId, cursoId, version])
   @@index([gradoId, cursoId, activo])

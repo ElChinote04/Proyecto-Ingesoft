@@ -19,6 +19,7 @@ import { reglaConsolidacionRouter } from './reglaConsolidacion.js';
 import { planAcademicoRouter } from './planAcademico.js';
 import { evidenciaPedagogicaRouter } from './evidenciaPedagogica.js';
 import { calificacionCompetenciaRouter } from './calificacionCompetencia.js';
+import { prisma } from '../config/database.js';
 export const router = Router();
 const requirePortal = (req, res, next) => {
   if (!req.user.roles.some((role) => ['ALUMNO', 'APODERADO'].includes(role)))
@@ -46,6 +47,13 @@ router.use('/admin', adminRouter);
 router.use('/cursos', cursoRouter);
 router.use('/competencias', competenciaRouter);
 router.use('/calificaciones', calificacionRouter);
+router.get('/bimestres', requireAuth, async (_req, res) => {
+  const anio = await prisma.anioAcademico.findFirst({
+    where: { activo: true },
+    include: { bimestres: { where: { activo: true }, orderBy: { numero: 'asc' } } },
+  });
+  res.json({ data: anio?.bimestres ?? [] });
+});
 router.use('/reglas-consolidacion', reglaConsolidacionRouter);
 router.use('/planes-academicos', planAcademicoRouter);
 router.use('/evidencias-pedagogicas', evidenciaPedagogicaRouter);

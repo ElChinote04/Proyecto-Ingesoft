@@ -443,6 +443,48 @@ select {
   background: #fef2f2;
   color: #ef7777;
 }
+.unpublished-badge {
+  background: #f3f4f6;
+  color: var(--muted);
+}
+.grading-table {
+  margin-bottom: 10px;
+}
+.grading-table th,
+.grading-table td {
+  padding: 14px 16px;
+}
+.level-options {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.level-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.level-options input {
+  accent-color: var(--brand);
+}
+.summary-card {
+  margin-bottom: 18px;
+}
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  background: #f3f4f6;
+  border-radius: 10px;
+}
 .progress-copy {
   color: #65a878;
   font-size: 12px;

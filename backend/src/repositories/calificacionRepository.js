@@ -37,10 +37,12 @@ export const auditCalificacion = (db, { usuarioId, tipoEvento, calificacionId, v
       usuarioId,
       tipoEvento,
       resultado: 'EXITOSO',
-      tipoEntidad: 'Calificacion',
-      idEntidad: String(calificacionId),
-      valorAnterior: valorAnterior ? JSON.stringify(valorAnterior) : null,
-      valorNuevo: valorNuevo ? JSON.stringify(valorNuevo) : null,
-      observacion: requestId ? `requestId=${requestId}` : null,
+      entidad: 'Calificacion',
+      entidadId: calificacionId,
+      requestId,
+      detalle: {
+        valorAnterior: valorAnterior ?? null,
+        valorNuevo: valorNuevo ?? null,
+      },
     },
   });
