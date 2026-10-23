@@ -4,7 +4,7 @@ import * as auth from '../controllers/authController.js';
 import * as session from '../controllers/sessionController.js';
 import * as health from '../controllers/healthController.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { validate, loginSchema, idSchema, asistenciaSchema } from '../validators/schemas.js';
+import {validate,loginSchema,idSchema,asistenciaSchema,reporteAsistenciaSchema} from '../validators/schemas.js';
 import { AppError } from '../errors/AppError.js';
 import { adminRouter } from './admin.js';
 import * as admin from '../controllers/adminController.js';
@@ -12,6 +12,7 @@ import { passwordSchema } from '../validators/seguridad.schemas.js';
 import { setupSchema } from '../validators/adminSchemas.js';
 import * as portal from '../controllers/portal.controller.js';
 import { horarioSchema, paginaSchema } from '../validators/portal.schemas.js';
+import { asistenciaDocenteRouter } from './asistenciaDocenteRoutes.js';
 export const router = Router();
 const requirePortal = (req, res, next) => {
   if (!req.user.roles.some((role) => ['ALUMNO', 'APODERADO'].includes(role)))
@@ -59,4 +60,13 @@ router.put(
   validate(idSchema, 'params'),
   validate(asistenciaSchema),
   session.save,
+);
+router.use(asistenciaDocenteRouter);
+
+router.get(
+  '/reportes/asistencia/estudiantes',
+  requireAuth,
+  requireRole('ADMINISTRADOR'),
+  validate(reporteAsistenciaSchema, 'query'),
+  session.report
 );
