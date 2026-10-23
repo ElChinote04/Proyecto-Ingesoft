@@ -135,37 +135,96 @@ automáticas.
 ## 3. Con Stripe de verdad
 
 Es lo que conviene tener listo para la exposición: demuestra que la integración
-con la pasarela es real y no un simulacro.
+con la pasarela es real y no un simulacro. Verificado de extremo a extremo con
+una cuenta de prueba y moneda PEN.
 
-1. Crea una cuenta en <https://dashboard.stripe.com>. **No hace falta activarla
-   ni dar datos de empresa** para usar el modo de prueba.
-2. Copia la llave secreta de prueba (empieza con `sk_test_`).
-3. Instala la CLI de Stripe y deja corriendo el reenvío del webhook:
+### 3.1 Cuenta y llave
 
-   ```powershell
-   stripe login
-   stripe listen --forward-to localhost:3000/api/v1/pagos/notificaciones
-   ```
+No hace falta crear una cuenta nueva ni verificar la empresa: esa verificación
+es para cobrar dinero real y aquí nunca se sale del modo de prueba. Basta
+cualquier cuenta de Stripe con su entorno de prueba.
 
-   Ese comando imprime un secreto de firma que empieza con `whsec_`.
+La **clave secreta** (`sk_test_...`) está en **Desarrolladores → Claves de API**.
+Pulsa _Revelar_ para verla completa. La clave publicable no se usa: con Checkout
+la tarjeta se captura en el dominio de Stripe, que es lo que mantiene a SAGE
+fuera del alcance de PCI DSS (AC015).
 
-4. En `backend/.env`:
+### 3.2 La CLI de Stripe
 
-   ```
-   PAGOS_PROVEEDOR=stripe
-   STRIPE_SECRET_KEY=sk_test_...
-   STRIPE_WEBHOOK_SECRET=whsec_...
-   ```
+Stripe vive en internet y el backend en `localhost`, así que Stripe no puede
+entregar el webhook directamente. La CLI abre ese túnel:
 
-5. Reinicia el backend, inicia un pago con `POST /api/v1/pagos` y abre en el
-   navegador la `urlCheckout` que devuelve. Paga con la tarjeta de prueba
-   `4242 4242 4242 4242`, cualquier fecha futura y cualquier CVC.
-6. Stripe envía el evento, la CLI lo reenvía a tu backend, el backend verifica la
-   firma, consulta el estado real y marca la boleta como pagada.
+```
+Stripe  ->  stripe listen (tu PC)  ->  localhost:3000
+```
 
-Tarjetas útiles para probar los otros caminos: `4000 0000 0000 0002` la rechaza,
-y `4000 0025 0000 3155` exige autenticación adicional del titular, que es el
-criterio de aceptación de US-007B sobre verificación adicional.
+Si no la tienes, bájala de <https://github.com/stripe/stripe-cli/releases>,
+descomprímela y ejecútala con su ruta completa; no hace falta añadirla al PATH.
+
+```powershell
+stripe login
+stripe listen --events checkout.session.completed,checkout.session.expired,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed --forward-to localhost:3000/api/v1/pagos/notificaciones
+```
+
+Tres cosas que cuestan un rato si no se saben:
+
+- **Las versiones recientes exigen `--events`.** Sin esa bandera la CLI se niega
+  a arrancar. Copia la lista completa de arriba: si dejas puntos suspensivos, la
+  CLI avisa `"..." isn't a valid event` y el evento que importa puede no
+  registrarse.
+- **`stripe listen` es un proceso que se queda corriendo**, como el backend. No
+  es un comando que ejecutas y termina. Si cierras esa ventana, el túnel
+  desaparece y los pagos se quedan en `PROCESANDO` para siempre, porque la
+  confirmación nunca llega.
+- **El `whsec_` que imprime al arrancar** es el que va en el `.env`. Si
+  reinicias la CLI, comprueba que sigue siendo el mismo.
+
+### 3.3 Configuración y arranque
+
+En `backend/.env` — no en `.env.example`, y asegúrate de que es el de este
+repositorio y no el del original:
+
+```
+PAGOS_PROVEEDOR=stripe
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+La línea de `PAGOS_PROVEEDOR` es la que realmente cambia de proveedor: con las
+llaves puestas pero `simulada`, se sigue usando la pasarela falsa.
+
+El `.env` se lee **una sola vez al arrancar**, así que reinicia el backend
+después de editarlo, y comprueba que quedó guardado:
+
+```powershell
+Get-Content .\backend\.env | Select-String '^PAGOS_PROVEEDOR|^STRIPE_'
+```
+
+> **Cuidado con las variables de entorno.** Si en esa terminal definiste
+> `$env:STRIPE_WEBHOOK_SECRET` o similar, ese valor **gana** sobre el `.env`,
+> porque dotenv no sobrescribe lo que ya está en el proceso. Si no cuadran las
+> cosas, arranca el backend desde una terminal nueva y limpia.
+
+### 3.4 La prueba
+
+Con las tres terminales en marcha —`stripe listen`, `Start-Sage.ps1` y una
+libre— lanza el recorrido de siempre:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Probar-Pagos.ps1 -AdminUsuario <admin> -AdminClave '<clave>'
+```
+
+El script detecta solo que está en modo Stripe: en vez de usar el atajo
+`/simular`, abre el navegador en la página real de Stripe y se queda consultando
+`GET /pagos/{id}` hasta que el webhook confirme.
+
+Paga con `4242 4242 4242 4242`, cualquier fecha futura y cualquier CVC. La
+`4000 0000 0000 0002` la rechaza y la `4000 0025 0000 3155` exige autenticación
+adicional del titular, que es el criterio de aceptación de US-007B sobre
+verificación adicional.
+
+Si la URL de checkout empieza por `https://checkout.stripe.com/` estás en
+Stripe; si sale `http://localhost:5173/...?simulado=` sigues en la falsa.
 
 > Stripe no da de alta negocios peruanos para cobros reales. Para el curso no
 > importa, porque nunca se sale del modo de prueba. Si lo preguntan: en
@@ -219,12 +278,19 @@ servicio puede perder la carrera entre dos clics simultáneos, el índice no.
 
 ## Problemas frecuentes
 
-| Síntoma                                    | Causa y solución                                                                                          |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `npm` no se reconoce                       | Ejecuta `. .\scripts\Use-Node.ps1` en esa terminal (con el punto y el espacio al inicio).                 |
-| `Docker no esta disponible`                | Abre Docker Desktop y espera a que termine de iniciar.                                                    |
-| `TEST_DATABASE_URL debe terminar en _test` | Falta la variable en `backend/.env`. Cópiala de `backend/.env.example`.                                   |
-| El puerto 5432, 3000 o 5173 está ocupado   | Tienes el repositorio original corriendo. Deténlo con Ctrl+C.                                             |
-| `PASARELA_NO_DISPONIBLE` (503) con Stripe  | La llave es incorrecta o no hay salida a internet. Con `PAGOS_PROVEEDOR=simulada` no debería ocurrir.     |
-| La boleta no pasa a PAGADA                 | Es el comportamiento correcto hasta que la pasarela confirme. Usa `/pagos/{id}/simular` o paga en Stripe. |
-| `PAGO_EN_CURSO` (409) al reintentar        | Ya hay un pago `INICIADO` o `PROCESANDO` sobre esa boleta. Conclúyelo o márcalo como `RECHAZADO`.         |
+| Síntoma                                          | Causa y solución                                                                                          |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `npm` no se reconoce                             | Ejecuta `. .\scripts\Use-Node.ps1` en esa terminal (con el punto y el espacio al inicio).                 |
+| `Docker no esta disponible`                      | Abre Docker Desktop y espera a que termine de iniciar.                                                    |
+| `TEST_DATABASE_URL debe terminar en _test`       | Falta la variable en `backend/.env`. Cópiala de `backend/.env.example`.                                   |
+| El puerto 5432, 3000 o 5173 está ocupado         | Tienes el repositorio original corriendo. Deténlo con Ctrl+C.                                             |
+| `PASARELA_NO_DISPONIBLE` (503) con Stripe        | La llave es incorrecta o no hay salida a internet. Con `PAGOS_PROVEEDOR=simulada` no debería ocurrir.     |
+| La boleta no pasa a PAGADA                       | Es el comportamiento correcto hasta que la pasarela confirme. Usa `/pagos/{id}/simular` o paga en Stripe. |
+| `PAGO_EN_CURSO` (409) al reintentar              | Ya hay un pago `INICIADO` o `PROCESANDO` sobre esa boleta. Conclúyelo o márcalo como `RECHAZADO`.         |
+| `scripts\...ps1 no existe`                       | Estás fuera de la carpeta del proyecto. Haz `cd` a `Proyecto-Ingesoft-pagos` o usa la ruta completa.      |
+| `la ejecución de scripts está deshabilitada`     | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` en esa terminal.                             |
+| `stripe` no se reconoce                          | La CLI no está instalada o no está en el PATH. Ejecútala con su ruta completa.                            |
+| `must specify events to forward`                 | Falta `--events` con la lista completa de la sección 3.2.                                                 |
+| El pago queda en `PROCESANDO` para siempre       | La ventana de `stripe listen` no estaba abierta al pagar, o el `whsec_` no coincide. Mira su salida.      |
+| `stripe listen` responde `[401]`                 | El `whsec_` del backend no es el de esa sesión de la CLI. Revisa el `.env` y las variables de entorno.    |
+| Acentos rotos (`Pensi?n`) en la página de Stripe | PowerShell 5.1 envía el cuerpo en ISO-8859-1 si el `Content-Type` no declara `charset=utf-8`.             |
