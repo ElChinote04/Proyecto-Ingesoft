@@ -13,6 +13,20 @@ enum NombreRol {
   APODERADO
 }
 
+enum EstadoBoleta {
+  PENDIENTE
+  PAGADA
+  ANULADA
+}
+
+enum EstadoPago {
+  INICIADO
+  PROCESANDO
+  CONFIRMADO
+  RECHAZADO
+  CANCELADO
+}
+
 enum CondicionAsistencia {
   PRESENTE
   TARDANZA
@@ -53,6 +67,7 @@ model Usuario {
 
   asistenciasDocentesCreadas     AsistenciaDocente[] @relation("CreadorAsistenciaDocente")
   asistenciasDocentesModificadas AsistenciaDocente[] @relation("ModificadorAsistenciaDocente")
+  pagosIniciados           Pago[]                 @relation("PagoIniciador")
 }
 
 model Instalacion {
@@ -165,6 +180,7 @@ model Matricula {
   creadoEn        DateTime               @default(now())
   modificadoEn    DateTime               @updatedAt
   asistencias     AsistenciaEstudiante[]
+  planPago        PlanPago?
 
   @@unique([estudianteId, anioAcademicoId])
   @@index([seccionId, activo])
@@ -243,6 +259,61 @@ model AsistenciaEstudiante {
 
   @@unique([sesionId, matriculaId])
   @@index([matriculaId])
+}
+
+/// Cronograma de pensiones pactado al matricular (US-006).
+model PlanPago {
+  id             Int              @id @default(autoincrement())
+  matriculaId    Int              @unique
+  matricula      Matricula        @relation(fields: [matriculaId], references: [id])
+  montoPension   Decimal          @db.Decimal(10, 2)
+  numeroCuotas   Int
+  diaVencimiento Int
+  mesInicio      Int
+  creadoEn       DateTime         @default(now())
+  boletas        CompromisoPago[]
+}
+
+/// Boleta de pensión emitida a partir del plan (US-006, US-007A).
+/// El estado MOROSA no se almacena: se deriva de fechaVencimiento al consultar.
+model CompromisoPago {
+  id               Int          @id @default(autoincrement())
+  planPagoId       Int
+  planPago         PlanPago     @relation(fields: [planPagoId], references: [id])
+  numeroCuota      Int
+  concepto         String       @db.VarChar(120)
+  periodo          String       @db.VarChar(7)
+  monto            Decimal      @db.Decimal(10, 2)
+  fechaVencimiento DateTime     @db.Date
+  estado           EstadoBoleta @default(PENDIENTE)
+  pagadaEn         DateTime?
+  creadoEn         DateTime     @default(now())
+  modificadoEn     DateTime     @updatedAt
+  pagos            Pago[]
+
+  @@unique([planPagoId, numeroCuota])
+  @@index([estado, fechaVencimiento])
+}
+
+/// Intento de pago de una boleta a través de la pasarela externa (US-007B).
+/// Un índice parcial en SQL garantiza un único pago en curso por boleta.
+model Pago {
+  id                Int            @id @default(autoincrement())
+  compromisoPagoId  Int
+  compromisoPago    CompromisoPago @relation(fields: [compromisoPagoId], references: [id])
+  referencia        String         @unique @db.VarChar(64)
+  referenciaExterna String?        @unique @db.VarChar(255)
+  monto             Decimal        @db.Decimal(10, 2)
+  estado            EstadoPago     @default(INICIADO)
+  proveedor         String         @db.VarChar(40)
+  motivoRechazo     String?        @db.VarChar(200)
+  confirmadoEn      DateTime?
+  iniciadoPorId     Int
+  iniciadoPor       Usuario        @relation("PagoIniciador", fields: [iniciadoPorId], references: [id])
+  creadoEn          DateTime       @default(now())
+  modificadoEn      DateTime       @updatedAt
+
+  @@index([compromisoPagoId, estado])
 }
 
 model RegistroAuditoria {
