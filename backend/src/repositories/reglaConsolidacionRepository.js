@@ -1,0 +1,39 @@
+import { prisma } from '../config/database.js';
+
+const include = {
+  grado: true,
+  curso: true,
+};
+
+export const listReglasConsolidacion = (where = {}, db = prisma) =>
+  db.reglaConsolidacion.findMany({ where, include, orderBy: [{ nombre: 'asc' }, { version: 'desc' }] });
+
+export const findReglaConsolidacion = (id, db = prisma) =>
+  db.reglaConsolidacion.findUnique({ where: { id }, include });
+
+export const createReglaConsolidacion = (data, db = prisma) =>
+  db.reglaConsolidacion.create({ data, include });
+
+export const updateReglaConsolidacion = (id, data, db = prisma) =>
+  db.reglaConsolidacion.update({ where: { id }, data, include });
+
+export const deleteReglaConsolidacion = (id, db = prisma) =>
+  db.reglaConsolidacion.update({ where: { id }, data: { activo: false, vigenteHasta: new Date() }, include });
+
+export const transaction = (operation) => prisma.$transaction(operation);
+
+export const auditReglaConsolidacion = (db, { usuarioId, tipoEvento, reglaId, valorAnterior, valorNuevo, requestId }) =>
+  db.registroAuditoria.create({
+    data: {
+      usuarioId,
+      tipoEvento,
+      entidad: 'ReglaConsolidacion',
+      entidadId: reglaId,
+      resultado: 'EXITO',
+      requestId,
+      detalle: {
+        valorAnterior: valorAnterior ?? null,
+        valorNuevo: valorNuevo ?? null,
+      },
+    },
+  });

@@ -13,6 +13,8 @@ import MiHorario from './pages/MiHorario';
 import Pagos from './pages/Pagos';
 import ResultadoPago from './pages/ResultadoPago';
 import CambiarContrasena from './pages/CambiarContrasena';
+import Gestion from './pages/ReglasConsolidacion';
+import Libreta from './pages/Libreta';
 import './styles/app.css';
 function Screens() {
   const { user, loading, startupError, restore } = useAuth();
@@ -57,6 +59,16 @@ function Screens() {
     );
   if (route === '/pagos' && user.roles.some((rol) => ['APODERADO', 'ADMINISTRADOR'].includes(rol)))
     return <Pagos key={perfiles} />;
+  if (
+    (route === '/gestion' || route === '/gestion/nueva' || /^\/gestion\/editar\/\d+$/.test(route)) &&
+    user.roles.some((rol) => ['DOCENTE', 'ADMINISTRADOR'].includes(rol))
+  )
+    return <Gestion />;
+  if (
+    route === '/evaluaciones' &&
+    user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol))
+  )
+    return <Libreta key={perfiles} />;
   if (
     user.roles.includes('ADMINISTRADOR') &&
     (route.startsWith('/admin') || !user.roles.includes('DOCENTE'))
