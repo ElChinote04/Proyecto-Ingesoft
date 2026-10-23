@@ -10,10 +10,35 @@ const base = '/api/v1';
 const clave = 'ClaveSegura123!';
 const admin = request.agent(app);
 const docente = request.agent(app);
-let adminId;
+const apoderado = request.agent(app);
+let adminId, cuentaDocente, cuentaApoderado, anio, grado, seccion;
 const hoyLima = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
 const consultar = async (filtros) =>
   (await admin.get(`${base}/admin/auditoria`).query(filtros).expect(200)).body.data;
+const alta = async (ruta, datos) =>
+  (await admin.post(`${base}/${ruta}`).send(datos).expect(201)).body.data;
+
+// Crea la cuenta y deja hecha la sesión con la contraseña inicial ya cambiada.
+async function crearCuenta(identificador, roles, agente) {
+  const cuenta = await alta('admin/usuarios', {
+    numeroDocumento: identificador,
+    nombres: identificador,
+    apellidos: 'Auditoría',
+    identificador,
+    contrasena: 'InicialTemporal123!',
+    roles,
+  });
+  await agente
+    .post(`${base}/auth/login`)
+    .send({ identificador, contrasena: 'InicialTemporal123!' })
+    .expect(200);
+  await agente
+    .put(`${base}/auth/contrasena`)
+    .send({ contrasenaActual: 'InicialTemporal123!', nuevaContrasena: clave })
+    .expect(200);
+  await agente.post(`${base}/auth/login`).send({ identificador, contrasena: clave }).expect(200);
+  return cuenta;
+}
 const cambioDeNota = {
   evento: 'NOTA_MODIFICADA',
   entidad: 'Calificacion',
@@ -42,30 +67,17 @@ before(async () => {
       .send({ identificador: 'admin-auditoria', contrasena: clave })
       .expect(200)
   ).body.data.id;
-  // Cuenta docente con la contraseña inicial ya cambiada, para probar el 403 por rol.
-  await admin
-    .post(`${base}/admin/usuarios`)
-    .send({
-      numeroDocumento: 'DOC-AUDITORIA',
-      nombres: 'Docente',
-      apellidos: 'Auditoría',
-      identificador: 'docente-auditoria',
-      contrasena: 'InicialTemporal123!',
-      roles: ['DOCENTE'],
-    })
-    .expect(201);
-  await docente
-    .post(`${base}/auth/login`)
-    .send({ identificador: 'docente-auditoria', contrasena: 'InicialTemporal123!' })
-    .expect(200);
-  await docente
-    .put(`${base}/auth/contrasena`)
-    .send({ contrasenaActual: 'InicialTemporal123!', nuevaContrasena: clave })
-    .expect(200);
-  await docente
-    .post(`${base}/auth/login`)
-    .send({ identificador: 'docente-auditoria', contrasena: clave })
-    .expect(200);
+  // El docente sirve para el 403 por rol y para registrar notas; el apoderado, para pagar.
+  cuentaDocente = await crearCuenta('docente-auditoria', ['DOCENTE'], docente);
+  cuentaApoderado = await crearCuenta('apoderado-auditoria', ['APODERADO'], apoderado);
+  // Año futuro, como en las pruebas de pagos, para que ninguna boleta nazca morosa.
+  anio = await alta('admin/catalogos/anios', { codigo: '2030' });
+  grado = await alta('admin/catalogos/grados', { nombre: 'Primero' });
+  seccion = await alta('admin/catalogos/secciones', {
+    nombre: 'A',
+    gradoId: grado.id,
+    anioAcademicoId: anio.id,
+  });
 });
 after(() => prisma.$disconnect());
 
@@ -144,4 +156,121 @@ test('AUD-06 filtros, paginación y validación de la consulta', async () => {
     { campoExtra: 'x' },
   ])
     await admin.get(`${base}/admin/auditoria`).query(invalida).expect(400);
+});
+
+// De punta a punta: se usan las rutas reales del módulo de Matrícula y Pagos (pasarela simulada).
+test('AUD-07 cada operación de un pago queda registrada con usuario, fecha y detalle', async () => {
+  const estudiante = await alta('admin/estudiantes', {
+    numeroDocumento: 'EST-PAGO-AUD',
+    nombres: 'Hijo',
+    apellidos: 'Auditoría',
+  });
+  await admin
+    .put(`${base}/admin/apoderados/estudiantes`)
+    .send({
+      apoderadoId: cuentaApoderado.apoderadoId,
+      estudianteId: estudiante.id,
+      parentesco: 'Padre',
+    })
+    .expect(200);
+  await alta('admin/matriculas', {
+    estudianteId: estudiante.id,
+    seccionId: seccion.id,
+    planPago: { montoPension: '350.00', numeroCuotas: 2, diaVencimiento: 10, mesInicio: 3 },
+  });
+  const { boletas } = (await apoderado.get(`${base}/compromisos-pago`).expect(200)).body.data;
+  const { pagoId } = (
+    await apoderado.post(`${base}/pagos`).send({ compromisoPagoId: boletas[0].id }).expect(201)
+  ).body.data;
+  await apoderado.post(`${base}/pagos/${pagoId}/simular`).send({ resultado: 'PAGADO' }).expect(200);
+
+  for (const [evento, usuario] of [
+    ['COMPROMISO_PAGO_EMITIDO', 'admin-auditoria'],
+    ['PAGO_INICIADO', 'apoderado-auditoria'],
+    ['PAGO_CONFIRMADO', 'apoderado-auditoria'],
+  ]) {
+    // La consulta devuelve primero lo más reciente: el registro de este pago.
+    const [registro] = (await consultar({ tipoEvento: evento })).registros;
+    assert.equal(registro.usuario, usuario, evento);
+    assert.equal(registro.resultado, 'EXITO', evento);
+    assert.ok(registro.fechaHora && registro.requestId, evento);
+    assert.ok(Object.keys(registro.detalle).length > 0, evento);
+  }
+  const [confirmado] = (await consultar({ tipoEvento: 'PAGO_CONFIRMADO' })).registros;
+  assert.equal(confirmado.entidadId, pagoId);
+  assert.equal(confirmado.detalle.monto, '350.00');
+});
+
+// De punta a punta: se usan las rutas reales del módulo de Gestión Académica.
+test('AUD-08 un cambio de nota queda registrado con usuario, fecha, valor anterior y nuevo', async () => {
+  const curso = await alta('admin/catalogos/cursos', { codigo: 'MAT', nombre: 'Matemática' });
+  const aula = await alta('admin/catalogos/aulas', { codigo: 'A101' });
+  const competencia = await alta('competencias', {
+    cursoId: curso.id,
+    codigo: 'C1',
+    nombre: 'Resuelve problemas de cantidad',
+    descripcion: 'Competencia de prueba para la auditoría',
+  });
+  const regla = await alta('reglas-consolidacion', {
+    gradoId: grado.id,
+    cursoId: curso.id,
+    nombre: 'Regla de prueba',
+    version: 1,
+    metodo: 'PROMEDIO',
+  });
+  await alta('admin/bloques', {
+    cursoId: curso.id,
+    seccionId: seccion.id,
+    docenteId: cuentaDocente.docenteId,
+    aulaId: aula.id,
+    diaSemana: 1,
+    horaInicio: '08:00',
+    horaFin: '09:00',
+  });
+  const alumno = await alta('admin/estudiantes', {
+    numeroDocumento: 'EST-NOTA-AUD',
+    nombres: 'Alumno',
+    apellidos: 'Auditoría',
+  });
+  const matricula = await alta('admin/matriculas', {
+    estudianteId: alumno.id,
+    seccionId: seccion.id,
+  });
+  const asignacion = await prisma.cursoSeccionDocente.findFirst({
+    where: { cursoId: curso.id, seccionId: seccion.id },
+  });
+  const bimestre = await prisma.bimestreAcademico.findFirst({
+    where: { anioAcademicoId: anio.id, numero: 1 },
+  });
+
+  const nota = (
+    await docente
+      .post(`${base}/calificaciones`)
+      .send({
+        matriculaId: matricula.id,
+        bimestreId: bimestre.id,
+        asignacionId: asignacion.id,
+        reglaId: regla.id,
+        competencias: [{ competenciaId: competencia.id, nivelLogro: 'B' }],
+      })
+      .expect(201)
+  ).body.data;
+  await admin
+    .put(`${base}/calificaciones/${nota.id}`)
+    .send({ competencias: [{ competenciaId: competencia.id, nivelLogro: 'A' }] })
+    .expect(200);
+
+  const [creada] = (await consultar({ tipoEvento: 'CALIFICACION_CREADA' })).registros;
+  assert.equal(creada.usuario, 'docente-auditoria');
+  assert.equal(creada.entidadId, nota.id);
+  const [modificada] = (await consultar({ tipoEvento: 'CALIFICACION_MODIFICADA' })).registros;
+  assert.equal(modificada.usuario, 'admin-auditoria');
+  assert.equal(modificada.entidad, 'Calificacion');
+  assert.equal(modificada.entidadId, nota.id);
+  assert.ok(modificada.fechaHora && modificada.requestId);
+  assert.equal(modificada.detalle.valorAnterior.competencias[0].nivelLogro, 'B');
+  assert.equal(modificada.detalle.valorNuevo.competencias[0].nivelLogro, 'A');
+  // El filtro "Éxito" incluye los registros de notas, que se guardan como EXITOSO.
+  const exitosas = await consultar({ resultado: 'EXITO', tipoEvento: 'CALIFICACION_MODIFICADA' });
+  assert.equal(exitosas.total, 1);
 });

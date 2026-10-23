@@ -59,6 +59,8 @@ export async function obtenerEventos(consulta) {
   const { pagina, limite, desde, hasta, ...filtros } = consulta;
   const where = {
     ...filtros,
+    // El módulo de notas registra sus éxitos como 'EXITOSO'; se consultan junto con 'EXITO'.
+    ...(filtros.resultado === 'EXITO' && { resultado: { in: ['EXITO', 'EXITOSO'] } }),
     fechaHora: { gte: desde && inicioDelDia(desde), lt: hasta && finDelDia(hasta) },
   };
   const [{ total, registros }, tiposEvento] = await Promise.all([

@@ -9,17 +9,22 @@ const RESULTADOS = {
   DENEGADO: ['Denegado', 'danger'],
   FALLO: ['Fallido', 'warning'],
 };
+// El módulo de notas registra sus éxitos como 'EXITOSO'; se muestra igual que 'EXITO'.
+const ETIQUETAS_RESULTADO = { ...RESULTADOS, EXITOSO: RESULTADOS.EXITO };
 const SIN_FILTROS = { tipoEvento: '', resultado: '', desde: '', hasta: '' };
 
 const mostrarValor = (valor) => (valor == null ? '—' : JSON.stringify(valor));
 
-// Los cambios (notas, pagos, usuarios) muestran el valor anterior y el nuevo; el resto, su detalle.
+// Los cambios muestran el valor anterior y el nuevo; el resto, su detalle. El módulo de notas los
+// guarda como valorAnterior/valorNuevo y el resto del sistema como anterior/nuevo.
 function DetalleEvento({ detalle }) {
-  if (detalle?.anterior !== undefined || detalle?.nuevo !== undefined)
+  const anterior = detalle?.anterior ?? detalle?.valorAnterior;
+  const nuevo = detalle?.nuevo ?? detalle?.valorNuevo;
+  if (anterior !== undefined || nuevo !== undefined)
     return (
       <div className="auditoria-cambio">
-        <span>Antes: {mostrarValor(detalle.anterior)}</span>
-        <span>Después: {mostrarValor(detalle.nuevo)}</span>
+        <span>Antes: {mostrarValor(anterior)}</span>
+        <span>Después: {mostrarValor(nuevo)}</span>
         {detalle.motivo && <span>Motivo: {detalle.motivo}</span>}
       </div>
     );
@@ -98,7 +103,10 @@ export default function ConsultaAuditoria() {
           <TablaDatos
             columnas={['Fecha y hora', 'Usuario', 'Evento', 'Entidad', 'Resultado', 'Detalle']}
             filas={datos.registros.map((evento) => {
-              const [etiqueta, color] = RESULTADOS[evento.resultado] ?? [evento.resultado, 'info'];
+              const [etiqueta, color] = ETIQUETAS_RESULTADO[evento.resultado] ?? [
+                evento.resultado,
+                'info',
+              ];
               return {
                 id: evento.id,
                 celdas: [
