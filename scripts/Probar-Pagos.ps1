@@ -18,6 +18,9 @@ $clave = 'ApoderadoSeguro123!'
 function Paso($texto) { Write-Host "`n== $texto" -ForegroundColor Cyan }
 function Ok($texto) { Write-Host "   OK  $texto" -ForegroundColor Green }
 function Mal($texto) { Write-Host "   MAL $texto" -ForegroundColor Red; exit 1 }
+# Windows PowerShell 5.1 codifica el cuerpo en ISO-8859-1 cuando el ContentType
+# no declara charset, y los acentos llegan rotos al servidor. De ahí el
+# '; charset=utf-8' en cada Invoke-RestMethod de este script.
 function Json($objeto) { $objeto | ConvertTo-Json -Depth 6 -Compress }
 function EsperaError($codigo, $texto, $bloque) {
     try { & $bloque; Mal "$texto (no falló)" }
@@ -28,13 +31,13 @@ function EsperaError($codigo, $texto, $bloque) {
 }
 
 Paso 'Inicia sesión el administrador'
-Invoke-RestMethod "$Api/auth/login" -Method Post -ContentType 'application/json' `
+Invoke-RestMethod "$Api/auth/login" -Method Post -ContentType 'application/json; charset=utf-8' `
     -Body (Json @{ identificador = $AdminUsuario; contrasena = $AdminClave }) `
     -SessionVariable admin | Out-Null
 Ok 'administrador autenticado'
 
 Paso 'Crea la cuenta del apoderado y el estudiante a su cargo'
-$cuenta = (Invoke-RestMethod "$Api/admin/usuarios" -Method Post -ContentType 'application/json' `
+$cuenta = (Invoke-RestMethod "$Api/admin/usuarios" -Method Post -ContentType 'application/json; charset=utf-8' `
         -Body (Json @{
             identificador   = "apoderado-$sufijo@sage.local"
             numeroDocumento = "DOC-$sufijo"
@@ -43,13 +46,13 @@ $cuenta = (Invoke-RestMethod "$Api/admin/usuarios" -Method Post -ContentType 'ap
             contrasena      = $claveInicial
             roles           = @('APODERADO')
         }) -WebSession $admin).data
-$estudiante = (Invoke-RestMethod "$Api/admin/estudiantes" -Method Post -ContentType 'application/json' `
+$estudiante = (Invoke-RestMethod "$Api/admin/estudiantes" -Method Post -ContentType 'application/json; charset=utf-8' `
         -Body (Json @{
             numeroDocumento = "EST-$sufijo"
             nombres         = 'Hijo'
             apellidos       = "Apoderado$sufijo"
         }) -WebSession $admin).data
-Invoke-RestMethod "$Api/admin/apoderados/estudiantes" -Method Put -ContentType 'application/json' `
+Invoke-RestMethod "$Api/admin/apoderados/estudiantes" -Method Put -ContentType 'application/json; charset=utf-8' `
     -Body (Json @{ apoderadoId = $cuenta.apoderadoId; estudianteId = $estudiante.id; parentesco = 'Padre' }) `
     -WebSession $admin | Out-Null
 Ok "apoderado $($cuenta.apoderadoId) vinculado al estudiante $($estudiante.id)"
@@ -67,7 +70,7 @@ Ok "año $($anio.codigo), sección $($seccion.id)"
 
 # ------------------------------------------------------------------- US-006
 Paso 'US-006: matricular emitiendo el compromiso de pago'
-$matricula = (Invoke-RestMethod "$Api/admin/matriculas" -Method Post -ContentType 'application/json' `
+$matricula = (Invoke-RestMethod "$Api/admin/matriculas" -Method Post -ContentType 'application/json; charset=utf-8' `
         -Body (Json @{
             estudianteId = $estudiante.id
             seccionId    = $seccion.id
@@ -83,20 +86,20 @@ Ok "matrícula $($matricula.id) creada con su cronograma"
 
 EsperaError 409 'no se puede emitir dos veces el compromiso' {
     Invoke-RestMethod "$Api/matriculas/$($matricula.id)/plan-pago" -Method Post `
-        -ContentType 'application/json' `
+        -ContentType 'application/json; charset=utf-8' `
         -Body (Json @{ montoPension = '350.00'; numeroCuotas = 10; diaVencimiento = 10; mesInicio = 3 }) `
         -WebSession $admin
 }
 
 # ------------------------------------------------------------------ US-007A
 Paso 'El apoderado cambia su contraseña inicial e inicia sesión'
-Invoke-RestMethod "$Api/auth/login" -Method Post -ContentType 'application/json' `
+Invoke-RestMethod "$Api/auth/login" -Method Post -ContentType 'application/json; charset=utf-8' `
     -Body (Json @{ identificador = "apoderado-$sufijo@sage.local"; contrasena = $claveInicial }) `
     -SessionVariable apoderado | Out-Null
-Invoke-RestMethod "$Api/auth/contrasena" -Method Put -ContentType 'application/json' `
+Invoke-RestMethod "$Api/auth/contrasena" -Method Put -ContentType 'application/json; charset=utf-8' `
     -Body (Json @{ contrasenaActual = $claveInicial; nuevaContrasena = $clave }) `
     -WebSession $apoderado | Out-Null
-Invoke-RestMethod "$Api/auth/login" -Method Post -ContentType 'application/json' `
+Invoke-RestMethod "$Api/auth/login" -Method Post -ContentType 'application/json; charset=utf-8' `
     -Body (Json @{ identificador = "apoderado-$sufijo@sage.local"; contrasena = $clave }) `
     -SessionVariable apoderado | Out-Null
 Ok 'apoderado autenticado'
@@ -110,7 +113,7 @@ $historial.boletas | Select-Object -First 3 periodo, monto, fechaVencimiento, es
 # ------------------------------------------------------------------ US-007B
 $boleta = $historial.boletas | Where-Object { $_.estado -ne 'PAGADA' } | Select-Object -First 1
 Paso "US-007B: pagar la boleta $($boleta.periodo) por S/ $($boleta.monto)"
-$pago = (Invoke-RestMethod "$Api/pagos" -Method Post -ContentType 'application/json' `
+$pago = (Invoke-RestMethod "$Api/pagos" -Method Post -ContentType 'application/json; charset=utf-8' `
         -Body (Json @{ compromisoPagoId = $boleta.id }) -WebSession $apoderado).data
 Ok "pago $($pago.pagoId) en estado $($pago.estado)"
 Write-Host "   URL de checkout: $($pago.urlCheckout)" -ForegroundColor DarkGray
@@ -121,7 +124,7 @@ if ($antes.estado -eq 'PAGADA') { Mal 'la boleta no debería estar pagada antes 
 Ok "la boleta sigue en $($antes.estado) mientras la pasarela no confirme"
 
 EsperaError 409 'no se permite un segundo pago en curso sobre la misma boleta' {
-    Invoke-RestMethod "$Api/pagos" -Method Post -ContentType 'application/json' `
+    Invoke-RestMethod "$Api/pagos" -Method Post -ContentType 'application/json; charset=utf-8' `
         -Body (Json @{ compromisoPagoId = $boleta.id }) -WebSession $apoderado
 }
 
@@ -147,7 +150,7 @@ if ($esStripe) {
 else {
     Paso 'La pasarela simulada confirma el pago'
     $confirmacion = (Invoke-RestMethod "$Api/pagos/$($pago.pagoId)/simular" -Method Post `
-            -ContentType 'application/json' -Body (Json @{ resultado = 'PAGADO' }) `
+            -ContentType 'application/json; charset=utf-8' -Body (Json @{ resultado = 'PAGADO' }) `
             -WebSession $apoderado).data
     if (-not $confirmacion.aplicado) { Mal "la confirmación no se aplicó: $($confirmacion.motivo)" }
     Ok 'confirmación aplicada'
@@ -161,14 +164,14 @@ Ok "la boleta pasó a PAGADA el $($despues.pagadaEn)"
 if (-not $esStripe) {
     Paso 'QAS008: el reenvío de la misma confirmación no vuelve a aplicarse'
     $reenvio = (Invoke-RestMethod "$Api/pagos/$($pago.pagoId)/simular" -Method Post `
-            -ContentType 'application/json' -Body (Json @{ resultado = 'PAGADO' }) `
+            -ContentType 'application/json; charset=utf-8' -Body (Json @{ resultado = 'PAGADO' }) `
             -WebSession $apoderado).data
     if ($reenvio.aplicado) { Mal 'el reenvío volvió a aplicar la confirmación' }
     Ok "reenvío ignorado con motivo $($reenvio.motivo)"
 }
 
 EsperaError 409 'no se puede volver a pagar una boleta ya pagada' {
-    Invoke-RestMethod "$Api/pagos" -Method Post -ContentType 'application/json' `
+    Invoke-RestMethod "$Api/pagos" -Method Post -ContentType 'application/json; charset=utf-8' `
         -Body (Json @{ compromisoPagoId = $boleta.id }) -WebSession $apoderado
 }
 
