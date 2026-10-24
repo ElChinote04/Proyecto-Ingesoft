@@ -274,3 +274,34 @@ test('AUD-08 un cambio de nota queda registrado con usuario, fecha, valor anteri
   const exitosas = await consultar({ resultado: 'EXITO', tipoEvento: 'CALIFICACION_MODIFICADA' });
   assert.equal(exitosas.total, 1);
 });
+
+// Clases de equivalencia que faltaban del documento de casos de prueba de la US-003.
+test('AUD-09 casos inválidos y valores límite restantes del registro y la consulta', async () => {
+  const registrar = (datos) =>
+    prisma.$transaction((db) => registrarTransaccionCritica(db, { actorId: adminId, ...datos }));
+  const { evento: _evento, ...sinEvento } = cambioDeNota;
+  await assert.rejects(registrar(sinEvento), /EVENTOS_CRITICOS/);
+  await assert.rejects(registrar({ ...cambioDeNota, nuevo: null }), /nuevo/);
+  const { motivo: _motivo, ...sinMotivo } = cambioDeNota;
+  await assert.rejects(registrar(sinMotivo), /motivo/);
+
+  for (const limite of [25, 50]) {
+    const pagina = await consultar({ limite });
+    assert.equal(pagina.limite, limite);
+    assert.ok(pagina.registros.length <= limite);
+  }
+  await registrar({
+    evento: 'PAGO_NO_COMPLETADO',
+    entidad: 'Pago',
+    entidadId: 8,
+    anterior: { estado: 'PROCESANDO' },
+    nuevo: { estado: 'RECHAZADO' },
+    resultado: 'FALLO',
+  });
+  const fallidos = await consultar({ resultado: 'FALLO' });
+  assert.ok(fallidos.total > 0);
+  assert.ok(fallidos.registros.every((item) => item.resultado === 'FALLO'));
+
+  for (const invalida of [{ pagina: 0 }, { desde: '23/10/2026' }, { tipoEvento: '' }])
+    await admin.get(`${base}/admin/auditoria`).query(invalida).expect(400);
+});
