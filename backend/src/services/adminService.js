@@ -4,6 +4,7 @@ import * as repository from '../repositories/adminRepository.js';
 import { env } from '../config/env.js';
 import { AppError } from '../errors/AppError.js';
 import { logger } from '../logging/logger.js';
+import { emitirCompromisos } from './pagos.service.js';
 
 const fail = (status, code, message) => {
   throw new AppError(status, code, message);
@@ -211,14 +212,6 @@ export async function updateUser(id, input, actor, requestId) {
   });
 }
 export const catalogs = () => repository.catalogs();
-function eventoPublico(event) {
-  if (event.tipoEvento !== 'ASISTENCIA_GUARDADA' || !event.detalle) return event;
-  return {
-    ...event,
-    detalle: Object.fromEntries(Object.entries(event.detalle).filter(([key]) => key !== 'version')),
-  };
-}
-export const auditEvents = async () => (await repository.audits()).map(eventoPublico);
 export function createCatalog(type, input, actor, requestId) {
   return mutation(actor, requestId, 'CATALOGO_CREADO', async (db) => {
     if (type === 'secciones') {
@@ -267,15 +260,28 @@ export function enroll(input, actor, requestId) {
         'DUPLICATE_ENROLLMENT',
         'El estudiante ya tiene una matrícula en este año académico.',
       );
+    const matricula = await repository.createEnrollment(
+      {
+        estudianteId: student.id,
+        seccionId: section.id,
+        anioAcademicoId: section.anioAcademicoId,
+      },
+      db,
+    );
+    // US-006: el compromiso de pago se emite en la misma transacción que la
+    // matrícula, de modo que no pueda existir una matrícula sin su cronograma
+    // ni un cronograma sin matrícula.
+    if (!input.planPago) return { data: matricula };
+    const plan = await emitirCompromisos(
+      { ...matricula, anioAcademico: section.anioAcademico },
+      input.planPago,
+      db,
+      actor,
+      requestId,
+    );
     return {
-      data: await repository.createEnrollment(
-        {
-          estudianteId: student.id,
-          seccionId: section.id,
-          anioAcademicoId: section.anioAcademicoId,
-        },
-        db,
-      ),
+      data: matricula,
+      detail: { planPagoId: plan.id, cuotasEmitidas: plan.boletas.length },
     };
   });
 }

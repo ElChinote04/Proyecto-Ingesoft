@@ -36,3 +36,5 @@ Thumbs.db
 # VSCode
 .vscode/*
 !.vscode/extensions.json
+
+CLAUDE.local.md

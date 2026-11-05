@@ -4,7 +4,7 @@ import * as auth from '../controllers/authController.js';
 import * as session from '../controllers/sessionController.js';
 import * as health from '../controllers/healthController.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { validate, loginSchema, idSchema, asistenciaSchema } from '../validators/schemas.js';
+import {validate,loginSchema,idSchema,asistenciaSchema,reporteAsistenciaSchema} from '../validators/schemas.js';
 import { AppError } from '../errors/AppError.js';
 import { adminRouter } from './admin.js';
 import * as admin from '../controllers/adminController.js';
@@ -12,6 +12,16 @@ import { passwordSchema } from '../validators/seguridad.schemas.js';
 import { setupSchema } from '../validators/adminSchemas.js';
 import * as portal from '../controllers/portal.controller.js';
 import { horarioSchema, paginaSchema } from '../validators/portal.schemas.js';
+import { cursoRouter } from './curso.js';
+import { competenciaRouter } from './competencia.js';
+import { calificacionRouter } from './calificacion.js';
+import { reglaConsolidacionRouter } from './reglaConsolidacion.js';
+import { planAcademicoRouter } from './planAcademico.js';
+import { evidenciaPedagogicaRouter } from './evidenciaPedagogica.js';
+import { calificacionCompetenciaRouter } from './calificacionCompetencia.js';
+import { prisma } from '../config/database.js';
+import { asistenciaDocenteRouter } from './asistenciaDocenteRoutes.js';
+import { pagosRouter } from './pagos.js';
 export const router = Router();
 const requirePortal = (req, res, next) => {
   if (!req.user.roles.some((role) => ['ALUMNO', 'APODERADO'].includes(role)))
@@ -36,6 +46,21 @@ router.get('/health', health.check);
 router.get('/instalacion', admin.status);
 router.post('/instalacion', loginLimit, validate(setupSchema), admin.initialize);
 router.use('/admin', adminRouter);
+router.use('/cursos', cursoRouter);
+router.use('/competencias', competenciaRouter);
+router.use('/calificaciones', calificacionRouter);
+router.get('/bimestres', requireAuth, async (_req, res) => {
+  const bimestres = await prisma.bimestreAcademico.findMany({
+    where: { activo: true, anioAcademico: { activo: true } },
+    orderBy: [{ anioAcademicoId: 'asc' }, { numero: 'asc' }],
+  });
+  res.json({ data: bimestres });
+});
+router.use('/reglas-consolidacion', reglaConsolidacionRouter);
+router.use('/planes-academicos', planAcademicoRouter);
+router.use('/evidencias-pedagogicas', evidenciaPedagogicaRouter);
+router.use('/calificaciones-competencias', calificacionCompetenciaRouter);
+router.use(pagosRouter);
 router.post('/auth/login', loginLimit, validate(loginSchema), auth.login);
 router.get('/auth/me', requireAuth, auth.me);
 router.put('/auth/contrasena', requireAuth, validate(passwordSchema), auth.cambiarContrasena);
@@ -59,4 +84,13 @@ router.put(
   validate(idSchema, 'params'),
   validate(asistenciaSchema),
   session.save,
+);
+router.use(asistenciaDocenteRouter);
+
+router.get(
+  '/reportes/asistencia/estudiantes',
+  requireAuth,
+  requireRole('ADMINISTRADOR'),
+  validate(reporteAsistenciaSchema, 'query'),
+  session.report
 );

@@ -37,3 +37,46 @@ export function validate(schema, source = 'body') {
     next();
   };
 }
+
+
+/* ============================================================
+   REPORTE DE ASISTENCIA ESTUDIANTIL
+   ============================================================ */
+
+// Validar fechas con formato YYYY-MM-DD
+const fechaReporteSchema = z.string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}$/,
+    'La fecha debe tener el formato YYYY-MM-DD.'
+  )
+  .refine((valor) => {
+    const fecha = new Date(`${valor}T00:00:00.000Z`);
+
+    return (
+      !Number.isNaN(fecha.getTime()) &&
+      fecha.toISOString().slice(0, 10) === valor
+    );
+  }, 'La fecha indicada no existe.');
+
+// Validar filtros del reporte estudiantil
+export const reporteAsistenciaSchema = z.object({
+  fechaInicio: fechaReporteSchema,
+  fechaFin: fechaReporteSchema,
+
+  seccionId: z.coerce.number()
+    .int()
+    .positive()
+    .max(2147483647),
+})
+.strict()
+.superRefine((datos, ctx) => {
+
+  if (datos.fechaInicio > datos.fechaFin) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['fechaFin'],
+      message: 'La fecha final no puede ser anterior a la inicial.',
+    });
+  }
+
+});

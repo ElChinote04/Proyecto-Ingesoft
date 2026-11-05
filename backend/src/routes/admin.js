@@ -3,7 +3,9 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validate, idSchema } from '../validators/schemas.js';
 import * as schemas from '../validators/adminSchemas.js';
 import * as controller from '../controllers/adminController.js';
+import * as auditoriaController from '../controllers/auditoria.controller.js';
 import { vinculoSchema } from '../validators/portal.schemas.js';
+import { consultaAuditoriaSchema } from '../validators/auditoria.schemas.js';
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole('ADMINISTRADOR'));
 adminRouter.get('/usuarios', controller.users);
@@ -28,7 +30,11 @@ adminRouter.post(
   controller.validarBloque,
 );
 adminRouter.post('/sesiones', validate(schemas.classSchema), controller.createClass);
-adminRouter.get('/auditoria', controller.audits);
+adminRouter.get(
+  '/auditoria',
+  validate(consultaAuditoriaSchema, 'query'),
+  auditoriaController.obtenerEventos,
+);
 
 adminRouter.put('/anios/:id/activacion', validate(idSchema, 'params'), controller.activarAnio);
 adminRouter.put('/apoderados/estudiantes', validate(vinculoSchema), controller.vincularApoderado);

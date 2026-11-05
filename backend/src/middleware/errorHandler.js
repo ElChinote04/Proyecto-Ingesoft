@@ -9,6 +9,12 @@ export async function errorHandler(error, req, res, _next) {
     known = new AppError(413, 'BODY_TOO_LARGE', 'La solicitud es demasiado grande.');
   if (error.code === 'P2002')
     known = new AppError(409, 'CONFLICT', 'Ya existe un registro con esos datos.');
+  if (error.code === 'P2021')
+    known = new AppError(
+      503,
+      'DATABASE_NOT_MIGRATED',
+      'La base de datos no tiene aplicada la migración de reglas de consolidación. Ejecuta las migraciones del backend y vuelve a intentar.',
+    );
   const status = known?.status ?? 500;
   if (status === 403 && req.user) {
     try {

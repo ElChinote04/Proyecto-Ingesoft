@@ -1,6 +1,11 @@
-export default function TablaDatos({ columnas, filas, vacio = 'No se encontraron registros.' }) {
+export default function TablaDatos({
+  columnas,
+  filas,
+  vacio = 'No se encontraron registros.',
+  className = '',
+}) {
   return (
-    <div className="table-card portal-table">
+    <div className={`table-card portal-table ${className}`.trim()}>
       <table>
         <thead>
           <tr>
@@ -16,7 +21,9 @@ export default function TablaDatos({ columnas, filas, vacio = 'No se encontraron
             filas.map((fila) => (
               <tr key={fila.id}>
                 {fila.celdas.map((celda, indice) => (
-                  <td key={columnas[indice]}>{celda}</td>
+                  <td key={columnas[indice]} data-label={columnas[indice]}>
+                    {celda}
+                  </td>
                 ))}
               </tr>
             ))

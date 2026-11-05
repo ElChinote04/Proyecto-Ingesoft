@@ -348,7 +348,9 @@ test('US-023: único año activo, cambio global y protección de años anteriore
 test('US-001: auditoría de seguridad, consulta exclusiva y protección contra modificaciones', async () => {
   await alumno.get(`${base}/admin/auditoria`).expect(403);
   await apoderado.get(`${base}/admin/auditoria`).expect(403);
-  const eventos = (await admin.get(`${base}/admin/auditoria`).expect(200)).body.data;
+  const eventos = (
+    await admin.get(`${base}/admin/auditoria?tipoEvento=ACCESO_DENEGADO&limite=50`).expect(200)
+  ).body.data.registros;
   assert.ok(eventos.some((evento) => evento.tipoEvento === 'ACCESO_DENEGADO' && evento.requestId));
   const registro = eventos[0];
   await assert.rejects(

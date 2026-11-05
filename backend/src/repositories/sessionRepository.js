@@ -63,3 +63,66 @@ export async function saveAttendance(db, sesionId, records, userId) {
   });
   return { fechaHora: event.fechaHora };
 }
+
+
+
+
+export const findAttendanceReport = (
+  { fechaInicio, fechaFin, seccionId },
+  db = prisma
+) =>
+  db.asistenciaEstudiante.findMany({
+    where: {
+      matricula: {
+        seccionId,
+      },
+      sesion: {
+        activo: true,
+        fecha: {
+          gte: fechaInicio,
+          lte: fechaFin,
+        },
+        bloque: {
+          asignacion: {
+            seccionId,
+          },
+        },
+      },
+    },
+
+    include: {
+      matricula: {
+        include: {
+          estudiante: {
+            include: {
+              persona: true,
+            },
+          },
+        },
+      },
+
+      sesion: {
+        include: {
+          bloque: {
+            include: {
+              asignacion: {
+                include: {
+                  curso: true,
+                  seccion: {
+                    include: {
+                      grado: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    orderBy: [
+      { sesion: { fecha: 'asc' } },
+      { matriculaId: 'asc' },
+    ],
+  });

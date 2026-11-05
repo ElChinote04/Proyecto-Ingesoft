@@ -2,6 +2,7 @@ import { VincularApoderado, AdministrarAnio } from '../components/AdministrarPer
 import GestionBloques from '../components/GestionBloques';
 import AsignacionForm from '../components/AsignacionForm';
 import MatrizHorarios from '../components/MatrizHorarios';
+import ConsultaAuditoria from '../components/ConsultaAuditoria';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { userFormBody } from '../utils/userForm';
@@ -10,6 +11,8 @@ import { useAuth } from '../hooks/useAuth';
 import AppLayout from '../layouts/AppLayout';
 import { AdminForm, Field, PersonFields, Select } from '../components/AdminForm';
 import { Loading, ResourceError } from '../components/Feedback';
+import TeacherAttendance from './TeacherAttendance';
+import StudentAttendanceReport from './StudentAttendanceReport';
 
 const roles = ['ADMINISTRADOR', 'DOCENTE', 'ALUMNO', 'APODERADO'];
 const sectionLabel = (s) => `${s.anioAcademico.codigo} · ${s.grado.nombre} ${s.nombre}`;
@@ -25,8 +28,74 @@ const titles = {
   catalogos: 'Catálogos académicos',
   matriculas: 'Alumnos y matrículas',
   horarios: 'Horarios y sesiones',
+  asistenciaDocentes: 'Asistencia docente',
+  reportesAsistencia: 'Reportes de asistencia',
   auditoria: 'Auditoría',
 };
+
+const meses = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
+
+// US-006. El cronograma se calcula a partir de estas cinco condiciones: el
+// servidor deriva de ellas una boleta por cuota, con su periodo y vencimiento.
+function PlanPagoFields() {
+  return (
+    <>
+      <Field
+        label="Monto de la pensión (S/)"
+        name="montoPension"
+        inputMode="decimal"
+        pattern="\d{1,6}(\.\d{1,2})?"
+        placeholder="350.00"
+        title="Hasta dos decimales, por ejemplo 350.00"
+      />
+      <Field
+        label="Número de cuotas"
+        name="numeroCuotas"
+        type="number"
+        min={1}
+        max={12}
+        defaultValue={10}
+      />
+      <Field
+        label="Día de vencimiento"
+        name="diaVencimiento"
+        type="number"
+        min={1}
+        max={28}
+        defaultValue={10}
+        title="Hasta 28 para que exista en todos los meses"
+      />
+      <Select
+        label="Mes de la primera cuota"
+        name="mesInicio"
+        defaultValue="3"
+        items={meses.map((nombre, indice) => ({ id: indice + 1, label: nombre }))}
+      />
+      <Field label="Concepto" name="concepto" maxLength={60} defaultValue="Pensión" />
+    </>
+  );
+}
+
+const planDelFormulario = (form) => ({
+  montoPension: String(form.get('montoPension')).trim(),
+  numeroCuotas: Number(form.get('numeroCuotas')),
+  diaVencimiento: Number(form.get('diaVencimiento')),
+  mesInicio: Number(form.get('mesInicio')),
+  concepto: String(form.get('concepto')).trim() || 'Pensión',
+});
 
 function Data({ resource, children }) {
   return (
@@ -328,6 +397,7 @@ function Enrollments() {
   const resource = useAdminData('catalogos,estudiantes');
   const [year, setYear] = useState('');
   const [grade, setGrade] = useState('');
+  const [conPlan, setConPlan] = useState(true);
   return (
     <Data resource={resource}>
       {([c, students]) => (
@@ -351,15 +421,18 @@ function Enrollments() {
             submit="Confirmar matrícula"
             reset={false}
             onSave={async (form) => {
-              const result = await api('/admin/matriculas', {
-                method: 'POST',
-                body: {
-                  estudianteId: Number(form.get('estudianteId')),
-                  seccionId: Number(form.get('seccionId')),
-                },
-              });
+              const body = {
+                estudianteId: Number(form.get('estudianteId')),
+                seccionId: Number(form.get('seccionId')),
+              };
+              // El compromiso de pago viaja en la misma petición: así no puede
+              // quedar una matrícula sin cronograma ni al revés (US-006).
+              if (form.get('emitirPlan')) body.planPago = planDelFormulario(form);
+              const result = await api('/admin/matriculas', { method: 'POST', body });
               resource.retry();
-              return `Matrícula #${result.id} registrada. El alumno ya forma parte del padrón de su sección.`;
+              return body.planPago
+                ? `Matrícula #${result.id} registrada junto con su compromiso de pago de ${body.planPago.numeroCuotas} cuotas. El apoderado ya puede verlas y pagarlas; el cronograma está en Pagos y boletas.`
+                : `Matrícula #${result.id} registrada. El alumno ya forma parte del padrón de su sección.`;
             }}
           >
             <Select
@@ -392,11 +465,25 @@ function Enrollments() {
                 (s) => s.nombre,
               )}
             />
+            <div className="field form-wide">
+              <span>Compromiso de pago</span>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  name="emitirPlan"
+                  checked={conPlan}
+                  onChange={(e) => setConPlan(e.target.checked)}
+                />
+                Emitir el cronograma de pensiones al matricular
+              </label>
+            </div>
+            {conPlan && <PlanPagoFields />}
             <p className="muted form-wide">
               Cada alumno puede tener una matrícula por año académico. Si falta una sección, créala
               en Catálogos académicos.
             </p>
           </AdminForm>
+          <EmitirPlanPago estudiantes={students} onSaved={resource.retry} />
           <VincularApoderado catalogos={c} estudiantes={students} onSaved={resource.retry} />
           <h2>Alumnos y sus matrículas</h2>
           <Table
@@ -419,6 +506,44 @@ function Enrollments() {
     </Data>
   );
 }
+/**
+ * Para las matrículas registradas antes de que existiera el módulo de pagos, o
+ * cuando se omitió el cronograma al matricular. El servidor rechaza con 409 si
+ * esa matrícula ya tiene uno.
+ */
+function EmitirPlanPago({ estudiantes, onSaved }) {
+  const matriculas = estudiantes.flatMap((estudiante) =>
+    estudiante.matriculas
+      .filter((matricula) => matricula.activo)
+      .map((matricula) => ({
+        id: matricula.id,
+        label: `#${matricula.id} · ${estudiante.nombres} ${estudiante.apellidos} · ${matricula.descripcion}`,
+      })),
+  );
+  return (
+    <AdminForm
+      title="Emitir compromiso de pago sobre una matrícula existente"
+      submit="Emitir cronograma"
+      onSave={async (form) => {
+        const id = Number(form.get('matriculaId'));
+        const plan = await api(`/matriculas/${id}/plan-pago`, {
+          method: 'POST',
+          body: planDelFormulario(form),
+        });
+        onSaved();
+        return `Cronograma emitido: ${plan.boletas.length} boletas de S/ ${plan.montoPension}. Puedes revisarlo en Pagos y boletas.`;
+      }}
+    >
+      <Select label="Matrícula" name="matriculaId" items={matriculas} />
+      <PlanPagoFields />
+      <p className="muted form-wide">
+        Una matrícula solo admite un cronograma. Si ya lo tiene, el sistema lo rechaza en lugar de
+        duplicar las boletas.
+      </p>
+    </AdminForm>
+  );
+}
+
 function Schedule() {
   const [edicion, setEdicion] = useState(null);
   const resource = useAdminData('catalogos,horarios');
@@ -528,36 +653,6 @@ function Schedule() {
     </Data>
   );
 }
-function Audits() {
-  const resource = useAdminData('auditoria');
-  return (
-    <>
-      <p className="muted">
-        Últimos 100 eventos, del más reciente al más antiguo. Horas de Lima. Los datos completos
-        permanecen en PostgreSQL.
-      </p>
-      <button className="secondary" onClick={resource.retry}>
-        Actualizar auditoría
-      </button>
-      <Data resource={resource}>
-        {([events]) => (
-          <Table
-            headers={['ID / Fecha', 'Usuario', 'Evento / Entidad', 'Detalle']}
-            rows={events.map((e) => [
-              `#${e.id} · ${new Date(e.fechaHora).toLocaleString('es-PE', { timeZone: 'America/Lima' })}`,
-              e.usuario?.identificador ?? 'Cuenta no identificada',
-              `${e.tipoEvento} · #${e.entidadId}`,
-              <details key="details">
-                <summary>Ver detalle</summary>
-                <pre>{JSON.stringify(e.detalle, null, 2)}</pre>
-              </details>,
-            ])}
-          />
-        )}
-      </Data>
-    </>
-  );
-}
 export default function Admin({ page }) {
   const pages = {
     inicio: Home,
@@ -565,7 +660,9 @@ export default function Admin({ page }) {
     catalogos: Catalogs,
     matriculas: Enrollments,
     horarios: Schedule,
-    auditoria: Audits,
+    asistenciaDocentes: TeacherAttendance,
+    reportesAsistencia: StudentAttendanceReport,
+    auditoria: ConsultaAuditoria,
   };
   const Page = pages[page] || Home;
   return (

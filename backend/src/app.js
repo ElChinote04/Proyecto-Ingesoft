@@ -25,7 +25,17 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: '100kb' }));
+// El cuerpo crudo se conserva para verificar la firma de la notificación de la
+// pasarela de pagos: la firma se calcula sobre los bytes exactos recibidos y un
+// JSON reserializado ya no coincide.
+app.use(
+  express.json({
+    limit: '100kb',
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    },
+  }),
+);
 app.use(cookieParser());
 app.use('/api/v1', router);
 app.use((_req, _res, next) =>
