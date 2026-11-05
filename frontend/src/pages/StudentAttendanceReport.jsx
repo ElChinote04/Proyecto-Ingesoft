@@ -7,7 +7,7 @@ import { statuses } from '../utils/format';
 
 export default function StudentAttendanceReport() {
   const { data, error, retry } = useAdminData('catalogos');
-
+  const [gradoId, setGradoId] = useState('');
   const [seccionId, setSeccionId] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
@@ -59,7 +59,12 @@ export default function StudentAttendanceReport() {
     return <Loading>Cargando secciones...</Loading>;
   }
 
+  const grados = data[0].grados ?? [];
   const secciones = data[0].secciones ?? [];
+
+  const seccionesFiltradas = secciones.filter(
+  (seccion) => String(seccion.gradoId) === gradoId
+);
 
   return (
     <>
@@ -79,24 +84,47 @@ export default function StudentAttendanceReport() {
           <form onSubmit={consultar}>
             <div className="form-grid">
               <label className="field">
-                Sección
-                <select
-                  required
-                  value={seccionId}
-                  onChange={(e) => {
-                    setSeccionId(e.target.value);
-                    limpiarResultado();
-                  }}
-                >
-                  <option value="">Seleccionar sección...</option>
+  Grado
+  <select
+    required
+    value={gradoId}
+    onChange={(e) => {
+      setGradoId(e.target.value);
+      setSeccionId('');
+      limpiarResultado();
+    }}
+  >
+    <option value="">Seleccionar grado...</option>
 
-                  {secciones.map((seccion) => (
-                    <option key={seccion.id} value={seccion.id}>
-                      {seccion.nombre} · #{seccion.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
+    {grados.map((grado) => (
+      <option key={grado.id} value={grado.id}>
+        {grado.nombre}
+      </option>
+    ))}
+  </select>
+</label>
+              
+<label className="field">
+  Sección
+  <select
+    required
+    disabled={!gradoId}
+    value={seccionId}
+    onChange={(e) => {
+      setSeccionId(e.target.value);
+      limpiarResultado();
+    }}
+  >
+    <option value="">Seleccionar sección...</option>
+
+    {seccionesFiltradas.map((seccion) => (
+      <option key={seccion.id} value={seccion.id}>
+        {seccion.nombre}
+      </option>
+    ))}
+  </select>
+</label>
+
 
               <label className="field">
                 Fecha inicial
