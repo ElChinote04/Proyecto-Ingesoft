@@ -1,5 +1,5 @@
 const PERMISOS_POR_ROL = {
-  ADMINISTRADOR: ['administrar', 'auditoria.consultar'],
+  ADMINISTRADOR: ['administrar', 'auditoria.consultar', 'errores.consultar'],
   DOCENTE: ['asistencia.registrar', 'horario.consultar'],
   ALUMNO: ['portal.consultar', 'horario.consultar'],
   APODERADO: ['portal.consultar'],

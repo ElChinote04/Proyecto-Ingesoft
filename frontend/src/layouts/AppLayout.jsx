@@ -174,6 +174,22 @@ export default function AppLayout({
                   Pagos y boletas
                 </button>
               )}
+            {!user.requiereCambioContrasena && user.permisos.includes('errores.consultar') && (
+              <button
+                className={section === 'Log de errores' ? 'nav-active' : 'nav-item'}
+                onClick={() =>
+                  onLeave(() => {
+                    window.location.hash = '/errores';
+                  })
+                }
+              >
+                <img
+                  src={section === 'Log de errores' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                  alt=""
+                />
+                Log de errores
+              </button>
+            )}
             <button
               className={section === 'Seguridad' ? 'nav-active' : 'nav-item'}
               onClick={() =>

@@ -1,5 +1,14 @@
 # Registro de cambios
 
+## Log de errores (US-004) — 2026-11-05
+
+- `GET /errores` con filtros (severidad, código, usuario, rango de fechas) y paginación 10/25/50.
+  Lee `app.log` y sus copias rotadas; sin cambios de esquema ni migraciones.
+- Permiso `errores.consultar`, hoy asignado al administrador, y middleware `requirePermiso`.
+- Pantalla **Log de errores**, que el menú muestra según el permiso.
+- `errorHandler` registra el módulo de la ruta que falló en lugar del valor fijo `http`.
+- Nueva suite `tests/errores.test.js` (ERR-01 a ERR-08).
+
 ## Auditoría de transacciones críticas (US-003) — 2026-10-23
 
 - `registrarTransaccionCritica(db, datos)` en `auditoria.service.js`: los módulos de notas y pagos
