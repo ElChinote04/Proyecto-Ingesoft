@@ -297,10 +297,85 @@ test('11 admite bloques contiguos y rechaza el cruce en dos altas simultáneas',
     horaInicio: '08:45',
     horaFin: '09:30',
   };
+  await admin.post(`${base}/admin/bloques/validar`).send(input).expect(204);
   const r = await Promise.all([1, 2].map(() => admin.post(`${base}/admin/bloques`).send(input)));
   assert.deepEqual(r.map((x) => x.status).sort(), [201, 409]);
   assert.equal(await prisma.cursoSeccionDocenteAula.count(), 2);
 });
+test('US-022 consulta previa sin escrituras, permisos y exclusión del propio bloque', async () => {
+  const input = {
+    cursoId: course.id,
+    seccionId: section.id,
+    docenteId: teacherUser.docenteId,
+    aulaId: room.id,
+    diaSemana: 5,
+    horaInicio: '08:00',
+    horaFin: '08:45',
+    bloqueId: block.id,
+  };
+  const antes = {
+    bloques: await prisma.cursoSeccionDocenteAula.count(),
+    eventos: await prisma.registroAuditoria.count(),
+  };
+  await admin.post(`${base}/admin/bloques/validar`).send(input).expect(204);
+  await admin
+    .post(`${base}/admin/bloques/validar`)
+    .send({ ...input, diaSemana: 1 })
+    .expect(204);
+  assert.equal(await prisma.cursoSeccionDocenteAula.count(), antes.bloques);
+  assert.equal(await prisma.registroAuditoria.count(), antes.eventos);
+  await admin
+    .post(`${base}/admin/bloques/validar`)
+    .send({ ...input, bloqueId: 2147483647 })
+    .expect(404);
+  await admin
+    .post(`${base}/admin/bloques/validar`)
+    .send({ ...input, horaFin: '07:00' })
+    .expect(400);
+  await request(app).post(`${base}/admin/bloques/validar`).send(input).expect(401);
+  await teacher.post(`${base}/admin/bloques/validar`).send(input).expect(403);
+});
+
+test('US-022 alta, edición y consulta previa identifican el mismo conflicto completo', async () => {
+  const input = {
+    cursoId: course.id,
+    seccionId: section.id,
+    docenteId: teacherUser.docenteId,
+    aulaId: room.id,
+    diaSemana: 5,
+    horaInicio: '09:00',
+    horaFin: '09:15',
+  };
+  const responses = [
+    await admin
+      .post(`${base}/admin/bloques/validar`)
+      .send({ ...input, bloqueId: block.id })
+      .expect(409),
+    await admin.post(`${base}/admin/bloques`).send(input).expect(409),
+    await admin.put(`${base}/admin/bloques/${block.id}`).send(input).expect(409),
+  ];
+  const message = responses[0].body.error.message;
+  for (const response of responses) {
+    assert.equal(response.body.error.code, 'SCHEDULE_CONFLICT');
+    assert.equal(response.body.error.message, message);
+  }
+  for (const detail of [
+    'docente',
+    'aula',
+    'sección',
+    course.nombre,
+    room.codigo,
+    'Elena',
+    'viernes',
+    '2026',
+    '08:45',
+    '09:30',
+    'bloque #',
+  ])
+    assert.ok(message.includes(detail), detail);
+  assert.equal(await prisma.cursoSeccionDocenteAula.count(), 2);
+});
+
 test('12 valida fecha/día/año y crea una sola sesión coherente con el bloque', async () => {
   for (const fecha of ['2026-02-30', '2026-10-01', '2027-10-01'])
     await post('sesiones', { bloqueId: block.id, fecha }, 400);

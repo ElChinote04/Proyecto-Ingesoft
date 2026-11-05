@@ -54,7 +54,16 @@ export function PersonFields() {
     </>
   );
 }
-export function AdminForm({ title, children, submit = 'Guardar', onSave, reset = true, onCancel }) {
+export function AdminForm({
+  title,
+  children,
+  submit = 'Guardar',
+  onSave,
+  reset = true,
+  onCancel,
+  submitDisabled = false,
+  actions,
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState('');
@@ -93,7 +102,8 @@ export function AdminForm({ title, children, submit = 'Guardar', onSave, reset =
               Cancelar edición
             </button>
           )}
-          <button type="submit" disabled={busy}>
+          {actions}
+          <button type="submit" disabled={busy || submitDisabled}>
             {busy ? 'Guardando…' : submit}
           </button>
         </div>

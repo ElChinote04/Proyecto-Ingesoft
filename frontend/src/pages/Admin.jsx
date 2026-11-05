@@ -1,5 +1,7 @@
 import { VincularApoderado, AdministrarAnio } from '../components/AdministrarPerfiles';
 import GestionBloques from '../components/GestionBloques';
+import AsignacionForm from '../components/AsignacionForm';
+import MatrizHorarios from '../components/MatrizHorarios';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { userFormBody } from '../utils/userForm';
@@ -418,8 +420,10 @@ function Enrollments() {
   );
 }
 function Schedule() {
+  const [edicion, setEdicion] = useState(null);
   const resource = useAdminData('catalogos,horarios');
-  const [year, setYear] = useState('');
+  const currentYear = String(new Date().getFullYear());
+  const [year, setYear] = useState(currentYear);
   const [view, setView] = useState('seccion');
   const [filter, setFilter] = useState('');
   return (
@@ -428,10 +432,9 @@ function Schedule() {
         const blocks = schedule.bloques.filter(
           (b) =>
             b.activo &&
-            (!year || String(b.asignacion.seccion.anioAcademicoId) === year) &&
+            (!year || String(b.asignacion.seccion.anioAcademico.codigo) === year) &&
             (!filter || String(view === 'aula' ? b.aulaId : b.asignacion[`${view}Id`]) === filter),
         );
-        const times = [...new Set(blocks.map((b) => b.horaInicio))].sort();
         const filters =
           view === 'seccion'
             ? options(c.secciones, sectionLabel)
@@ -445,8 +448,11 @@ function Schedule() {
                 Año académico
                 <select value={year} onChange={(e) => setYear(e.target.value)}>
                   <option value="">Todos</option>
+                  {!c.anios.some((a) => String(a.codigo) === currentYear) && (
+                    <option value={currentYear}>{currentYear} · Sin registrar</option>
+                  )}
                   {c.anios.map((a) => (
-                    <option key={a.id} value={a.id}>
+                    <option key={a.id} value={a.codigo}>
                       {a.codigo}
                     </option>
                   ))}
@@ -478,94 +484,16 @@ function Schedule() {
                 </select>
               </label>
             </div>
-            <div className="table-card">
-              <table className="schedule-matrix">
-                <caption>Horario semanal · bloques asignados</caption>
-                <thead>
-                  <tr>
-                    <th>Inicio</th>
-                    {days.map((d) => (
-                      <th key={d}>{d}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {times.length ? (
-                    times.map((time) => (
-                      <tr key={time}>
-                        <th>{time}</th>
-                        {days.map((d, i) => (
-                          <td key={d}>
-                            {blocks
-                              .filter((b) => b.horaInicio === time && b.diaSemana === i + 1)
-                              .map((b) => (
-                                <div className="schedule-block" key={b.id}>
-                                  <strong>{b.asignacion.curso.nombre}</strong>
-                                  <span>{sectionLabel(b.asignacion.seccion)}</span>
-                                  <span>
-                                    {b.asignacion.docente.persona.nombres}{' '}
-                                    {b.asignacion.docente.persona.apellidos}
-                                  </span>
-                                  <span>
-                                    {b.aula.codigo} · {b.horaInicio}–{b.horaFin}
-                                  </span>
-                                  <small>Bloque #{b.id}</small>
-                                </div>
-                              ))}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={8} className="muted">
-                        No hay bloques para estos filtros.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <GestionBloques catalogos={c} bloques={schedule.bloques} onSaved={resource.retry} />
-            <AdminForm
-              title="Nueva asignación horaria"
-              submit="Guardar asignación"
-              onSave={async (form) => {
-                const block = await api('/admin/bloques', {
-                  method: 'POST',
-                  body: numbers(form, ['cursoId', 'seccionId', 'docenteId', 'aulaId', 'diaSemana']),
-                });
-                resource.retry();
-                return `Bloque #${block.id} asignado. Crea una sesión con fecha para que el docente pueda tomar asistencia.`;
-              }}
-            >
-              <Select
-                label="Año / grado / sección"
-                name="seccionId"
-                items={options(
-                  c.secciones.filter((seccion) => seccion.anioAcademico.activo),
-                  sectionLabel,
-                )}
+            <MatrizHorarios bloques={blocks} onSelect={setEdicion} />
+            {edicion && (
+              <GestionBloques
+                catalogos={c}
+                bloque={edicion}
+                onSaved={resource.retry}
+                onClose={() => setEdicion(null)}
               />
-              <Select label="Curso" name="cursoId" items={options(c.cursos, (x) => x.nombre)} />
-              <Select
-                label="Docente"
-                name="docenteId"
-                items={options(c.docentes, (x) => x.nombre)}
-              />
-              <Select label="Aula" name="aulaId" items={options(c.aulas, (x) => x.codigo)} />
-              <Select
-                label="Día de la semana"
-                name="diaSemana"
-                items={days.map((d, i) => ({ id: i + 1, label: d }))}
-              />
-              <Field label="Hora de inicio" name="horaInicio" type="time" />
-              <Field label="Hora de fin" name="horaFin" type="time" />
-              <p className="muted form-wide">
-                Se comprueban cruces de docente, aula y sección dentro del mismo año académico antes
-                de guardar.
-              </p>
-            </AdminForm>
+            )}
+            <AsignacionForm catalogos={c} onSaved={resource.retry} />
             <AdminForm
               title="Crear sesión de clase"
               submit="Crear sesión"

@@ -286,27 +286,53 @@ function validTeacher(t) {
     t.persona.usuario.roles.some((r) => r.rol.nombre === 'DOCENTE')
   );
 }
-export function createBlock(input, actor, requestId) {
-  return mutation(actor, requestId, 'BLOQUE_ASIGNADO', async (db) => {
-    const section = exists(await repository.findSection(input.seccionId, db), 'La sección');
-    if (!section.anioAcademico.activo)
-      fail(409, 'INACTIVE_YEAR', 'Solo puedes asignar horarios al año académico activo.');
-    exists(await repository.findCourse(input.cursoId, db), 'El curso');
-    exists(await repository.findRoom(input.aulaId, db), 'El aula');
-    if (!validTeacher(await repository.findTeacher(input.docenteId, db)))
-      fail(400, 'INVALID_TEACHER', 'Selecciona un docente con cuenta activa y rol DOCENTE.');
-    const conflict = await repository.conflictingBlock(input, section.anioAcademicoId, db);
-    if (conflict) {
-      const reason = [];
-      if (conflict.asignacion.docenteId === input.docenteId) reason.push('docente');
-      if (conflict.aulaId === input.aulaId) reason.push('aula');
-      if (conflict.asignacion.seccionId === input.seccionId) reason.push('sección');
+function mensajeCruce(conflicto, input) {
+  const { asignacion } = conflicto;
+  const docente = `${asignacion.docente.persona.nombres} ${asignacion.docente.persona.apellidos}`;
+  const seccion = `${asignacion.seccion.grado.nombre} ${asignacion.seccion.nombre}`;
+  const recursos = [];
+  if (asignacion.docenteId === input.docenteId) recursos.push(`docente ${docente}`);
+  if (conflicto.aulaId === input.aulaId) recursos.push(`aula ${conflicto.aula.codigo}`);
+  if (asignacion.seccionId === input.seccionId) recursos.push(`sección ${seccion}`);
+  const dia = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'][
+    conflicto.diaSemana - 1
+  ];
+  return `Cruce de ${recursos.join(', ')} con ${asignacion.curso.nombre} (bloque #${conflicto.id}), sección ${seccion}, docente ${docente}, aula ${conflicto.aula.codigo}, año ${asignacion.seccion.anioAcademico.codigo}, ${dia} de ${conflicto.horaInicio} a ${conflicto.horaFin}. No se guardaron cambios.`;
+}
+
+// La consulta previa no reserva el horario; el guardado repite la validación en su transacción.
+async function comprobarBloque(input, db, excluirId) {
+  let anterior;
+  if (excluirId) {
+    anterior = exists(await repository.findBlock(excluirId, db), 'El bloque');
+    if (!anterior.activo || !anterior.asignacion.seccion.anioAcademico.activo)
+      fail(409, 'INACTIVE_YEAR', 'Solo puedes modificar bloques activos del año académico activo.');
+    if (await repository.hasClassSessions(excluirId, db))
       fail(
         409,
-        'SCHEDULE_CONFLICT',
-        `Cruce de ${reason.join(', ')} con ${conflict.asignacion.curso.nombre} de ${conflict.horaInicio} a ${conflict.horaFin}. No se guardó la asignación.`,
+        'BLOCK_HAS_SESSIONS',
+        'Este bloque tiene sesiones vinculadas. Conserva su historial y crea otra asignación.',
       );
-    }
+  }
+  const section = exists(await repository.findSection(input.seccionId, db), 'La sección');
+  if (!section.anioAcademico.activo)
+    fail(409, 'INACTIVE_YEAR', 'Solo puedes asignar horarios al año académico activo.');
+  exists(await repository.findCourse(input.cursoId, db), 'El curso');
+  exists(await repository.findRoom(input.aulaId, db), 'El aula');
+  if (!validTeacher(await repository.findTeacher(input.docenteId, db)))
+    fail(400, 'INVALID_TEACHER', 'Selecciona un docente con cuenta activa y rol DOCENTE.');
+  const conflict = await repository.conflictingBlock(input, section.anioAcademicoId, db, excluirId);
+  if (conflict) fail(409, 'SCHEDULE_CONFLICT', mensajeCruce(conflict, input));
+  return anterior;
+}
+
+export async function validarBloque({ bloqueId, ...input }) {
+  await comprobarBloque(input, undefined, bloqueId);
+}
+
+export function createBlock(input, actor, requestId) {
+  return mutation(actor, requestId, 'BLOQUE_ASIGNADO', async (db) => {
+    await comprobarBloque(input, db);
     return { data: await repository.createBlock(input, db) };
   });
 }
@@ -361,30 +387,7 @@ export function vincularApoderado(input, actor, requestId) {
 }
 export function modificarBloque(id, input, actor, requestId) {
   return mutation(actor, requestId, 'BLOQUE_MODIFICADO', async (db) => {
-    const anterior = exists(await repository.findBlock(id, db), 'El bloque');
-    const seccion = exists(await repository.findSection(input.seccionId, db), 'La sección');
-    if (
-      !anterior.activo ||
-      !anterior.asignacion.seccion.anioAcademico.activo ||
-      !seccion.anioAcademico.activo
-    )
-      fail(409, 'INACTIVE_YEAR', 'Solo puedes modificar bloques activos del año académico activo.');
-    if (await repository.hasClassSessions(id, db))
-      fail(
-        409,
-        'BLOCK_HAS_SESSIONS',
-        'Este bloque tiene sesiones vinculadas. Conserva su historial y crea otra asignación.',
-      );
-    exists(await repository.findCourse(input.cursoId, db), 'El curso');
-    exists(await repository.findRoom(input.aulaId, db), 'El aula');
-    if (!validTeacher(await repository.findTeacher(input.docenteId, db)))
-      fail(400, 'INVALID_TEACHER', 'Selecciona un docente activo.');
-    if (await repository.conflictingBlock(input, seccion.anioAcademicoId, db, id))
-      fail(
-        409,
-        'SCHEDULE_CONFLICT',
-        'Existe un cruce de docente, aula o sección. No se guardaron cambios.',
-      );
+    const anterior = await comprobarBloque(input, db, id);
     return {
       data: await repository.updateBlock(id, input, db),
       detail: {

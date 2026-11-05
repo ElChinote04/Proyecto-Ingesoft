@@ -63,6 +63,7 @@ export const blockSchema = z
     message: 'La hora final debe ser posterior a la inicial.',
     path: ['horaFin'],
   });
+export const validarBloqueSchema = blockSchema.safeExtend({ bloqueId: id.optional() });
 export const classSchema = z
   .object({
     bloqueId: id,

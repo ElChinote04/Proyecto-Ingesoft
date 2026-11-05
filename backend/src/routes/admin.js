@@ -22,6 +22,11 @@ adminRouter.post('/estudiantes', validate(schemas.studentSchema), controller.cre
 adminRouter.post('/matriculas', validate(schemas.enrollmentSchema), controller.enroll);
 adminRouter.get('/horarios', controller.schedule);
 adminRouter.post('/bloques', validate(schemas.blockSchema), controller.createBlock);
+adminRouter.post(
+  '/bloques/validar',
+  validate(schemas.validarBloqueSchema),
+  controller.validarBloque,
+);
 adminRouter.post('/sesiones', validate(schemas.classSchema), controller.createClass);
 adminRouter.get('/auditoria', controller.audits);
 

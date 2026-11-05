@@ -23,6 +23,7 @@ export async function api(path, { body, headers, ...options } = {}) {
       code: 'NETWORK_ERROR',
     });
   }
+  if (response.status === 204) return null;
   const payload = await response.json().catch(() => ({
     error: { message: 'El servidor devolvió una respuesta no válida.', code: 'INVALID_RESPONSE' },
   }));

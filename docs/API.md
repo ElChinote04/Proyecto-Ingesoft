@@ -325,6 +325,21 @@ POST `/admin/matriculas`: `{ estudianteId, seccionId }`. Devuelve matrícula act
 
 ### Horarios, asignaciones y sesiones
 
+POST `/admin/bloques/validar`: recibe los campos de una asignación y, al editar,
+`bloqueId` opcional. Solo administrador. Responde 204 sin cuerpo cuando los datos
+son válidos y no hay cruces; 409 SCHEDULE_CONFLICT cuando existe un solapamiento.
+No crea filas ni eventos de auditoría de cambios. Comprueba año activo, referencias,
+docente y restricciones de edición, excluyendo el propio bloque. El guardado repite
+la validación en su transacción; la consulta previa no reserva el intervalo.
+
+Alta, edición y validación previa comparten el mensaje de cruce, que identifica
+recurso, curso, bloque, sección, docente, aula, año, día e intervalo incompatibles.
+La interfaz consulta tras 300 ms sin cambios con todos los campos completos y
+horas válidas; bloquea Guardar mientras comprueba o encuentra un conflicto.
+En la matriz administrativa, los bloques abarcan todas las filas de su duración;
+al seleccionarlos se abre la edición y el retiro con confirmación. Los bloques
+históricos permanecen en modo de solo lectura.
+
 GET `/admin/horarios` devuelve `{ bloques, sesiones }`. Los bloques incluyen aula, asignacion.curso, asignacion.docente.persona y asignacion.seccion con grado/año. Las sesiones incluyen fecha ISO, horas, bloqueId y activo.
 
 POST `/admin/bloques`:
