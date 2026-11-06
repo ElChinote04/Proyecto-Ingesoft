@@ -1,6 +1,11 @@
 FROM node:24.21.0-slim
 WORKDIR /app
 
+# Prisma necesita OpenSSL y la imagen slim no lo trae.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 # Incluye devDependencies: la CLI de Prisma hace falta para `migrate deploy`.
 RUN npm ci
