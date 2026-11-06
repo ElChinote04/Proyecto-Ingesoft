@@ -1,7 +1,11 @@
 import * as repository from '../repositories/calificacionRepository.js';
 import * as detalleRepository from '../repositories/calificacionCompetencia.js';
-import { registrarTransaccionCritica } from './auditoria.service.js';
 import { agregarLogroConsolidado } from './calificacionesAlumno.service.js';
+import {
+  exigirMotivoSiPublicada,
+  exigirSeccionSinPublicar,
+  filtrarPublicadas,
+} from './publicacionSeccion.service.js';
 import { AppError } from '../errors/AppError.js';
 
 const fail = (status, code, message) => {
@@ -111,41 +115,6 @@ export async function listarCalificaciones(user, estudianteId) {
   fail(403, 'FORBIDDEN', 'Tu usuario no tiene un rol académico habilitado.');
 }
 
-async function filtrarPublicadas(calificaciones) {
-  const ids = [...new Set(calificaciones.map(({ bimestreId }) => bimestreId))];
-  if (!ids.length) return calificaciones;
-  const publicadas = await repository.listBimestresPublicados(ids);
-  const permitidas = new Set(publicadas.map(({ entidadId }) => entidadId));
-  return calificaciones.filter(({ bimestreId }) => permitidas.has(bimestreId));
-}
-
-export async function publicarBimestre(bimestreId, actor, requestId) {
-  requireRole(actor, 'DOCENTE');
-  return repository.transaction(async (db) => {
-    const asignaciones = await db.cursoSeccionDocente.count({
-      where: {
-        docenteId: actor.docenteId,
-        calificaciones: { some: { bimestreId, activo: true } },
-      },
-    });
-    if (!asignaciones)
-      fail(404, 'GRADES_NOT_FOUND', 'No tienes calificaciones para publicar en este bimestre.');
-    const existente = await db.registroAuditoria.findFirst({
-      where: { tipoEvento: 'NOTA_PUBLICADA', entidad: 'BimestreAcademico', entidadId: bimestreId },
-    });
-    if (existente) return { publicado: true, yaPublicado: true };
-    await registrarTransaccionCritica(db, {
-      actorId: actor.id,
-      evento: 'NOTA_PUBLICADA',
-      entidad: 'BimestreAcademico',
-      entidadId: bimestreId,
-      nuevo: { bimestreId },
-      requestId,
-    });
-    return { publicado: true, yaPublicado: false };
-  });
-}
-
 export async function obtenerCalificacion(id, user) {
   const calificacion = await repository.findCalificacion(id);
   if (!calificacion?.activo)
@@ -159,7 +128,11 @@ export async function obtenerCalificacion(id, user) {
 export async function crearCalificacion(input, actor, requestId) {
   requireRole(actor, 'DOCENTE');
   return repository.transaction(async (db) => {
-    await validateContext(input, db);
+    const { matricula } = await validateContext(input, db);
+    await exigirSeccionSinPublicar(
+      { bimestreId: input.bimestreId, seccionId: matricula.seccionId },
+      db,
+    );
     const existente = await repository.findCalificacionByKey(input, db);
     if (existente?.activo)
       fail(409, 'GRADE_EXISTS', 'Ya existe una calificación para ese alumno, curso y bimestre.');
@@ -201,6 +174,14 @@ export async function modificarCalificacion(id, input, actor, requestId) {
   return repository.transaction(async (db) => {
     const actual = await repository.findCalificacion(id, db);
     if (!actual?.activo) fail(404, 'GRADE_NOT_FOUND', 'La calificación no existe o está inactiva.');
+    await exigirMotivoSiPublicada(
+      {
+        bimestreId: actual.bimestreId,
+        seccionId: actual.matricula.seccionId,
+        motivo: input.motivo,
+      },
+      db,
+    );
     if (input.competencias)
       await validateContext({ ...actual, competencias: input.competencias }, db);
     const calificacion = await repository.updateCalificacion(id, { modificadoPorId: actor.id }, db);
@@ -235,18 +216,23 @@ export async function modificarCalificacion(id, input, actor, requestId) {
       calificacionId: id,
       valorAnterior: snapshot(actual),
       valorNuevo: snapshot(result),
+      motivo: input.motivo,
       requestId,
     });
     return result;
   });
 }
 
-export async function desactivarCalificacion(id, actor, requestId) {
+export async function desactivarCalificacion(id, motivo, actor, requestId) {
   requireRole(actor, 'ADMINISTRADOR');
   return repository.transaction(async (db) => {
     const actual = await repository.findCalificacion(id, db);
     if (!actual?.activo)
       fail(404, 'GRADE_NOT_FOUND', 'La calificación no existe o ya está inactiva.');
+    await exigirMotivoSiPublicada(
+      { bimestreId: actual.bimestreId, seccionId: actual.matricula.seccionId, motivo },
+      db,
+    );
     const result = await repository.deleteCalificacion(id, db);
     await db.calificacionCompetencia.updateMany({
       where: { calificacionId: id, activo: true },
@@ -258,6 +244,7 @@ export async function desactivarCalificacion(id, actor, requestId) {
       calificacionId: id,
       valorAnterior: snapshot(actual),
       valorNuevo: snapshot(result),
+      motivo,
       requestId,
     });
     return result;

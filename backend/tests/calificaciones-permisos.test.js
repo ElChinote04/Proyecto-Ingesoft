@@ -136,7 +136,9 @@ before(async () => {
     ).body.data;
   notaHijo = await registrarNota(hijo.matricula.id, 'AD');
   notaOtroAlumno = await registrarNota(otroAlumno.matricula.id, 'B');
-  await docente.post(`${base}/calificaciones/bimestres/${bimestre.id}/publicacion`).expect(200);
+  await prisma.publicacionSeccion.create({
+    data: { bimestreId: bimestre.id, seccionId: seccion.id, publicadoPorId: cuentaDocente.id },
+  });
   detalleHijo = notaHijo.competencias[0].id;
 });
 after(() => prisma.$disconnect());

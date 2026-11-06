@@ -34,6 +34,7 @@ const schema = z.object({
   SESSION_IDLE_SECONDS: z.coerce.number().int().min(60).max(86400).default(1800),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   LOG_DIR: z.string().default('logs'),
+  EVIDENCIAS_DIR: z.string().default('storage/evidencias'),
   // Pasarela de pagos (ADR-002). 'simulada' permite desarrollar y probar sin
   // credenciales; 'stripe' exige las llaves del proveedor.
   PAGOS_PROVEEDOR: z.enum(['simulada', 'stripe']).default('simulada'),

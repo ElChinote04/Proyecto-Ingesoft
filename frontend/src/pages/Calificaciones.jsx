@@ -12,7 +12,6 @@ const PASO = 'Calificaciones';
 function AlumnosDelSalon({ salon }) {
   const alumnos = useResource(`/secciones/${salon.id}/alumnos`);
   const [alumnoActivo, setAlumnoActivo] = useState(null);
-  const [guardado, setGuardado] = useState(null);
 
   if (alumnos.loading) return <Loading>Cargando alumnos…</Loading>;
   if (alumnos.error) return <ResourceError error={alumnos.error} retry={alumnos.retry} />;
@@ -26,10 +25,7 @@ function AlumnosDelSalon({ salon }) {
         key="calificar"
         type="button"
         aria-label={`Calificar a ${alumno.nombre}`}
-        onClick={() => {
-          setGuardado(null);
-          setAlumnoActivo(alumno);
-        }}
+        onClick={() => setAlumnoActivo(alumno)}
       >
         Calificar
       </button>,
@@ -38,11 +34,6 @@ function AlumnosDelSalon({ salon }) {
 
   return (
     <>
-      {guardado && (
-        <Feedback intent="success" title="Calificaciones guardadas">
-          Se registraron {guardado.total} competencias de {guardado.nombre}.
-        </Feedback>
-      )}
       <TablaDatos
         columnas={['Estudiante', 'Código', 'Acción']}
         filas={filas}
@@ -53,10 +44,6 @@ function AlumnosDelSalon({ salon }) {
           alumno={alumnoActivo}
           salon={salon}
           onClose={() => setAlumnoActivo(null)}
-          onSaved={(resultado) => {
-            setGuardado({ total: resultado.total, nombre: alumnoActivo.nombre });
-            setAlumnoActivo(null);
-          }}
         />
       )}
     </>

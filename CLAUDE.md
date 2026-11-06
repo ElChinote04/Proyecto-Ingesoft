@@ -163,7 +163,9 @@ y fuera de producción.
 ## Estado actual
 
 Implementado: acceso y roles, gestión de usuarios, catálogos, estudiantes,
-matrícula, horarios, sesiones, asistencia, auditoría y el módulo de pagos.
+matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos, la
+evidencia pedagógica de las notas (US-019) y la publicación de libretas por
+sección.
 
 Pendiente: evaluación por competencias, justificaciones de inasistencia,
 reportes, y la boleta en PDF (US-009).

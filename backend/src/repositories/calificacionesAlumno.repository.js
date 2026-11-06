@@ -92,23 +92,31 @@ export function listReglasVigentes({ gradoId, cursoIds }, db = prisma) {
   });
 }
 
-export const listNiveles = ({ matriculaId, bimestreId, asignacionIds }, db = prisma) =>
+export const listNiveles = ({ matriculaId, seccionId, cursoIds }, db = prisma) =>
   db.calificacionCompetencia.findMany({
     where: {
       activo: true,
       calificacion: {
         activo: true,
         matriculaId,
-        ...(bimestreId ? { bimestreId } : {}),
-        asignacionId: { in: asignacionIds },
+        asignacion: { seccionId, cursoId: { in: cursoIds } },
       },
     },
     select: {
+      id: true,
       competenciaId: true,
       nivelLogro: true,
       conclusionDescriptiva: true,
       calificacion: { select: { bimestreId: true, modificadoEn: true } },
+      _count: { select: { evidencias: { where: { activo: true } } } },
     },
+  });
+
+export const findCalificacionDelCurso = ({ matriculaId, bimestreId, cursoId }, db = prisma) =>
+  db.calificacion.findFirst({
+    where: { matriculaId, bimestreId, activo: true, asignacion: { cursoId } },
+    select: { asignacionId: true },
+    orderBy: { id: 'asc' },
   });
 
 export async function guardarNivel(datos, db) {

@@ -97,7 +97,7 @@ export default function Evaluaciones() {
             <span>Información visible únicamente para el alumno y su apoderado.</span>
             <span className={evaluations.length ? 'published-badge' : 'published-badge unpublished-badge'}>{evaluations.length ? 'Publicado' : 'No publicado'}</span>
           </div>
-          {!evaluations.length && !grades.loading && <Feedback intent="info" title="Bimestre no publicado">El docente todavía no ha registrado calificaciones para este bimestre.</Feedback>}
+          {!evaluations.length && !grades.loading && <Feedback intent="info" title="Bimestre no publicado">La libreta de este bimestre todavía no fue publicada.</Feedback>}
           <div className="table-card evaluations-card">
             <table>
               <caption className="sr-only">Resultados de la libreta de notas</caption>

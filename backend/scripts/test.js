@@ -25,6 +25,8 @@ try {
     'auditoria',
     'calificaciones-permisos',
     'calificaciones-alumno',
+    'evidencias-calificacion',
+    'publicacion-libretas',
     'errores',
   ]) {
     const databaseName = `sage_run_${randomBytes(8).toString('hex')}_test`;
@@ -36,6 +38,7 @@ try {
       NODE_ENV: 'test',
       INITIAL_SETUP_KEY: randomBytes(32).toString('hex'),
       LOG_DIR: `logs/tests/${databaseName}`,
+      EVIDENCIAS_DIR: `logs/tests/${databaseName}/evidencias`,
       DEMO_PASSWORD: 'Docente123!',
       // Las pruebas nunca salen a la pasarela real, aunque el .env local apunte a
       // Stripe para la demostración.

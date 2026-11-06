@@ -4,6 +4,7 @@ import { Feedback, Loading, ResourceError } from '../components/Feedback';
 import { useResource } from '../hooks/useResource';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
+import PublicacionLibretas from '../components/PublicacionLibretas';
 import Calificaciones from './Calificaciones';
 
 const ruleMethods = [
@@ -507,6 +508,7 @@ function AdminRules() {
         </form>
       ) : (
         <>
+          <PublicacionLibretas />
           <CompetenciesSection catalog={catalog} />
           <div className="rule-heading page-heading">
             <div>

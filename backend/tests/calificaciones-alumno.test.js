@@ -236,7 +236,10 @@ test('CAA-07 guarda varias competencias de una vez y el apoderado las ve', async
     ficha.cursos[1].competencias.map(({ nivelLogro }) => nivelLogro),
     ['B', 'A'],
   );
-  await docente.post(`${base}/calificaciones/bimestres/${bimestre.id}/publicacion`).expect(200);
+  // Aquí solo importa la visibilidad: publicar de verdad se prueba en publicacion-libretas.
+  const publicacion = await prisma.publicacionSeccion.create({
+    data: { bimestreId: bimestre.id, seccionId: seccion.id, publicadoPorId: 1 },
+  });
   const libreta = await apoderado
     .get(`${base}/calificaciones?estudianteId=${alumno.id}`)
     .expect(200);
@@ -244,6 +247,7 @@ test('CAA-07 guarda varias competencias de una vez y el apoderado las ve', async
     'A',
     'B',
   ]);
+  await prisma.publicacionSeccion.delete({ where: { id: publicacion.id } });
 });
 
 test('CAA-08 sobrescribir una nota conserva el valor anterior en la auditoría', async () => {

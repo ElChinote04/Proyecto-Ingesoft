@@ -1,5 +1,6 @@
 import * as repository from '../repositories/calificacionesAlumno.repository.js';
 import { registrarTransaccionCritica } from './auditoria.service.js';
+import { estaPublicada, exigirSeccionSinPublicar } from './publicacionSeccion.service.js';
 import { AppError } from '../errors/AppError.js';
 
 const fail = (status, code, message) => {
@@ -116,6 +117,7 @@ async function resolverCursos(matriculaId, bimestreId, actor, db) {
   const reglaDe = (cursoId) => reglas.find((regla) => regla.cursoId === cursoId) ?? null;
   return {
     bimestre,
+    seccionId: matricula.seccionId,
     cursos: asignaciones.map(({ id, curso }) => ({
       asignacionId: id,
       curso,
@@ -125,11 +127,15 @@ async function resolverCursos(matriculaId, bimestreId, actor, db) {
 }
 
 export async function obtenerCalificaciones(matriculaId, { bimestreId }, actor) {
-  const { bimestre, cursos } = await resolverCursos(matriculaId, bimestreId, actor);
-  const niveles = await repository.listNiveles({
-    matriculaId,
-    asignacionIds: cursos.map(({ asignacionId }) => asignacionId),
-  });
+  const { bimestre, seccionId, cursos } = await resolverCursos(matriculaId, bimestreId, actor);
+  const [niveles, publicado] = await Promise.all([
+    repository.listNiveles({
+      matriculaId,
+      seccionId,
+      cursoIds: cursos.map(({ curso }) => curso.id),
+    }),
+    estaPublicada({ bimestreId, seccionId }),
+  ]);
   const nivelDe = new Map(
     niveles
       .filter((item) => item.calificacion.bimestreId === bimestreId)
@@ -142,7 +148,7 @@ export async function obtenerCalificaciones(matriculaId, { bimestreId }, actor) 
     nivelesPorCompetencia.set(nivel.competenciaId, anteriores);
   }
   return {
-    bimestre: { id: bimestre.id, nombre: bimestre.nombre },
+    bimestre: { id: bimestre.id, nombre: bimestre.nombre, publicado },
     cursos: cursos.map(({ curso, regla }) => ({
       id: curso.id,
       nombre: curso.nombre,
@@ -151,6 +157,8 @@ export async function obtenerCalificaciones(matriculaId, { bimestreId }, actor) 
         ...competencia,
         nivelLogro: nivelDe.get(competencia.id)?.nivelLogro ?? null,
         conclusionDescriptiva: nivelDe.get(competencia.id)?.conclusionDescriptiva ?? null,
+        calificacionCompetenciaId: nivelDe.get(competencia.id)?.id ?? null,
+        totalEvidencias: nivelDe.get(competencia.id)?._count.evidencias ?? 0,
         logroConsolidado: consolidar(
           nivelesPorCompetencia.get(competencia.id) ?? [],
           regla?.metodo ?? 'frecuencia',
@@ -162,7 +170,8 @@ export async function obtenerCalificaciones(matriculaId, { bimestreId }, actor) 
 
 export async function guardarCalificaciones(matriculaId, input, actor, requestId) {
   return repository.transaction(async (db) => {
-    const { cursos } = await resolverCursos(matriculaId, input.bimestreId, actor, db);
+    const { seccionId, cursos } = await resolverCursos(matriculaId, input.bimestreId, actor, db);
+    await exigirSeccionSinPublicar({ bimestreId: input.bimestreId, seccionId }, db);
     const destinos = new Map(
       cursos.flatMap((destino) =>
         destino.curso.competencias.map((competencia) => [competencia.id, destino]),
@@ -183,11 +192,17 @@ export async function guardarCalificaciones(matriculaId, input, actor, requestId
           'RULE_NOT_FOUND',
           `El curso ${destino.curso.nombre} no tiene una regla de consolidación vigente.`,
         );
+      // Tras reasignar el curso, la nota sigue en la asignación anterior: duplicarla dejaría a la
+      // evidencia sustentando una nota distinta de la vigente.
+      const existente = await repository.findCalificacionDelCurso(
+        { matriculaId, bimestreId: input.bimestreId, cursoId: destino.curso.id },
+        db,
+      );
       const { calificacionId, anterior, nuevo } = await repository.guardarNivel(
         {
           matriculaId,
           bimestreId: input.bimestreId,
-          asignacionId: destino.asignacionId,
+          asignacionId: existente?.asignacionId ?? destino.asignacionId,
           reglaId: destino.regla.id,
           competenciaId,
           nivelLogro,

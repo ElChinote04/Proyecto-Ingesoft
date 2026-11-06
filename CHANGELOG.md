@@ -1,5 +1,21 @@
 # Registro de cambios
 
+## Evidencia pedagógica y publicación de libretas (US-019) — 2026-11-06
+
+- El docente registra evidencia por nota desde Calificar alumno: título, descripción y hasta tres
+  archivos PDF, JPG o PNG. Queda ligada al alumno, curso y competencia, y conserva el nivel con que
+  se registró. El modal sigue abierto tras guardar para continuar con la evidencia.
+- Nuevos modelos `EvidenciaCalificacion`, `ArchivoEvidenciaCalificacion` y `PublicacionSeccion`.
+  Los archivos van a `EVIDENCIAS_DIR` y requieren `multer`. La migración conserva lo ya publicado.
+- La libreta la publica el administrador, por sección o de forma masiva, solo con nota y evidencia
+  en todas las competencias. La ruta del docente deja de existir.
+- Con la sección publicada, notas y evidencia quedan en solo lectura para el docente. El
+  administrador corrige por API con motivo obligatorio.
+- Tras reasignar un curso, el docente nuevo ve las notas del anterior y las actualiza sin duplicarlas.
+- Corregidos: la auditoría de `EvidenciaPedagogica` escribía columnas inexistentes, y
+  `/calificaciones-competencias` fallaba con 500 en toda escritura por una transacción no exportada.
+- Nuevas suites `evidencias-calificacion` (EVC-01 a EVC-20) y `publicacion-libretas` (PUB-01 a PUB-24).
+
 ## Calificación por alumno — 2026-11-05
 
 - El docente elige un salón, ve a sus alumnos y califica todas las competencias de cada uno en una

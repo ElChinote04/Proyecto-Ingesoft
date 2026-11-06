@@ -20,16 +20,17 @@ datasource db {
 }
 
 model BimestreAcademico {
-  id              Int             @id @default(autoincrement())
+  id              Int                  @id @default(autoincrement())
   anioAcademicoId Int
-  anioAcademico   AnioAcademico   @relation(fields: [anioAcademicoId], references: [id])
+  anioAcademico   AnioAcademico        @relation(fields: [anioAcademicoId], references: [id])
   numero          Int
   nombre          String
-  fechaInicio     DateTime?       @db.Date
-  fechaFin        DateTime?       @db.Date
-  activo          Boolean         @default(true)
+  fechaInicio     DateTime?            @db.Date
+  fechaFin        DateTime?            @db.Date
+  activo          Boolean              @default(true)
   calificaciones  Calificacion[]
   planes          PlanAcademico[]
+  publicaciones   PublicacionSeccion[]
 
   @@unique([anioAcademicoId, numero])
 }
@@ -67,20 +68,65 @@ model Calificacion {
 }
 
 model CalificacionCompetencia {
-  id                    Int          @id @default(autoincrement())
+  id                    Int                     @id @default(autoincrement())
   calificacionId        Int
-  calificacion          Calificacion @relation(fields: [calificacionId], references: [id])
+  calificacion          Calificacion            @relation(fields: [calificacionId], references: [id])
   competenciaId         Int
-  competencia           Competencia  @relation(fields: [competenciaId], references: [id])
+  competencia           Competencia             @relation(fields: [competenciaId], references: [id])
   nivelLogro            NivelLogro
   conclusionDescriptiva String?
-  activo                Boolean      @default(true)
+  activo                Boolean                 @default(true)
   creadoPorId           Int
   modificadoPorId       Int
-  creadoEn              DateTime     @default(now())
-  modificadoEn          DateTime     @updatedAt
+  creadoEn              DateTime                @default(now())
+  modificadoEn          DateTime                @updatedAt
+  evidencias            EvidenciaCalificacion[]
 
   @@unique([calificacionId, competenciaId])
+}
+
+model EvidenciaCalificacion {
+  id                        Int                            @id @default(autoincrement())
+  calificacionCompetenciaId Int
+  calificacionCompetencia   CalificacionCompetencia        @relation(fields: [calificacionCompetenciaId], references: [id])
+  titulo                    String
+  descripcion               String?
+  nivelLogroRegistrado      NivelLogro
+  activo                    Boolean                        @default(true)
+  creadoPorId               Int
+  modificadoPorId           Int
+  creadoEn                  DateTime                       @default(now())
+  modificadoEn              DateTime                       @updatedAt
+  archivos                  ArchivoEvidenciaCalificacion[]
+
+  @@index([calificacionCompetenciaId, activo])
+}
+
+model ArchivoEvidenciaCalificacion {
+  id               Int                   @id @default(autoincrement())
+  evidenciaId      Int
+  evidencia        EvidenciaCalificacion @relation(fields: [evidenciaId], references: [id])
+  nombreOriginal   String
+  nombreAlmacenado String                @unique
+  tipoMime         String
+  tamanoBytes      Int
+  activo           Boolean               @default(true)
+  creadoPorId      Int
+  creadoEn         DateTime              @default(now())
+
+  @@index([evidenciaId, activo])
+}
+
+model PublicacionSeccion {
+  id             Int               @id @default(autoincrement())
+  bimestreId     Int
+  bimestre       BimestreAcademico @relation(fields: [bimestreId], references: [id])
+  seccionId      Int
+  seccion        Seccion           @relation(fields: [seccionId], references: [id])
+  publicadoPorId Int
+  publicadoEn    DateTime          @default(now())
+
+  @@unique([bimestreId, seccionId])
 }
 
 enum NombreRol {
@@ -248,6 +294,7 @@ model Seccion {
   anioAcademico   AnioAcademico         @relation(fields: [anioAcademicoId], references: [id])
   matriculas      Matricula[]
   asignaciones    CursoSeccionDocente[]
+  publicaciones   PublicacionSeccion[]
 
   @@unique([gradoId, anioAcademicoId, nombre])
 }
