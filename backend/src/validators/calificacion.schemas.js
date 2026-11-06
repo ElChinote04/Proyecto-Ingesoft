@@ -2,20 +2,23 @@ import { z } from 'zod';
 
 export const calificacionQuerySchema = z.object({ estudianteId: z.coerce.number().int().positive().optional() }).strict();
 
-export const calificacionContextQuerySchema = z
-  .object({ cursoId: z.coerce.number().int().positive(), seccionId: z.coerce.number().int().positive(), bimestreId: z.coerce.number().int().positive(), competenciaId: z.coerce.number().int().positive() })
+const id = z.number().int().positive().max(2147483647);
+
+export const calificacionAlumnoQuerySchema = z
+  .object({ bimestreId: z.coerce.number().int().positive().max(2147483647) })
   .strict();
 
-export const bulkCalificacionSchema = z
+export const calificacionAlumnoSchema = z
   .object({
-    cursoId: z.number().int().positive(),
-    seccionId: z.number().int().positive(),
-    bimestreId: z.number().int().positive(),
-    competenciaId: z.number().int().positive(),
-    calificaciones: z.array(z.object({ matriculaId: z.number().int().positive(), nivelLogro: z.enum(['AD', 'A', 'B', 'C']) }).strict()).min(1),
+    bimestreId: id,
+    calificaciones: z
+      .array(z.object({ competenciaId: id, nivelLogro: z.enum(['AD', 'A', 'B', 'C']) }).strict())
+      .min(1, 'Registra al menos una competencia.')
+      .max(200),
   })
   .strict()
   .superRefine((value, context) => {
-    const ids = value.calificaciones.map(({ matriculaId }) => matriculaId);
-    if (new Set(ids).size !== ids.length) context.addIssue({ code: 'custom', path: ['calificaciones'], message: 'No repitas alumnos.' });
+    const ids = value.calificaciones.map(({ competenciaId }) => competenciaId);
+    if (new Set(ids).size !== ids.length)
+      context.addIssue({ code: 'custom', path: ['calificaciones'], message: 'No repitas competencias.' });
   });

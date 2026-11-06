@@ -1,5 +1,14 @@
 # Registro de cambios
 
+## Calificación por alumno — 2026-11-05
+
+- El docente elige un salón, ve a sus alumnos y califica todas las competencias de cada uno en una
+  sola vista. Los salones salen de sus asignaciones, así que ya no depende de tener sesiones.
+- `GET /secciones`, `GET /secciones/:id/alumnos`, `GET` y `PUT /matriculas/:id/calificaciones`.
+- Se retiran `GET /calificaciones/contexto` y `POST /calificaciones/competencias/bulk`.
+- Al sobrescribir una nota, la auditoría conserva el nivel anterior.
+- Nueva suite `tests/calificaciones-alumno.test.js` (CAA-01 a CAA-13).
+
 ## Log de errores (US-004) — 2026-11-05
 
 - `GET /errores` con filtros (severidad, código, usuario, rango de fechas) y paginación 10/25/50.

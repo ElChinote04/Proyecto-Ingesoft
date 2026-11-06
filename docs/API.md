@@ -376,6 +376,19 @@ Eventos administrativos: ADMINISTRADOR_INICIAL_CREADO, USUARIO_CREADO, USUARIO_A
 Catálogos, matrículas y sesiones conservan altas y consultas. Los bloques admiten
 edición y retiro según las reglas siguientes, conservando registros con historial.
 
+## Calificaciones por alumno
+
+Rutas exclusivas del rol DOCENTE. Un docente solo accede a los salones donde tiene una asignación activa en el año académico activo; no hace falta que existan sesiones de clase.
+
+| Ruta                                            | Respuesta o cuerpo                                                                                                                                    |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /secciones                                  | `[{ id, nombre, anioAcademicoId, anioAcademico }]`                                                                                                    |
+| GET /secciones/:id/alumnos                      | `[{ matriculaId, codigo, nombre }]`; 403 si el salón no es del docente                                                                                |
+| GET /matriculas/:id/calificaciones?bimestreId=1 | `{ bimestre, cursos: [{ id, nombre, regla, competencias: [{ id, codigo, nombre, nivelLogro }] }] }`; `regla` es null si el curso no tiene una vigente |
+| PUT /matriculas/:id/calificaciones              | `{ bimestreId, calificaciones: [{ competenciaId, nivelLogro }] }`, niveles AD, A, B o C; devuelve `{ total, resultados }`                             |
+
+El PUT guarda solo las competencias enviadas, en una transacción: si una falla no se guarda ninguna. Responde 400 `INVALID_COMPETENCY_CONTEXT` si la competencia no pertenece a un curso del docente en ese salón, y 404 `RULE_NOT_FOUND` si el curso no tiene regla vigente.
+
 ## Portal privado y horario semanal
 
 ### GET /portal/estudiantes

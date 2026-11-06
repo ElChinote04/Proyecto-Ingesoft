@@ -9,18 +9,27 @@ enum NivelLogro {
   C
 }
 
+enum EstadoEvidenciaPedagogica {
+  PENDIENTE_REVISION
+  OBSERVADA
+  VALIDADA
+}
+
 datasource db {
   provider = "postgresql"
 }
 
 model BimestreAcademico {
-  id              Int            @id @default(autoincrement())
+  id              Int             @id @default(autoincrement())
   anioAcademicoId Int
-  anioAcademico   AnioAcademico  @relation(fields: [anioAcademicoId], references: [id])
+  anioAcademico   AnioAcademico   @relation(fields: [anioAcademicoId], references: [id])
   numero          Int
   nombre          String
-  activo          Boolean        @default(true)
+  fechaInicio     DateTime?       @db.Date
+  fechaFin        DateTime?       @db.Date
+  activo          Boolean         @default(true)
   calificaciones  Calificacion[]
+  planes          PlanAcademico[]
 
   @@unique([anioAcademicoId, numero])
 }
@@ -34,6 +43,7 @@ model Competencia {
   descripcion    String
   activo         Boolean                   @default(true)
   calificaciones CalificacionCompetencia[]
+  planes         PlanAcademico[]
 }
 
 model Calificacion {
@@ -134,9 +144,10 @@ model Usuario {
   reglasCreadas            ReglaConsolidacion[]   @relation("ReglaCreador")
   reglasModificadas        ReglaConsolidacion[]   @relation("ReglaModificador")
 
-  asistenciasDocentesCreadas     AsistenciaDocente[] @relation("CreadorAsistenciaDocente")
-  asistenciasDocentesModificadas AsistenciaDocente[] @relation("ModificadorAsistenciaDocente")
-  pagosIniciados                 Pago[]              @relation("PagoIniciador")
+  asistenciasDocentesCreadas     AsistenciaDocente[]   @relation("CreadorAsistenciaDocente")
+  asistenciasDocentesModificadas AsistenciaDocente[]   @relation("ModificadorAsistenciaDocente")
+  pagosIniciados                 Pago[]                @relation("PagoIniciador")
+  evidenciasRevisadas            EvidenciaPedagogica[] @relation("EvidenciaRevisor")
 }
 
 model Instalacion {
@@ -175,7 +186,9 @@ model Docente {
   personaId     Int                   @unique
   persona       Persona               @relation(fields: [personaId], references: [id])
   codigoDocente String                @unique
+  activo        Boolean               @default(true)
   asignaciones  CursoSeccionDocente[]
+  evidencias    EvidenciaPedagogica[]
 
   asistencias AsistenciaDocente[]
 }
@@ -259,13 +272,16 @@ model Matricula {
 }
 
 model Curso {
-  id           Int                   @id @default(autoincrement())
-  codigo       String                @unique
-  nombre       String
-  activo       Boolean               @default(true)
-  asignaciones CursoSeccionDocente[]
-  reglas       ReglaConsolidacion[]
-  competencias Competencia[]
+  id              Int                   @id @default(autoincrement())
+  codigo          String                @unique
+  nombre          String
+  descripcion     String?
+  activo          Boolean               @default(true)
+  creadoPorId     Int?
+  modificadoPorId Int?
+  asignaciones    CursoSeccionDocente[]
+  reglas          ReglaConsolidacion[]
+  competencias    Competencia[]
 }
 
 model CursoSeccionDocente {
@@ -276,8 +292,10 @@ model CursoSeccionDocente {
   seccion        Seccion                   @relation(fields: [seccionId], references: [id])
   docenteId      Int
   docente        Docente                   @relation(fields: [docenteId], references: [id])
+  activo         Boolean                   @default(true)
   bloques        CursoSeccionDocenteAula[]
   calificaciones Calificacion[]
+  planes         PlanAcademico[]
 
   @@unique([cursoId, seccionId, docenteId])
 }
@@ -414,6 +432,51 @@ model ReglaConsolidacion {
 
   @@unique([gradoId, cursoId, version])
   @@index([gradoId, cursoId, activo])
+}
+
+model PlanAcademico {
+  id              Int                   @id @default(autoincrement())
+  bimestreId      Int
+  bimestre        BimestreAcademico     @relation(fields: [bimestreId], references: [id])
+  asignacionId    Int
+  asignacion      CursoSeccionDocente   @relation(fields: [asignacionId], references: [id])
+  titulo          String
+  objetivo        String
+  fechaInicio     DateTime              @db.Date
+  fechaFin        DateTime?             @db.Date
+  activo          Boolean               @default(true)
+  creadoPorId     Int
+  modificadoPorId Int
+  creadoEn        DateTime              @default(now())
+  modificadoEn    DateTime              @updatedAt
+  competencias    Competencia[]
+  evidencias      EvidenciaPedagogica[]
+
+  @@index([asignacionId, activo])
+}
+
+model EvidenciaPedagogica {
+  id                    Int                       @id @default(autoincrement())
+  docenteId             Int
+  docente               Docente                   @relation(fields: [docenteId], references: [id])
+  planId                Int
+  plan                  PlanAcademico             @relation(fields: [planId], references: [id])
+  revisorId             Int?
+  revisor               Usuario?                  @relation("EvidenciaRevisor", fields: [revisorId], references: [id])
+  fechaRegistro         DateTime                  @db.Date
+  fechaEntrega          DateTime?                 @db.Date
+  descripcionAvance     String
+  archivos              String[]
+  observacionesRevision String?
+  estadoRevision        EstadoEvidenciaPedagogica @default(PENDIENTE_REVISION)
+  fechaRevision         DateTime?                 @db.Date
+  activo                Boolean                   @default(true)
+  creadoPorId           Int
+  modificadoPorId       Int
+  creadoEn              DateTime                  @default(now())
+  modificadoEn          DateTime                  @updatedAt
+
+  @@index([planId, activo])
 }
 
 model RegistroAuditoria {

@@ -24,6 +24,7 @@ try {
     'cronograma',
     'auditoria',
     'calificaciones-permisos',
+    'calificaciones-alumno',
     'errores',
   ]) {
     const databaseName = `sage_run_${randomBytes(8).toString('hex')}_test`;
