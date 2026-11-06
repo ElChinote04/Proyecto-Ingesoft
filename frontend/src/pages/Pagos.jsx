@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import AppLayout from '../layouts/AppLayout';
 import { Feedback, Loading, ResourceError } from '../components/Feedback';
 import TablaDatos from '../components/TablaDatos';
+import DescargarComprobante from '../components/DescargarComprobante';
 import { api } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useResource } from '../hooks/useResource';
@@ -338,8 +339,16 @@ export default function Pagos() {
                           {estilo.etiqueta}
                         </span>,
                         boleta.pagadaEn ? (
-                          <span key="pagada" className="muted">
-                            Pagada el {fechaDeInstante(boleta.pagadaEn)}
+                          <span key="pagada" className="boleta-pagada">
+                            <span className="muted">
+                              Pagada el {fechaDeInstante(boleta.pagadaEn)}
+                            </span>
+                            {boleta.comprobante && (
+                              <DescargarComprobante
+                                boletaId={boleta.id}
+                                numero={boleta.comprobante}
+                              />
+                            )}
                           </span>
                         ) : PAGABLES.includes(boleta.estado) && boleta.pagoEnCursoId ? (
                           // Un intento abierto bloquea un pago nuevo (409); se

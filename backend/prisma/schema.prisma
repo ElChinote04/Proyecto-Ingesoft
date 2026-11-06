@@ -366,6 +366,7 @@ model CompromisoPago {
   creadoEn         DateTime     @default(now())
   modificadoEn     DateTime     @updatedAt
   pagos            Pago[]
+  comprobante      Comprobante?
 
   @@unique([planPagoId, numeroCuota])
   @@index([estado, fechaVencimiento])
@@ -388,8 +389,22 @@ model Pago {
   iniciadoPor       Usuario        @relation("PagoIniciador", fields: [iniciadoPorId], references: [id])
   creadoEn          DateTime       @default(now())
   modificadoEn      DateTime       @updatedAt
+  comprobante       Comprobante?
 
   @@index([compromisoPagoId, estado])
+}
+
+/// Comprobante de pago de una boleta (US-009). Se emite en la misma transacción
+/// que confirma el pago, de modo que toda boleta PAGADA tiene exactamente uno.
+/// El id es el correlativo: se muestra como B001-00000001.
+model Comprobante {
+  id               Int            @id @default(autoincrement())
+  serie            String         @default("B001") @db.VarChar(4)
+  pagoId           Int            @unique
+  pago             Pago           @relation(fields: [pagoId], references: [id])
+  compromisoPagoId Int            @unique
+  compromisoPago   CompromisoPago @relation(fields: [compromisoPagoId], references: [id])
+  emitidoEn        DateTime       @default(now())
 }
 
 model ReglaConsolidacion {

@@ -10,6 +10,7 @@ import {
 import { AppError } from '../errors/AppError.js';
 import { logger } from '../logging/logger.js';
 import { env } from '../config/env.js';
+import { generarComprobantePdf, numeroComprobante } from '../domain/comprobante.js';
 
 const fail = (status, code, message) => {
   throw new AppError(status, code, message);
@@ -102,6 +103,8 @@ const boletaResumenDto = (b) => ({
   fechaVencimiento: b.fechaVencimiento.toISOString().slice(0, 10),
   estado: estadoVisible(b),
   pagadaEn: b.pagadaEn?.toISOString() ?? null,
+  // US-009: número del comprobante de una boleta pagada, para ofrecer su descarga.
+  comprobante: b.comprobante ? numeroComprobante(b.comprobante) : null,
 });
 
 /**
@@ -298,12 +301,23 @@ export async function confirmarDesdeNotificacion({ referencia }, requestId) {
       );
       if (!cambiados) return false;
       await repository.marcarBoletaPagada(pago.compromisoPagoId, ahora, db);
+      // US-009: el comprobante nace en la misma transacción que la confirmación,
+      // así no puede existir una boleta pagada sin comprobante ni al revés.
+      const comprobante = await repository.crearComprobante(
+        { pagoId: pago.id, compromisoPagoId: pago.compromisoPagoId, emitidoEn: ahora },
+        db,
+      );
       await repository.audit(
         db,
         pago.iniciadoPorId,
         'PAGO_CONFIRMADO',
         pago.id,
-        { compromisoPagoId: pago.compromisoPagoId, referencia, monto: dinero(pago.monto) },
+        {
+          compromisoPagoId: pago.compromisoPagoId,
+          referencia,
+          monto: dinero(pago.monto),
+          comprobante: numeroComprobante(comprobante),
+        },
         { requestId, entidad: 'Pago' },
       );
       return true;
@@ -417,6 +431,41 @@ export async function cancelarPago(id, actor, requestId) {
     entidadId: pago.id,
   });
   return { id: pago.id, estado: 'CANCELADO' };
+}
+
+// ------------------------------------------------------------------ US-009
+/**
+ * Comprobante en PDF de una boleta pagada. Lo descarga el apoderado a cargo
+ * del estudiante o el administrador; nadie más, aunque conozca el número.
+ */
+export async function obtenerComprobante(compromisoPagoId, actor) {
+  const boleta = await repository.buscarBoleta(compromisoPagoId);
+  if (!boleta) fail(404, 'REFERENCE_NOT_FOUND', 'La boleta no existe.');
+  if (!actor.roles.includes('ADMINISTRADOR')) {
+    const apoderado = await repository.buscarApoderadoDeUsuario(actor.id);
+    const aCargo = apoderado?.estudiantes.some(
+      (v) => v.estudianteId === boleta.planPago.matricula.estudianteId,
+    );
+    if (!aCargo)
+      fail(
+        403,
+        'FORBIDDEN',
+        'Solo puedes descargar los comprobantes de los estudiantes a tu cargo.',
+      );
+  }
+  const comprobante = await repository.buscarComprobanteDeBoleta(compromisoPagoId);
+  if (!comprobante)
+    fail(
+      409,
+      'BOLETA_NO_PAGADA',
+      'Esta boleta todavía no está pagada, así que aún no tiene comprobante.',
+    );
+  const numero = numeroComprobante(comprobante);
+  return {
+    numero,
+    nombreArchivo: `comprobante-${numero}.pdf`,
+    pdf: await generarComprobantePdf(comprobante),
+  };
 }
 
 export { RESULTADO };

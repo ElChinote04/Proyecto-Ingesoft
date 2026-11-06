@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import AppLayout from '../layouts/AppLayout';
 import { Feedback, Loading } from '../components/Feedback';
 import { api } from '../api/client';
+import DescargarComprobante from '../components/DescargarComprobante';
 
 // Estados en los que la pasarela todavía no ha dicho la última palabra.
 const EN_CURSO = ['INICIADO', 'PROCESANDO'];
@@ -160,7 +161,19 @@ export default function ResultadoPago({ id, cancelado = false }) {
         )}
 
         <div className="actions">
-          <button onClick={volver}>Volver a mis boletas</button>
+          {pago?.estado === 'CONFIRMADO' && pago.boleta.comprobante && (
+            <DescargarComprobante
+              boletaId={pago.boleta.id}
+              numero={pago.boleta.comprobante}
+              className=""
+            />
+          )}
+          <button
+            className={pago?.estado === 'CONFIRMADO' ? 'secondary' : undefined}
+            onClick={volver}
+          >
+            Volver a mis boletas
+          </button>
           {enCurso && checkout?.url && (
             <a className="button-link" href={checkout.url}>
               Retomar el pago
