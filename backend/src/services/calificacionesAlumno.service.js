@@ -1,6 +1,7 @@
 import * as repository from '../repositories/calificacionesAlumno.repository.js';
 import { registrarTransaccionCritica } from './auditoria.service.js';
 import { estaPublicada, exigirSeccionSinPublicar } from './publicacionSeccion.service.js';
+import { consolidar } from '../domain/consolidacion.js';
 import { AppError } from '../errors/AppError.js';
 
 const fail = (status, code, message) => {
@@ -10,41 +11,6 @@ const fail = (status, code, message) => {
 function requireDocente(actor) {
   if (!actor.docenteId)
     fail(403, 'NO_TEACHER_PROFILE', 'Tu cuenta no tiene un perfil docente asociado.');
-}
-
-const niveles = ['C', 'B', 'A', 'AD'];
-
-function metodoRegla(metodo) {
-  try {
-    return JSON.parse(metodo);
-  } catch {
-    return { estrategia: metodo, desempate: 'reciente', minimoEvidencias: 1 };
-  }
-}
-
-export function consolidar(items, metodo) {
-  if (!items.length) return null;
-  const regla = metodoRegla(metodo);
-  const suficientes = items.length >= (regla.minimoEvidencias || 1) ? items : [];
-  if (!suficientes.length) return null;
-  if (regla.estrategia === 'reciente') return suficientes.at(-1).nivelLogro;
-  if (regla.estrategia === 'prioridad') {
-    return suficientes.reduce(
-      (mejor, item) =>
-        niveles.indexOf(item.nivelLogro) > niveles.indexOf(mejor) ? item.nivelLogro : mejor,
-      suficientes[0].nivelLogro,
-    );
-  }
-
-  const conteos = new Map();
-  for (const item of suficientes)
-    conteos.set(item.nivelLogro, (conteos.get(item.nivelLogro) || 0) + 1);
-  const maximo = Math.max(...conteos.values());
-  const candidatas = niveles.filter((nivel) => conteos.get(nivel) === maximo);
-  if (candidatas.length === 1 || regla.desempate === 'alto')
-    return candidatas[candidatas.length - 1];
-  if (regla.desempate === 'bajo') return candidatas[0];
-  return [...suficientes].reverse().find((item) => candidatas.includes(item.nivelLogro)).nivelLogro;
 }
 
 export function agregarLogroConsolidado(calificaciones) {

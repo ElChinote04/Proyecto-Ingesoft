@@ -4,7 +4,7 @@ import request from 'supertest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
-import { consolidar } from '../src/services/calificacionesAlumno.service.js';
+import { consolidar } from '../src/domain/consolidacion.js';
 
 const base = '/api/v1';
 const clave = 'ClaveSegura123!';
@@ -240,13 +240,11 @@ test('CAA-07 guarda varias competencias de una vez y el apoderado las ve', async
   const publicacion = await prisma.publicacionSeccion.create({
     data: { bimestreId: bimestre.id, seccionId: seccion.id, publicadoPorId: 1 },
   });
-  const libreta = await apoderado
-    .get(`${base}/calificaciones?estudianteId=${alumno.id}`)
-    .expect(200);
-  assert.deepEqual(libreta.body.data[0].competencias.map(({ nivelLogro }) => nivelLogro).sort(), [
-    'A',
-    'B',
-  ]);
+  const libreta = await apoderado.get(`${base}/libretas/${matricula.id}`).expect(200);
+  const logros = libreta.body.data.areas
+    .find(({ id }) => id === matematica.id)
+    .competencias.map(({ logros: niveles }) => niveles[bimestre.numero]);
+  assert.deepEqual(logros.sort(), ['A', 'B']);
   await prisma.publicacionSeccion.delete({ where: { id: publicacion.id } });
 });
 

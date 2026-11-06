@@ -158,10 +158,10 @@ test('CAL-02 un apoderado sin hijos no ve ninguna nota', async () => {
   await apoderadoSinHijos.get(`${notas}/${notaHijo.id}`).expect(403);
 });
 
-test('CAL-03 un apoderado solo abre la nota de su hijo', async () => {
+test('CAL-03 un apoderado consulta las notas de su hijo solo en la libreta', async () => {
   await apoderado.get(detalles).expect(403);
   await apoderado.get(`${detalles}/${detalleHijo}`).expect(403);
-  await apoderado.get(`${notas}/${notaHijo.id}`).expect(200);
+  await apoderado.get(`${notas}/${notaHijo.id}`).expect(403);
   await apoderado.get(`${notas}/${notaOtroAlumno.id}`).expect(403);
 });
 
@@ -186,12 +186,8 @@ test('CAL-06 el administrador ve todas las notas', async () => {
   await admin.get(`${notas}/${notaOtroAlumno.id}`).expect(200);
 });
 
-test('CAL-07 el listado del apoderado solo trae a su hijo', async () => {
-  const lista = (await apoderado.get(notas).expect(200)).body.data;
-  assert.deepEqual(
-    lista.map((nota) => nota.id),
-    [notaHijo.id],
-  );
+test('CAL-07 el apoderado no lista notas fuera de la libreta', async () => {
+  await apoderado.get(notas).expect(403);
 });
 
 test('CAL-08 una nota que no existe responde 404', async () => {

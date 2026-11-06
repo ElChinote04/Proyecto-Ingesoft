@@ -164,8 +164,8 @@ y fuera de producción.
 
 Implementado: acceso y roles, gestión de usuarios, catálogos, estudiantes,
 matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos, la
-evidencia pedagógica de las notas (US-019) y la publicación de libretas por
-sección.
+evidencia pedagógica de las notas (US-019), la publicación de libretas por
+sección y la consulta de la libreta por competencias (US-020).
 
 Pendiente: evaluación por competencias, justificaciones de inasistencia,
 reportes, y la boleta en PDF (US-009).

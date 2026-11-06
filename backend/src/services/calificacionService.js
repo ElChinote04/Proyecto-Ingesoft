@@ -1,11 +1,7 @@
 import * as repository from '../repositories/calificacionRepository.js';
 import * as detalleRepository from '../repositories/calificacionCompetencia.js';
 import { agregarLogroConsolidado } from './calificacionesAlumno.service.js';
-import {
-  exigirMotivoSiPublicada,
-  exigirSeccionSinPublicar,
-  filtrarPublicadas,
-} from './publicacionSeccion.service.js';
+import { exigirMotivoSiPublicada, exigirSeccionSinPublicar } from './publicacionSeccion.service.js';
 import { AppError } from '../errors/AppError.js';
 
 const fail = (status, code, message) => {
@@ -86,25 +82,6 @@ export async function listarCalificaciones(user, estudianteId) {
         ...(requestedStudentId ? { matricula: { estudianteId: requestedStudentId } } : {}),
       }),
     );
-  if (user.roles.includes('ALUMNO')) {
-    if (!user.estudianteId || (requestedStudentId && requestedStudentId !== user.estudianteId))
-      fail(403, 'FORBIDDEN', 'Solo puedes consultar tus propias calificaciones.');
-    const calificaciones = await repository.listCalificaciones({
-      activo: true,
-      matricula: { estudianteId: user.estudianteId },
-    });
-    return agregarLogroConsolidado(await filtrarPublicadas(calificaciones));
-  }
-  if (user.roles.includes('APODERADO')) {
-    const matricula = {
-      ...(requestedStudentId ? { estudianteId: requestedStudentId } : {}),
-      estudiante: { apoderados: { some: { apoderadoId: user.apoderadoId, activo: true } } },
-    };
-    return agregarLogroConsolidado(
-      await filtrarPublicadas(await repository.listCalificaciones({ activo: true, matricula })),
-    );
-  }
-
   if (user.roles.includes('DOCENTE'))
     return agregarLogroConsolidado(
       await repository.listCalificaciones({
@@ -112,7 +89,7 @@ export async function listarCalificaciones(user, estudianteId) {
         ...(user.docenteId ? { asignacion: { docenteId: user.docenteId } } : {}),
       }),
     );
-  fail(403, 'FORBIDDEN', 'Tu usuario no tiene un rol académico habilitado.');
+  fail(403, 'FORBIDDEN', 'Las notas publicadas se consultan en la libreta.');
 }
 
 export async function obtenerCalificacion(id, user) {

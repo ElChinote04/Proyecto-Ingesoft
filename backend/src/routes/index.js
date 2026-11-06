@@ -4,7 +4,13 @@ import * as auth from '../controllers/authController.js';
 import * as session from '../controllers/sessionController.js';
 import * as health from '../controllers/healthController.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import {validate,loginSchema,idSchema,asistenciaSchema,reporteAsistenciaSchema} from '../validators/schemas.js';
+import {
+  validate,
+  loginSchema,
+  idSchema,
+  asistenciaSchema,
+  reporteAsistenciaSchema,
+} from '../validators/schemas.js';
 import { AppError } from '../errors/AppError.js';
 import { adminRouter } from './admin.js';
 import * as admin from '../controllers/adminController.js';
@@ -25,6 +31,7 @@ import { prisma } from '../config/database.js';
 import { asistenciaDocenteRouter } from './asistenciaDocenteRoutes.js';
 import { pagosRouter } from './pagos.js';
 import { erroresRouter } from './errores.js';
+import { libretasRouter } from './libretas.js';
 export const router = Router();
 const requirePortal = (req, res, next) => {
   if (!req.user.roles.some((role) => ['ALUMNO', 'APODERADO'].includes(role)))
@@ -53,6 +60,7 @@ router.use('/errores', erroresRouter);
 router.use('/cursos', cursoRouter);
 router.use('/competencias', competenciaRouter);
 router.use('/calificaciones', calificacionRouter);
+router.use('/libretas', libretasRouter);
 router.get('/bimestres', requireAuth, async (_req, res) => {
   const bimestres = await prisma.bimestreAcademico.findMany({
     where: { activo: true, anioAcademico: { activo: true } },
@@ -98,5 +106,5 @@ router.get(
   requireAuth,
   requireRole('ADMINISTRADOR'),
   validate(reporteAsistenciaSchema, 'query'),
-  session.report
+  session.report,
 );

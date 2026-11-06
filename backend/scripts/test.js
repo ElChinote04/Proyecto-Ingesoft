@@ -27,6 +27,7 @@ try {
     'calificaciones-alumno',
     'evidencias-calificacion',
     'publicacion-libretas',
+    'libretas',
     'errores',
   ]) {
     const databaseName = `sage_run_${randomBytes(8).toString('hex')}_test`;

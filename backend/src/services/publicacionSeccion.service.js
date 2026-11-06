@@ -51,18 +51,6 @@ export async function exigirMotivoSiPublicada({ bimestreId, seccionId, motivo },
     );
 }
 
-export async function filtrarPublicadas(calificaciones) {
-  const bimestreIds = [...new Set(calificaciones.map(({ bimestreId }) => bimestreId))];
-  if (!bimestreIds.length) return calificaciones;
-  const publicaciones = await repository.listPublicaciones(bimestreIds);
-  const permitidas = new Set(
-    publicaciones.map(({ bimestreId, seccionId }) => `${bimestreId}:${seccionId}`),
-  );
-  return calificaciones.filter(({ bimestreId, matricula }) =>
-    permitidas.has(`${bimestreId}:${matricula.seccionId}`),
-  );
-}
-
 async function exigirBimestre(id, db) {
   const bimestre = await repository.findBimestre(id, db);
   if (!bimestre?.activo) fail(404, 'TERM_NOT_FOUND', 'El bimestre no existe o está inactivo.');

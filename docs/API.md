@@ -421,6 +421,25 @@ Rutas exclusivas del rol ADMINISTRADOR. La publicación es por sección y bimest
 
 Con la sección publicada, `POST /calificaciones`, `POST /calificaciones-competencias` y `PUT /matriculas/:id/calificaciones` responden 409 `TERM_PUBLISHED`. El administrador conserva `PUT` y `DELETE` de `/calificaciones/:id` y `/calificaciones-competencias/:id`, pero debe enviar `motivo` (5 a 500 caracteres); sin él responden 400 `CORRECTION_REASON_REQUIRED`.
 
+## Libreta de notas (US-020)
+
+Solo la consultan el propio alumno y su apoderado con vínculo activo. Quien entra lo decide ese vínculo, no un rol: el administrador y el docente reciben 403, salvo que además sean apoderados del estudiante. El `:id` es el de la matrícula, porque hay una libreta por alumno y año.
+
+| Ruta              | Respuesta                                                                                                                                                                                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /libretas     | `[{ id, nombre, matriculas: [{ id, anioAcademico, seccion, activa }] }]`, con todos los años y el más reciente primero. Incluye matrículas inactivas                                                                                                             |
+| GET /libretas/:id | `{ institucion, estudiante: { apellidosNombres, codigo, dni }, matricula, periodos: [{ id, numero, nombre, publicado }], anualCompleta, areas: [{ id, codigo, nombre, calificacionFinal, competencias: [{ id, codigo, nombre, logros, calificacionAnual }] }] }` |
+
+`logros` tiene una clave por número de bimestre; un bimestre sin publicar siempre vale `null`, porque esas notas no salen del servidor. Áreas y competencias se ordenan por código.
+
+`calificacionAnual` y `calificacionFinal` son `null` hasta que se publican todos los bimestres (`anualCompleta`). La anual aplica la regla con la que se calificó el último bimestre del curso e ignora su mínimo. La final del área aplica esa estrategia a las notas anuales, y es `null` si falta alguna; como las competencias no tienen orden en el tiempo, `reciente` pasa a nivel más frecuente y su empate, al nivel más bajo.
+
+`institucion` sale de las variables `INSTITUCION_*`; sin valor, cada campo es `null`.
+
+Errores propios: 403 `FORBIDDEN` sin perfil de alumno ni apoderado, 403 `STUDENT_FORBIDDEN` si la matrícula es de un estudiante sin vínculo, y 404 `ENROLLMENT_NOT_FOUND`.
+
+`GET /calificaciones` y `GET /calificaciones/:id` responden 403 a alumnos y apoderados: las notas publicadas se consultan únicamente aquí.
+
 ## Portal privado y horario semanal
 
 ### GET /portal/estudiantes

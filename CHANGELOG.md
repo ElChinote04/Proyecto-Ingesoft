@@ -1,5 +1,21 @@
 # Registro de cambios
 
+## Libreta de notas por competencias (US-020) — 2026-11-06
+
+- Alumno y apoderado consultan la libreta bimestral y la anual en `Mis evaluaciones`, con el formato
+  del informe de progreso. La misma hoja se ve en pantalla y se imprime o guarda como PDF, sin el
+  menú de SAGE. El alumno también tiene el acceso desde el portal.
+- Nuevas rutas `GET /libretas` y `GET /libretas/:id`, solo para el alumno y su apoderado. Incluyen
+  años anteriores y matrículas inactivas.
+- La libreta anual muestra cada bimestre publicado. La calificación anual y la final del área
+  aparecen al publicar todos los bimestres.
+- Corregido: la vista por bimestre mostraba un consolidado de todos los bimestres y no el logro de
+  ese periodo.
+- `GET /calificaciones` se cierra a alumnos y apoderados, porque devolvía entidades completas, con
+  el DNI del docente incluido. Las pruebas CAL-03 y CAL-07 cambian en consecuencia.
+- `consolidar` pasa a `domain/consolidacion.js`. Nuevas variables `INSTITUCION_*`.
+- Nueva suite `libretas` (LIB-01 a LIB-29).
+
 ## Evidencia pedagógica y publicación de libretas (US-019) — 2026-11-06
 
 - El docente registra evidencia por nota desde Calificar alumno: título, descripción y hasta tres

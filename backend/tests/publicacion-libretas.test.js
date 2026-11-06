@@ -97,6 +97,13 @@ const notasDe = async (matriculaId) =>
       .get(`${base}/matriculas/${matriculaId}/calificaciones?bimestreId=${bimestre.id}`)
       .expect(200)
   ).body.data.cursos[0].competencias;
+const logrosPublicados = async (agente, alumno) => {
+  const { body } = await agente.get(`${base}/libretas/${alumno.matricula.id}`).expect(200);
+  return body.data.areas
+    .flatMap(({ competencias }) => competencias)
+    .flatMap(({ logros }) => Object.values(logros))
+    .filter(Boolean);
+};
 const registrarEvidencia = async (notaId) =>
   (
     await docente
@@ -282,8 +289,7 @@ test('PUB-05 no se exige una matrícula ni una competencia inactiva', async () =
 });
 
 test('PUB-06 una sección completa se publica una sola vez y su libreta se ve', async () => {
-  const antes = await apoderado.get(`${base}/calificaciones`).expect(200);
-  assert.equal(antes.body.data.length, 0);
+  assert.equal((await logrosPublicados(apoderado, alumnoA)).length, 0);
   for (const { calificacionCompetenciaId } of await notasDe(alumnoA.matricula.id))
     await registrarEvidencia(calificacionCompetenciaId);
   assert.equal((await filaDe(seccionA)).estado, 'LISTA');
@@ -294,8 +300,7 @@ test('PUB-06 una sección completa se publica una sola vez y su libreta se ve', 
   assert.equal(fila.estado, 'PUBLICADA');
   assert.ok(fila.publicadoEn);
 
-  const libreta = await apoderado.get(`${base}/calificaciones`).expect(200);
-  assert.equal(libreta.body.data[0].competencias.length, 2);
+  assert.equal((await logrosPublicados(apoderado, alumnoA)).length, 2);
 
   const repetida = await publicar(seccionA).expect(200);
   assert.equal(repetida.body.data.yaPublicado, true);
@@ -319,8 +324,7 @@ test('PUB-08 otra sección no ve notas hasta publicarse la suya', async () => {
   await calificar(alumnoB.matricula.id, [
     { competenciaId: competencia.id, nivelLogro: 'C' },
   ]).expect(200);
-  const libreta = await apoderadoOtro.get(`${base}/calificaciones`).expect(200);
-  assert.equal(libreta.body.data.length, 0);
+  assert.equal((await logrosPublicados(apoderadoOtro, alumnoB)).length, 0);
 });
 
 test('PUB-09 una sección de otro año no se publica', async () => {
