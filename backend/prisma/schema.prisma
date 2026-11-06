@@ -82,6 +82,8 @@ enum NombreRol {
 
 enum EstadoBoleta {
   PENDIENTE
+  /// US-010: boleta fraccionada en cuotas cuyo total todavía no se completa.
+  PARCIAL
   PAGADA
   ANULADA
 }
@@ -355,23 +357,31 @@ model PlanPago {
 /// Boleta de pensión emitida a partir del plan (US-006, US-007A).
 /// El estado MOROSA no se almacena: se deriva de fechaVencimiento al consultar.
 model CompromisoPago {
-  id               Int           @id @default(autoincrement())
+  id               Int              @id @default(autoincrement())
   planPagoId       Int
-  planPago         PlanPago      @relation(fields: [planPagoId], references: [id])
+  planPago         PlanPago         @relation(fields: [planPagoId], references: [id])
   numeroCuota      Int
-  concepto         String        @db.VarChar(120)
-  periodo          String        @db.VarChar(7)
-  monto            Decimal       @db.Decimal(10, 2)
-  fechaVencimiento DateTime      @db.Date
-  estado           EstadoBoleta  @default(PENDIENTE)
+  concepto         String           @db.VarChar(120)
+  periodo          String           @db.VarChar(7)
+  monto            Decimal          @db.Decimal(10, 2)
+  fechaVencimiento DateTime         @db.Date
+  estado           EstadoBoleta     @default(PENDIENTE)
   pagadaEn         DateTime?
-  creadoEn         DateTime      @default(now())
-  modificadoEn     DateTime      @updatedAt
+  creadoEn         DateTime         @default(now())
+  modificadoEn     DateTime         @updatedAt
   pagos            Pago[]
   /// Uno vigente como máximo (índice parcial en SQL); los anulados se conservan (US-013).
   comprobantes     Comprobante[]
+  /// US-010: una boleta fraccionada se reemplaza, para el cobro, por sus
+  /// fracciones; cada fracción es una boleta que se paga y se comprueba sola.
+  boletaOrigenId   Int?
+  boletaOrigen     CompromisoPago?  @relation("Fraccionamiento", fields: [boletaOrigenId], references: [id])
+  fracciones       CompromisoPago[] @relation("Fraccionamiento")
+  /// 0 en la boleta original; 1..N en cada fracción.
+  numeroFraccion   Int              @default(0)
 
-  @@unique([planPagoId, numeroCuota])
+  @@unique([planPagoId, numeroCuota, numeroFraccion])
+  @@index([boletaOrigenId])
   @@index([estado, fechaVencimiento])
 }
 

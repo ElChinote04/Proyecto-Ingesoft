@@ -40,6 +40,16 @@ pagosRouter.get(
   controller.descargarComprobante,
 );
 
+// US-010 — pago fraccionado de una boleta pendiente.
+pagosRouter.post(
+  '/compromisos-pago/:id/fracciones',
+  requireAuth,
+  requireRole('ADMINISTRADOR'),
+  validate(idSchema, 'params'),
+  validate(schemas.fraccionarSchema),
+  controller.fraccionarBoleta,
+);
+
 // US-007B — iniciar y consultar el pago de una boleta.
 pagosRouter.post(
   '/pagos',

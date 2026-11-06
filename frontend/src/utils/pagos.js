@@ -33,8 +33,10 @@ export const nombreDe = (persona) => `${persona.nombres} ${persona.apellidos}`;
 
 // El concepto guardado ya lleva el periodo («Pensión 2026-10»), que las tablas
 // muestran en su propia columna.
+// US-010: una cuota de una boleta fraccionada indica qué parte es.
 export const conceptoDe = (boleta) =>
-  `${boleta.concepto.replace(` ${boleta.periodo}`, '')} · cuota ${boleta.numeroCuota}`;
+  `${boleta.concepto.replace(` ${boleta.periodo}`, '')} · cuota ${boleta.numeroCuota}` +
+  (boleta.numeroFraccion ? ` · parte ${boleta.numeroFraccion} de ${boleta.totalFracciones}` : '');
 
 /** Convierte los filtros elegidos en parámetros de consulta, omitiendo los vacíos. */
 export const consultaDeFiltros = (filtros) =>

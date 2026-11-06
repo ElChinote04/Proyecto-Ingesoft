@@ -173,6 +173,14 @@ muestra como `B001-00000001`). El PDF se genera al descargarlo con `pdfkit` en
 descargan el apoderado a cargo y el administrador. Es un comprobante interno,
 no el electrónico de SUNAT.
 
+**Pago en cuotas (US-010).** El administrador divide una boleta pendiente en
+2 a 6 boletas hijas (`boletaOrigenId`, `numeroFraccion` de 1 a N; la original
+tiene 0). La original queda `PARCIAL` y ya no se cobra entera: se cobran sus
+cuotas, cada una con su comprobante, y pasa a `PAGADA` con la última. Por eso
+los reportes excluyen las boletas que tienen fracciones (`fracciones: { none:
+{} }`) para no contar dos veces el mismo dinero. La regla del reparto está en
+`domain/fraccionamiento.js`.
+
 **Cobranza (US-008, US-011, US-012) y anulación (US-013).** Las reglas puras
 están en `domain/cobranza.js` y la exportación en `domain/reportePagos.js`
 (PDF con `pdfkit`, Excel con `write-excel-file`). Anular un pago no borra nada:

@@ -1356,6 +1356,23 @@ a {
 .pago-en-curso {
   white-space: nowrap;
 }
+/* US-010: vista previa de las cuotas al fraccionar una boleta. */
+.fracciones-vista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.fracciones-vista li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+}
+.fracciones-vista li + li {
+  border-top: 1px solid var(--border);
+}
 /* US-009: fecha de pago y descarga del comprobante en la misma celda. */
 .boleta-pagada,
 .descargar-comprobante {

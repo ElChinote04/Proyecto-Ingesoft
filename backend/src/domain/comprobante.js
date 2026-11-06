@@ -60,7 +60,9 @@ export function datosComprobante(comprobante) {
     documentoEstudiante: estudiante.numeroDocumento,
     aula: `${matricula.seccion.grado.nombre} ${matricula.seccion.nombre} · año ${matricula.anioAcademico.codigo}`,
     // El concepto guardado ya lleva el periodo («Pensión 2026-04»), que va en su propia fila.
-    concepto: `${boleta.concepto.replace(` ${boleta.periodo}`, '')} · cuota ${boleta.numeroCuota}`,
+    concepto:
+      `${boleta.concepto.replace(` ${boleta.periodo}`, '')} · cuota ${boleta.numeroCuota}` +
+      (boleta.numeroFraccion ? ` · parte ${boleta.numeroFraccion}` : ''),
     periodo: periodoLargo(boleta.periodo),
     monto: soles(pago.monto),
     medio:

@@ -30,6 +30,9 @@ const boletaInclude = {
   pagos: { where: { estado: { in: EN_CURSO } }, select: { id: true, iniciadoPorId: true } },
   // El comprobante vigente; los de pagos anulados (US-013) se conservan aparte.
   comprobantes: { where: { anuladoEn: null }, select: { id: true, serie: true, pagoId: true } },
+  // US-010: avance de una boleta fraccionada y total de partes de una fracción.
+  fracciones: { select: { estado: true, monto: true } },
+  boletaOrigen: { select: { _count: { select: { fracciones: true } } } },
   planPago: {
     include: {
       matricula: {
@@ -69,7 +72,8 @@ export async function listarBoletas(
       skip: (pagina - 1) * limite,
       take: limite,
       include: boletaInclude,
-      orderBy: [{ periodo: 'desc' }, { id: 'desc' }],
+      // Cada fracción aparece junto a la boleta de la que proviene.
+      orderBy: [{ periodo: 'desc' }, { numeroCuota: 'desc' }, { numeroFraccion: 'asc' }],
     }),
   ]);
   return { total, registros };
@@ -80,6 +84,45 @@ export const buscarBoleta = (id, db = prisma) =>
 
 export const marcarBoletaPagada = (id, fecha, db = prisma) =>
   db.compromisoPago.update({ where: { id }, data: { estado: 'PAGADA', pagadaEn: fecha } });
+
+/**
+ * US-010: bloquea la boleta original mientras se confirma (o anula) el pago de
+ * una de sus fracciones. Si dos fracciones se confirman a la vez, la segunda
+ * espera y ve la primera ya pagada, así la original no queda PARCIAL para siempre.
+ */
+export const bloquearBoleta = (id, db) =>
+  db.$queryRaw`SELECT id FROM "CompromisoPago" WHERE id = ${id} FOR UPDATE`;
+
+export const contarFraccionesSinPagar = (boletaOrigenId, db = prisma) =>
+  db.compromisoPago.count({ where: { boletaOrigenId, estado: { not: 'PAGADA' } } });
+
+/** Pasa la boleta de PENDIENTE a PARCIAL; 0 si otra solicitud se adelantó. */
+export const marcarBoletaParcial = async (id, db) =>
+  (
+    await db.compromisoPago.updateMany({
+      where: { id, estado: 'PENDIENTE' },
+      data: { estado: 'PARCIAL' },
+    })
+  ).count;
+
+/** US-013 + US-010: si se anula el pago de una fracción, la original vuelve a PARCIAL. */
+export const reabrirBoletaFraccionada = (id, db) =>
+  db.compromisoPago.updateMany({
+    where: { id, estado: 'PAGADA' },
+    data: { estado: 'PARCIAL', pagadaEn: null },
+  });
+
+export const crearFracciones = (boleta, fracciones, db) =>
+  db.compromisoPago.createManyAndReturn({
+    data: fracciones.map((f) => ({
+      planPagoId: boleta.planPagoId,
+      numeroCuota: boleta.numeroCuota,
+      concepto: boleta.concepto,
+      periodo: boleta.periodo,
+      boletaOrigenId: boleta.id,
+      ...f,
+    })),
+  });
 
 // ------------------------------------------------------------ comprobantes (US-009)
 export const crearComprobante = ({ pagoId, compromisoPagoId, emitidoEn }, db = prisma) =>
@@ -215,11 +258,16 @@ export const listarBoletasMorosas = (filtros, morosaAntesDe) =>
     orderBy: { fechaVencimiento: 'asc' },
   });
 
-/** Boletas no anuladas que vencen en el rango, para el reporte de pagos. */
+/**
+ * Boletas no anuladas que vencen en el rango, para el reporte de pagos. Una
+ * boleta fraccionada (US-010) no entra: se cuentan sus fracciones, que son las
+ * que se cobran, para no sumar dos veces el mismo dinero.
+ */
 export const listarBoletasDelPeriodo = (filtros, desde, hasta) =>
   prisma.compromisoPago.findMany({
     where: {
       estado: { in: ['PENDIENTE', 'PAGADA'] },
+      fracciones: { none: {} },
       fechaVencimiento: { gte: desde, lte: hasta },
       ...filtroMatricula(filtros),
     },
