@@ -19,6 +19,9 @@ const schema = z.object({
   INITIAL_SETUP_KEY: vacioEsAusente(z.string().min(32).optional()),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().default('127.0.0.1'),
+  // Saltos de proxy de confianza delante del servidor (CloudFront y balanceador
+  // en AWS = 2). Con 0 se ignora X-Forwarded-For, que el cliente puede falsificar.
+  TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
   DATABASE_URL: z.url(),
   FRONTEND_URL: z.url().default('http://localhost:5173'),
   JWT_SECRET: z

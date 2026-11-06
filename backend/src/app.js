@@ -9,6 +9,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { AppError } from './errors/AppError.js';
 export const app = express();
 app.disable('x-powered-by');
+// Sin esto, detrás de un proxy req.ip sería la del proxy para todos los usuarios:
+// el límite de intentos de acceso se compartiría y la auditoría perdería la IP real.
+app.set('trust proxy', env.TRUST_PROXY);
 app.use((req, res, next) => {
   req.requestId = randomUUID();
   res.set('X-Request-Id', req.requestId);

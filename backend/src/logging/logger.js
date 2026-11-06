@@ -21,5 +21,8 @@ export const logger = winston.createLogger({
       maxsize: 5_000_000,
       maxFiles: 3,
     }),
+    // En un contenedor los archivos se pierden en cada despliegue; la salida
+    // estándar es lo que recoge la plataforma (CloudWatch Logs en AWS).
+    ...(env.NODE_ENV === 'production' ? [new winston.transports.Console()] : []),
   ],
 });

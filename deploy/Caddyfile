@@ -1,0 +1,15 @@
+# Caddy obtiene y renueva el certificado HTTPS de SAGE_DOMINIO por su cuenta.
+# Como no declara proxies de confianza, descarta el X-Forwarded-For que mande el
+# cliente y lo reemplaza por la IP real: por eso el backend usa TRUST_PROXY=1.
+{$SAGE_DOMINIO} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	handle {
+		root * /srv
+		file_server
+	}
+}
