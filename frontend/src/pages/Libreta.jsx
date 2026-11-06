@@ -37,8 +37,8 @@ export default function Evaluaciones() {
       .flatMap((grade) => (grade.competencias ?? []).map((item) => ({
         curso: grade.asignacion?.curso?.nombre ?? 'Curso',
         competencia: item.competencia?.nombre ?? 'Competencia',
-        logro: item.nivelLogro,
-        progreso: progressByLevel[item.nivelLogro] ?? 'Sin progreso',
+        logro: item.logroConsolidado,
+        progreso: progressByLevel[item.logroConsolidado] ?? 'Sin progreso',
       }))),
     [grades.data, selectedPeriodId],
   );

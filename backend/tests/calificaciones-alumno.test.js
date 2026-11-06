@@ -4,6 +4,7 @@ import request from 'supertest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
+import { consolidar } from '../src/services/calificacionesAlumno.service.js';
 
 const base = '/api/v1';
 const clave = 'ClaveSegura123!';
@@ -132,6 +133,32 @@ before(async () => {
   });
 });
 after(() => prisma.$disconnect());
+
+test('US-018 consolida las estrategias reciente, frecuencia y prioridad', () => {
+  const niveles = (valores) => valores.map((nivelLogro) => ({ nivelLogro }));
+
+  assert.equal(
+    consolidar(
+      niveles(['C', 'B', 'A']),
+      JSON.stringify({ estrategia: 'reciente', minimoEvidencias: 3 }),
+    ),
+    'A',
+  );
+  assert.equal(
+    consolidar(
+      niveles(['C', 'B', 'B']),
+      JSON.stringify({ estrategia: 'frecuencia', minimoEvidencias: 3 }),
+    ),
+    'B',
+  );
+  assert.equal(
+    consolidar(
+      niveles(['C', 'B', 'AD']),
+      JSON.stringify({ estrategia: 'prioridad', minimoEvidencias: 3 }),
+    ),
+    'AD',
+  );
+});
 
 test('CAA-01 un docente sin sesiones generadas ve sus salones', async () => {
   const sesiones = await docente.get(`${base}/sesiones`).expect(200);
