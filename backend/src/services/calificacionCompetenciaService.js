@@ -15,10 +15,17 @@ async function validateContext(input, db) {
   if (competencia.cursoId !== calificacion.asignacion.cursoId) fail(400, 'INVALID_COMPETENCY_CONTEXT', 'La competencia no pertenece al curso de la calificación.');
 }
 
-export async function listarDetalles() { return repository.listCalificacionesCompetencia({ activo: true }); }
-export async function obtenerDetalle(id) {
+export async function listarDetalles(user) {
+  if (user.roles.includes('ADMINISTRADOR')) return repository.listCalificacionesCompetencia({ activo: true });
+  if (user.roles.includes('DOCENTE') && user.docenteId) return repository.listCalificacionesCompetencia({ activo: true, calificacion: { asignacion: { docenteId: user.docenteId } } });
+  fail(403, 'FORBIDDEN', 'No tienes permiso para consultar estas calificaciones.');
+}
+export async function obtenerDetalle(id, user) {
   const item = await repository.findCalificacionCompetencia(id);
   if (!item?.activo) fail(404, 'GRADE_DETAIL_NOT_FOUND', 'El detalle de calificación no existe o está inactivo.');
+  const esAdministrador = user.roles.includes('ADMINISTRADOR');
+  const esSuDocente = user.roles.includes('DOCENTE') && user.docenteId === item.calificacion.asignacion.docenteId;
+  if (!esAdministrador && !esSuDocente) fail(403, 'FORBIDDEN', 'No tienes permiso para consultar esta calificación.');
   return item;
 }
 

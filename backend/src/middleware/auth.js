@@ -17,6 +17,15 @@ export async function requireAuth(req, _res, next) {
     );
   next();
 }
+export const requirePermiso = (permiso) => (req, _res, next) => {
+  if (!req.user?.permisos.includes(permiso))
+    throw new AppError(
+      403,
+      'FORBIDDEN',
+      'Tu usuario no tiene permiso para realizar esta operación.',
+    );
+  next();
+};
 export const requireRole = (role) => (req, _res, next) => {
   if (!req.user?.roles.includes(role))
     throw new AppError(

@@ -347,6 +347,15 @@ Un solapamiento de docente, aula o sección dentro del mismo año académico dev
 
 POST `/admin/sesiones`: `{ "bloqueId": 1, "fecha": "2027-10-01" }`. Devuelve la sesión creada sin contador de edición. El año y día deben coincidir con el bloque; las horas se derivan del bloque. Errores: 400 YEAR_MISMATCH, DAY_MISMATCH, INVALID_TEACHER o VALIDATION_ERROR; 409 DUPLICATE_CLASS para bloque/fecha repetidos. No recibe ni permite sobrescribir docente/horas desde el cliente.
 
+### Log de errores
+
+GET `/errores?severidad&codigo&usuario&desde&hasta&pagina&limite`: requiere el permiso
+`errores.consultar`. Todos los filtros son opcionales; `severidad` ∈ ERROR|ADVERTENCIA;
+`desde`/`hasta` son fechas `YYYY-MM-DD` de Lima (ambas inclusive); `limite` ∈ 10|25|50 (10 por
+defecto). Responde `{ total, pagina, limite, codigos[], registros[{ fechaHora, severidad, modulo,
+codigo, descripcion, usuario, requestId }] }`, del más reciente al más antiguo. Se lee de los
+archivos de log del servidor y no hay rutas para alterarlos.
+
 ### Auditoría
 
 GET `/admin/auditoria?tipoEvento&entidad&entidadId&usuarioId&resultado&desde&hasta&pagina&limite`:

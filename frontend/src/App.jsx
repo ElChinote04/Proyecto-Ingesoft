@@ -15,6 +15,7 @@ import ResultadoPago from './pages/ResultadoPago';
 import CambiarContrasena from './pages/CambiarContrasena';
 import Gestion from './pages/ReglasConsolidacion';
 import Libreta from './pages/Libreta';
+import LogErrores from './pages/LogErrores';
 import './styles/app.css';
 function Screens() {
   const { user, loading, startupError, restore } = useAuth();
@@ -69,6 +70,7 @@ function Screens() {
     user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol))
   )
     return <Libreta key={perfiles} />;
+  if (route === '/errores' && user.permisos.includes('errores.consultar')) return <LogErrores />;
   if (
     user.roles.includes('ADMINISTRADOR') &&
     (route.startsWith('/admin') || !user.roles.includes('DOCENTE'))

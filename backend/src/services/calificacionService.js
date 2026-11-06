@@ -274,10 +274,13 @@ export async function guardarCalificacionesMasivas(input, actor, requestId) {
   });
 }
 
-export async function obtenerCalificacion(id) {
+export async function obtenerCalificacion(id, user) {
   const calificacion = await repository.findCalificacion(id);
   if (!calificacion?.activo)
     fail(404, 'GRADE_NOT_FOUND', 'La calificación no existe o está inactiva.');
+  const permitidas = await listarCalificaciones(user, calificacion.matricula.estudianteId);
+  if (!permitidas.some((item) => item.id === id))
+    fail(403, 'FORBIDDEN', 'No tienes permiso para consultar esta calificación.');
   return calificacion;
 }
 

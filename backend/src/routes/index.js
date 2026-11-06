@@ -22,6 +22,7 @@ import { calificacionCompetenciaRouter } from './calificacionCompetencia.js';
 import { prisma } from '../config/database.js';
 import { asistenciaDocenteRouter } from './asistenciaDocenteRoutes.js';
 import { pagosRouter } from './pagos.js';
+import { erroresRouter } from './errores.js';
 export const router = Router();
 const requirePortal = (req, res, next) => {
   if (!req.user.roles.some((role) => ['ALUMNO', 'APODERADO'].includes(role)))
@@ -46,6 +47,7 @@ router.get('/health', health.check);
 router.get('/instalacion', admin.status);
 router.post('/instalacion', loginLimit, validate(setupSchema), admin.initialize);
 router.use('/admin', adminRouter);
+router.use('/errores', erroresRouter);
 router.use('/cursos', cursoRouter);
 router.use('/competencias', competenciaRouter);
 router.use('/calificaciones', calificacionRouter);
