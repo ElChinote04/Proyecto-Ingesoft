@@ -28,6 +28,7 @@ const EN_CURSO = ['INICIADO', 'PROCESANDO'];
 const boletaInclude = {
   // Como mucho uno, por el índice único parcial sobre los pagos en curso.
   pagos: { where: { estado: { in: EN_CURSO } }, select: { id: true, iniciadoPorId: true } },
+  comprobante: { select: { id: true, serie: true } },
   planPago: {
     include: {
       matricula: {
@@ -78,6 +79,34 @@ export const buscarBoleta = (id, db = prisma) =>
 
 export const marcarBoletaPagada = (id, fecha, db = prisma) =>
   db.compromisoPago.update({ where: { id }, data: { estado: 'PAGADA', pagadaEn: fecha } });
+
+// ------------------------------------------------------------ comprobantes (US-009)
+export const crearComprobante = ({ pagoId, compromisoPagoId, emitidoEn }, db = prisma) =>
+  db.comprobante.create({ data: { pagoId, compromisoPagoId, emitidoEn } });
+
+/** Todo lo que se imprime en el comprobante, en una sola consulta. */
+export const buscarComprobanteDeBoleta = (compromisoPagoId, db = prisma) =>
+  db.comprobante.findUnique({
+    where: { compromisoPagoId },
+    include: {
+      pago: { include: { iniciadoPor: { include: { persona: true } } } },
+      compromisoPago: {
+        include: {
+          planPago: {
+            include: {
+              matricula: {
+                include: {
+                  anioAcademico: true,
+                  seccion: { include: { grado: true } },
+                  estudiante: { include: { persona: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
 
 // ------------------------------------------------------------ apoderado
 export const buscarApoderadoDeUsuario = (usuarioId, db = prisma) =>

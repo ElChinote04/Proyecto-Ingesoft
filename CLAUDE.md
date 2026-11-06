@@ -163,10 +163,18 @@ y fuera de producción.
 ## Estado actual
 
 Implementado: acceso y roles, gestión de usuarios, catálogos, estudiantes,
-matrícula, horarios, sesiones, asistencia, auditoría y el módulo de pagos.
+matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos y el
+comprobante de pago en PDF (US-009).
 
-Pendiente: evaluación por competencias, justificaciones de inasistencia,
-reportes, y la boleta en PDF (US-009).
+**Comprobante (US-009).** Se emite en la misma transacción que confirma el pago
+(tabla `Comprobante`, una fila por boleta pagada; el id es el correlativo y se
+muestra como `B001-00000001`). El PDF se genera al descargarlo con `pdfkit` en
+`domain/comprobante.js`, desde `GET /compromisos-pago/:id/comprobante`; lo
+descargan el apoderado a cargo y el administrador. Es un comprobante interno,
+no el electrónico de SUNAT.
+
+Pendiente: evaluación por competencias, justificaciones de inasistencia y
+reportes.
 
 ## Cosas que no hay que hacer
 

@@ -527,3 +527,80 @@ test('QAS008: dos notificaciones simultáneas confirman y auditan una sola vez',
   });
   assert.equal(auditoria, 1);
 });
+
+// ------------------------------------------------------------------- US-009
+// supertest no acumula cuerpos binarios por defecto: este parser los junta en un Buffer.
+const comoBuffer = (res, cb) => {
+  const partes = [];
+  res.on('data', (parte) => partes.push(parte));
+  res.on('end', () => cb(null, Buffer.concat(partes)));
+};
+
+const descargar = (agente, boletaId) =>
+  agente.get(`${base}/compromisos-pago/${boletaId}/comprobante`).buffer(true).parse(comoBuffer);
+
+test('US-009: toda boleta pagada tiene un comprobante y el historial muestra su número', async () => {
+  const pagadas = await prisma.compromisoPago.findMany({
+    where: { estado: 'PAGADA' },
+    include: { comprobante: true },
+  });
+  assert.ok(pagadas.length > 0, 'las pruebas anteriores dejan boletas pagadas');
+  assert.ok(
+    pagadas.every((b) => b.comprobante),
+    'ninguna boleta pagada queda sin comprobante',
+  );
+
+  const respuesta = await apoderado.get(`${base}/compromisos-pago?estado=PAGADA`).expect(200);
+  for (const boleta of respuesta.body.data.boletas)
+    assert.match(boleta.comprobante, /^B001-\d{8}$/);
+  const pendientes = await apoderado.get(`${base}/compromisos-pago?estado=PENDIENTE`).expect(200);
+  assert.ok(pendientes.body.data.boletas.every((b) => b.comprobante === null));
+});
+
+test('US-009: el apoderado descarga el comprobante en PDF', async () => {
+  const pagada = await prisma.compromisoPago.findFirst({
+    where: { estado: 'PAGADA', planPago: { matriculaId: matricula.id } },
+    include: { comprobante: true },
+  });
+  const respuesta = await descargar(apoderado, pagada.id).expect(200);
+  assert.equal(respuesta.headers['content-type'], 'application/pdf');
+  const numero = `B001-${String(pagada.comprobante.id).padStart(8, '0')}`;
+  assert.match(respuesta.headers['content-disposition'], new RegExp(`comprobante-${numero}\\.pdf`));
+  assert.equal(respuesta.body.subarray(0, 5).toString(), '%PDF-');
+  assert.ok(respuesta.body.length > 1000);
+});
+
+test('US-009: el administrador también puede descargarlo', async () => {
+  const pagada = await prisma.compromisoPago.findFirst({ where: { estado: 'PAGADA' } });
+  const respuesta = await descargar(admin, pagada.id).expect(200);
+  assert.equal(respuesta.body.subarray(0, 5).toString(), '%PDF-');
+});
+
+test('US-009: otro apoderado no puede descargar un comprobante ajeno', async () => {
+  const pagada = await prisma.compromisoPago.findFirst({
+    where: { estado: 'PAGADA', planPago: { matriculaId: matricula.id } },
+  });
+  const respuesta = await otroApoderado
+    .get(`${base}/compromisos-pago/${pagada.id}/comprobante`)
+    .expect(403);
+  assert.equal(respuesta.body.error.code, 'FORBIDDEN');
+  await request(app).get(`${base}/compromisos-pago/${pagada.id}/comprobante`).expect(401);
+});
+
+test('US-009: una boleta sin pagar no tiene comprobante', async () => {
+  const pendiente = await prisma.compromisoPago.findFirst({
+    where: { estado: 'PENDIENTE', planPago: { matriculaId: matricula.id } },
+  });
+  const respuesta = await apoderado
+    .get(`${base}/compromisos-pago/${pendiente.id}/comprobante`)
+    .expect(409);
+  assert.equal(respuesta.body.error.code, 'BOLETA_NO_PAGADA');
+  await apoderado.get(`${base}/compromisos-pago/999999/comprobante`).expect(404);
+  await apoderado.get(`${base}/compromisos-pago/abc/comprobante`).expect(400);
+});
+
+test('US-009: las notificaciones repetidas no emiten un segundo comprobante', async () => {
+  const pagadas = await prisma.compromisoPago.count({ where: { estado: 'PAGADA' } });
+  const comprobantes = await prisma.comprobante.count();
+  assert.equal(comprobantes, pagadas, 'exactamente un comprobante por boleta pagada');
+});

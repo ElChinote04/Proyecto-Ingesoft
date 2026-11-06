@@ -30,6 +30,14 @@ pagosRouter.get(
   controller.listarBoletas,
 );
 
+// US-009 — comprobante en PDF de una boleta pagada.
+pagosRouter.get(
+  '/compromisos-pago/:id/comprobante',
+  requireAuth,
+  validate(idSchema, 'params'),
+  controller.descargarComprobante,
+);
+
 // US-007B — iniciar y consultar el pago de una boleta.
 pagosRouter.post(
   '/pagos',
