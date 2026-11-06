@@ -84,3 +84,14 @@ export const anularPago = async (req, res) =>
       req.requestId,
     ),
   });
+
+/** US-010: fraccionar una boleta pendiente en cuotas. */
+export const fraccionarBoleta = async (req, res) =>
+  res.status(201).json({
+    data: await service.fraccionarBoleta(
+      req.validated.params.id,
+      req.validated.body,
+      req.user,
+      req.requestId,
+    ),
+  });

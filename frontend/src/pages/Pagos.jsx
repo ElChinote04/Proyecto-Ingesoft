@@ -4,6 +4,7 @@ import { Feedback, Loading, ResourceError } from '../components/Feedback';
 import TablaDatos from '../components/TablaDatos';
 import DescargarComprobante from '../components/DescargarComprobante';
 import AnularPago from '../components/AnularPago';
+import FraccionarBoleta from '../components/FraccionarBoleta';
 import AvisosVencimiento from '../components/AvisosVencimiento';
 import MorosidadPagos from '../components/MorosidadPagos';
 import ReportePagos from '../components/ReportePagos';
@@ -24,6 +25,8 @@ import {
 const ESTADOS = {
   PENDIENTE: { etiqueta: 'Pendiente', clase: 'warning' },
   MOROSA: { etiqueta: 'Morosa', clase: 'danger' },
+  // US-010: boleta fraccionada cuyo total todavía no se completa.
+  PARCIAL: { etiqueta: 'Parcial', clase: 'info' },
   PAGADA: { etiqueta: 'Pagada', clase: 'success' },
   ANULADA: { etiqueta: 'Anulada', clase: 'info' },
 };
@@ -142,6 +145,8 @@ function Boletas() {
   const [porPagar, setPorPagar] = useState(null);
   const [porAnular, setPorAnular] = useState(null);
   const [anulada, setAnulada] = useState(null);
+  const [porFraccionar, setPorFraccionar] = useState(null);
+  const [fraccionada, setFraccionada] = useState(null);
   const [iniciando, setIniciando] = useState(false);
   const [error, setError] = useState('');
   // El administrador consulta los cronogramas emitidos (US-006) sin poder
@@ -229,6 +234,27 @@ function Boletas() {
           El pago de {conceptoDe(anulada)} de {nombreDe(anulada.estudiante)} quedó anulado y
           registrado en la auditoría. La boleta vuelve a estar pendiente de pago.
         </Feedback>
+      )}
+
+      {fraccionada && (
+        <Feedback intent="success" title="Boleta dividida en cuotas">
+          La boleta de {nombreDe(fraccionada.estudiante)} quedó dividida en cuotas. El apoderado ya
+          puede pagarlas por separado.
+        </Feedback>
+      )}
+
+      {porFraccionar && (
+        <FraccionarBoleta
+          boleta={porFraccionar}
+          descripcion={`${conceptoDe(porFraccionar)} de ${nombreDe(porFraccionar.estudiante)}`}
+          onClose={() => setPorFraccionar(null)}
+          onSaved={() => {
+            setFraccionada(porFraccionar);
+            setPorFraccionar(null);
+            resumen.retry();
+            listado.retry();
+          }}
+        />
       )}
 
       {porAnular && (
@@ -331,7 +357,17 @@ function Boletas() {
                         <span key="estado" className={`badge ${estilo.clase}`}>
                           {estilo.etiqueta}
                         </span>,
-                        boleta.pagadaEn ? (
+                        boleta.estado === 'PARCIAL' ? (
+                          // US-010: se paga por cuotas; aquí solo se muestra el avance.
+                          <span key="parcial" className="muted">
+                            En cuotas · pagado {soles(boleta.montoPagado ?? 0)} de{' '}
+                            {soles(boleta.monto)}
+                          </span>
+                        ) : boleta.pagadaEn && boleta.montoPagado !== null ? (
+                          <span key="pagada-en-cuotas" className="muted">
+                            Pagada en cuotas el {fechaDeInstante(boleta.pagadaEn)}
+                          </span>
+                        ) : boleta.pagadaEn ? (
                           <span key="pagada" className="boleta-pagada">
                             <span className="muted">
                               Pagada el {fechaDeInstante(boleta.pagadaEn)}
@@ -367,6 +403,18 @@ function Boletas() {
                         ) : PAGABLES.includes(boleta.estado) && puedePagar ? (
                           <button key="pagar" onClick={() => abrirPago(boleta)}>
                             Pagar
+                          </button>
+                        ) : PAGABLES.includes(boleta.estado) && !boleta.boletaOrigenId ? (
+                          // US-010: el administrador divide la boleta en cuotas.
+                          <button
+                            key="fraccionar"
+                            className="secondary"
+                            onClick={() => {
+                              setFraccionada(null);
+                              setPorFraccionar(boleta);
+                            }}
+                          >
+                            Pagar en cuotas
                           </button>
                         ) : (
                           <span key="sin-accion" className="muted">

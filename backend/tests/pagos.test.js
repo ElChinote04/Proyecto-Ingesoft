@@ -600,7 +600,192 @@ test('US-009: una boleta sin pagar no tiene comprobante', async () => {
 });
 
 test('US-009: las notificaciones repetidas no emiten un segundo comprobante', async () => {
-  const pagadas = await prisma.compromisoPago.count({ where: { estado: 'PAGADA' } });
+  // Una boleta fraccionada (US-010) no tiene comprobante propio: lo tiene cada cuota.
+  const pagadas = await prisma.compromisoPago.count({
+    where: { estado: 'PAGADA', fracciones: { none: {} } },
+  });
   const comprobantes = await prisma.comprobante.count();
   assert.equal(comprobantes, pagadas, 'exactamente un comprobante por boleta pagada');
+});
+
+// ------------------------------------------------------------------- US-010
+async function pagarBoleta(boletaId) {
+  const { pagoId } = (
+    await apoderado.post(`${base}/pagos`).send({ compromisoPagoId: boletaId }).expect(201)
+  ).body.data;
+  const pago = await prisma.pago.findUnique({ where: { id: pagoId } });
+  simulada.marcar(pago.referenciaExterna, RESULTADO.PAGADO);
+  await notificar({
+    referencia: pago.referencia,
+    idExterno: pago.referenciaExterna,
+    tipo: 'pago',
+  }).expect(200);
+}
+
+const fraccionar = (agente, boletaId, datos, estado) =>
+  agente.post(`${base}/compromisos-pago/${boletaId}/fracciones`).send(datos).expect(estado);
+
+let boletaFraccionada;
+
+// Una boleta original pendiente: las fracciones también son boletas pendientes
+// del mismo plan, así que boletaLibre podría devolver una.
+const boletaEntera = () =>
+  prisma.compromisoPago.findFirst({
+    where: {
+      planPago: { matriculaId: matricula.id },
+      estado: 'PENDIENTE',
+      boletaOrigenId: null,
+      pagos: { none: { estado: { in: ['INICIADO', 'PROCESANDO'] } } },
+    },
+    orderBy: { numeroCuota: 'desc' },
+  });
+
+test('US-010: el administrador fracciona una boleta pendiente y queda PARCIAL', async () => {
+  boletaFraccionada = await boletaEntera();
+  const respuesta = await fraccionar(
+    admin,
+    boletaFraccionada.id,
+    { numeroCuotas: 2, montoCuota: '175.00', fechaPrimerVencimiento: '2030-06-10' },
+    201,
+  );
+  const { estado, fracciones } = respuesta.body.data;
+  assert.equal(estado, 'PARCIAL');
+  assert.deepEqual(
+    fracciones.map((f) => [f.numeroFraccion, f.monto, f.fechaVencimiento]),
+    [
+      [1, '175.00', '2030-06-10'],
+      [2, '175.00', '2030-07-10'],
+    ],
+  );
+
+  const guardada = await prisma.compromisoPago.findUnique({
+    where: { id: boletaFraccionada.id },
+    include: { fracciones: true },
+  });
+  assert.equal(guardada.estado, 'PARCIAL');
+  assert.equal(guardada.fracciones.length, 2);
+  assert.ok(guardada.fracciones.every((f) => f.estado === 'PENDIENTE'));
+  const auditoria = await prisma.registroAuditoria.count({
+    where: { tipoEvento: 'BOLETA_FRACCIONADA', entidadId: boletaFraccionada.id },
+  });
+  assert.equal(auditoria, 1);
+});
+
+test('US-010: la boleta fraccionada ya no se paga entera ni se vuelve a fraccionar', async () => {
+  const pagoEntero = await apoderado
+    .post(`${base}/pagos`)
+    .send({ compromisoPagoId: boletaFraccionada.id })
+    .expect(409);
+  assert.equal(pagoEntero.body.error.code, 'BOLETA_FRACCIONADA');
+
+  const datos = { numeroCuotas: 2, montoCuota: '175.00', fechaPrimerVencimiento: '2030-06-10' };
+  const otraVez = await fraccionar(admin, boletaFraccionada.id, datos, 409);
+  assert.equal(otraVez.body.error.code, 'BOLETA_NO_PENDIENTE');
+
+  const parte = await prisma.compromisoPago.findFirst({
+    where: { boletaOrigenId: boletaFraccionada.id },
+  });
+  const deParte = await fraccionar(admin, parte.id, datos, 409);
+  assert.equal(deParte.body.error.code, 'BOLETA_ES_FRACCION');
+});
+
+test('US-010: solo el administrador fracciona y la suma no puede exceder el total', async () => {
+  const boleta = await boletaEntera();
+  // 2 cuotas de 200 ya suman 400: la tercera excedería los 350 de la boleta.
+  const datos = { numeroCuotas: 3, montoCuota: '200.00', fechaPrimerVencimiento: '2030-06-10' };
+  await fraccionar(apoderado, boleta.id, datos, 403);
+  const excede = await fraccionar(admin, boleta.id, datos, 400);
+  assert.equal(excede.body.error.code, 'FRACCIONES_EXCEDEN_TOTAL');
+  await fraccionar(admin, boleta.id, { ...datos, numeroCuotas: 7 }, 400);
+  await fraccionar(admin, boleta.id, { ...datos, extra: true }, 400);
+  await fraccionar(admin, 999999, { ...datos, numeroCuotas: 2, montoCuota: '175.00' }, 404);
+  const intacta = await prisma.compromisoPago.findUnique({ where: { id: boleta.id } });
+  assert.equal(intacta.estado, 'PENDIENTE', 'un intento rechazado no cambia la boleta');
+});
+
+test('US-010: sigue PARCIAL hasta pagar la última cuota y cada cuota tiene comprobante', async () => {
+  const partes = await prisma.compromisoPago.findMany({
+    where: { boletaOrigenId: boletaFraccionada.id },
+    orderBy: { numeroFraccion: 'asc' },
+  });
+
+  await pagarBoleta(partes[0].id);
+  let original = await prisma.compromisoPago.findUnique({ where: { id: boletaFraccionada.id } });
+  assert.equal(original.estado, 'PARCIAL', 'RF139: parcial mientras no se complete el total');
+
+  const historial = await apoderado.get(`${base}/compromisos-pago?estado=PARCIAL`).expect(200);
+  const fila = historial.body.data.boletas.find((b) => b.id === boletaFraccionada.id);
+  assert.equal(fila.montoPagado, '175.00');
+  const parteListada = (
+    await apoderado.get(`${base}/compromisos-pago?limite=100`).expect(200)
+  ).body.data.boletas.find((b) => b.id === partes[0].id);
+  assert.equal(parteListada.boletaOrigenId, boletaFraccionada.id);
+  assert.equal(parteListada.numeroFraccion, 1);
+  assert.equal(parteListada.totalFracciones, 2);
+  assert.match(parteListada.comprobante, /^B001-\d{8}$/);
+
+  await pagarBoleta(partes[1].id);
+  original = await prisma.compromisoPago.findUnique({ where: { id: boletaFraccionada.id } });
+  assert.equal(original.estado, 'PAGADA');
+  assert.ok(original.pagadaEn);
+
+  const sinPropio = await apoderado
+    .get(`${base}/compromisos-pago/${boletaFraccionada.id}/comprobante`)
+    .expect(409);
+  assert.equal(sinPropio.body.error.code, 'BOLETA_FRACCIONADA');
+  await descargar(apoderado, partes[1].id).expect(200);
+});
+
+test('US-010: no se fracciona una boleta con un pago en curso', async () => {
+  const boleta = await boletaEntera();
+  const { pagoId } = (
+    await apoderado.post(`${base}/pagos`).send({ compromisoPagoId: boleta.id }).expect(201)
+  ).body.data;
+  const datos = { numeroCuotas: 2, montoCuota: '175.00', fechaPrimerVencimiento: '2030-06-10' };
+  const respuesta = await fraccionar(admin, boleta.id, datos, 409);
+  assert.equal(respuesta.body.error.code, 'PAGO_EN_CURSO');
+  const intacta = await prisma.compromisoPago.findUnique({ where: { id: boleta.id } });
+  assert.equal(intacta.estado, 'PENDIENTE');
+  await apoderado.delete(`${base}/pagos/${pagoId}`).expect(200);
+});
+
+test('US-010 con US-012: el reporte cuenta las cuotas y no la boleta original', async () => {
+  const original = await prisma.compromisoPago.findUnique({ where: { id: boletaFraccionada.id } });
+  const dia = original.fechaVencimiento.toISOString().slice(0, 10);
+  const { totales } = (
+    await admin.get(`${base}/reportes/pagos?desde=${dia}&hasta=${dia}`).expect(200)
+  ).body.data;
+  const esperadas = await prisma.compromisoPago.findMany({
+    where: {
+      estado: { in: ['PENDIENTE', 'PAGADA'] },
+      fracciones: { none: {} },
+      fechaVencimiento: original.fechaVencimiento,
+    },
+  });
+  assert.ok(!esperadas.some((b) => b.id === original.id));
+  assert.equal(totales.boletas, esperadas.length, 'la boleta fraccionada no se suma');
+});
+
+test('US-010 con US-013: anular el pago de una cuota devuelve la original a PARCIAL', async () => {
+  const ultima = await prisma.compromisoPago.findFirst({
+    where: { boletaOrigenId: boletaFraccionada.id },
+    orderBy: { numeroFraccion: 'desc' },
+  });
+  const pago = await prisma.pago.findFirst({
+    where: { compromisoPagoId: ultima.id, estado: 'CONFIRMADO' },
+  });
+  await admin
+    .put(`${base}/pagos/${pago.id}/anulacion`)
+    .send({ motivo: 'Pago registrado por error en la cuota' })
+    .expect(200);
+  const original = await prisma.compromisoPago.findUnique({ where: { id: boletaFraccionada.id } });
+  assert.equal(original.estado, 'PARCIAL');
+  assert.equal(original.pagadaEn, null);
+  const cuota = await prisma.compromisoPago.findUnique({ where: { id: ultima.id } });
+  assert.equal(cuota.estado, 'PENDIENTE');
+
+  // Al volver a pagarla, la original se completa otra vez.
+  await pagarBoleta(ultima.id);
+  const completa = await prisma.compromisoPago.findUnique({ where: { id: boletaFraccionada.id } });
+  assert.equal(completa.estado, 'PAGADA');
 });

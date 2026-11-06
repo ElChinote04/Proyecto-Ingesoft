@@ -31,9 +31,23 @@ export const iniciarPagoSchema = z.object({ compromisoPagoId: id }).strict();
 export const boletasQuerySchema = z
   .object({
     estudianteId: z.coerce.number().int().positive().max(2147483647).optional(),
-    estado: z.enum(['PENDIENTE', 'PAGADA', 'MOROSA', 'ANULADA']).optional(),
+    estado: z.enum(['PENDIENTE', 'PARCIAL', 'PAGADA', 'MOROSA', 'ANULADA']).optional(),
     pagina: z.coerce.number().int().min(1).default(1),
     limite: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .strict();
+
+const fecha = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener el formato AAAA-MM-DD.')
+  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), 'La fecha no es válida.');
+
+/** Pago fraccionado de una boleta (US-010). Los montos viajan como texto. */
+export const fraccionarSchema = z
+  .object({
+    numeroCuotas: z.number().int().min(2).max(6),
+    montoCuota: monto,
+    fechaPrimerVencimiento: fecha,
   })
   .strict();
 

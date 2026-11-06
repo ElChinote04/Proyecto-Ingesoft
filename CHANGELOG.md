@@ -1,5 +1,21 @@
 # Registro de cambios
 
+## Pago en cuotas (US-010) — 2026-11-06
+
+- `POST /compromisos-pago/:id/fracciones` (administrador) con `{ numeroCuotas, montoCuota,
+  fechaPrimerVencimiento }` divide una boleta pendiente en 2 a 6 cuotas que vencen una por mes. La
+  última cuota se ajusta para que la suma sea exactamente el total (RF140): 400
+  `FRACCIONES_EXCEDEN_TOTAL` o `FRACCIONES_NO_CUBREN_TOTAL` si no cuadra. Se audita como
+  `BOLETA_FRACCIONADA`.
+- Cada cuota es una boleta hija (`boletaOrigenId`, `numeroFraccion`) que el apoderado paga por la
+  pasarela y que tiene su propio comprobante. La original pasa al nuevo estado `PARCIAL` y ya no se
+  paga entera (409 `BOLETA_FRACCIONADA`); queda PAGADA al pagarse la última cuota (RF139).
+- No se divide una boleta pagada, ya dividida, que ya es una cuota o con un pago en curso (409).
+- Integración con lo existente: el reporte de pagos (US-012) cuenta las cuotas y no la original;
+  anular el pago de una cuota (US-013) devuelve la original a `PARCIAL`.
+- Botón **Pagar en cuotas** en Pagos y boletas (administrador) con vista previa de las cuotas.
+- Migración `20261106170000_fraccionamiento_boletas`.
+
 ## Cobranza y anulación de pagos (US-008, US-011, US-012, US-013) — 2026-11-06
 
 - **US-008 Morosidad:** `GET /reportes/pagos/morosidad` agrupa las boletas vencidas por
