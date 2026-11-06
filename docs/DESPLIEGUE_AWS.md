@@ -143,7 +143,7 @@ La primera vez tarda entre 5 y 10 minutos: descarga imágenes, instala
 dependencias y compila el frontend. Después:
 
 ```bash
-docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml --env-file deploy/.env ps
 ```
 
 Los tres servicios deben aparecer como `running`. Abre
@@ -153,7 +153,7 @@ está publicado.
 Para ver los registros:
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f backend
+docker compose -f docker-compose.prod.yml --env-file deploy/.env logs -f backend
 ```
 
 ## 7. Primer administrador
@@ -209,7 +209,7 @@ migración que cambie datos, haz una copia de seguridad (sección 11).
 - **Volcado de la base**, para conservarla fuera del servidor:
 
   ```bash
-  docker compose -f docker-compose.prod.yml exec -T db pg_dump -U sage sage > sage-$(date +%F).sql
+  docker compose -f docker-compose.prod.yml --env-file deploy/.env exec -T db pg_dump -U sage sage > sage-$(date +%F).sql
   ```
 
 ## 12. Problemas habituales
