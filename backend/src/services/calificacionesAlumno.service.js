@@ -1,5 +1,5 @@
 import * as repository from '../repositories/calificacionesAlumno.repository.js';
-import { auditCalificacion } from '../repositories/calificacionRepository.js';
+import { registrarTransaccionCritica } from './auditoria.service.js';
 import { AppError } from '../errors/AppError.js';
 
 const fail = (status, code, message) => {
@@ -9,6 +9,63 @@ const fail = (status, code, message) => {
 function requireDocente(actor) {
   if (!actor.docenteId)
     fail(403, 'NO_TEACHER_PROFILE', 'Tu cuenta no tiene un perfil docente asociado.');
+}
+
+const niveles = ['C', 'B', 'A', 'AD'];
+
+function metodoRegla(metodo) {
+  try {
+    return JSON.parse(metodo);
+  } catch {
+    return { estrategia: metodo, desempate: 'reciente', minimoEvidencias: 1 };
+  }
+}
+
+export function consolidar(items, metodo) {
+  if (!items.length) return null;
+  const regla = metodoRegla(metodo);
+  const suficientes = items.length >= (regla.minimoEvidencias || 1) ? items : [];
+  if (!suficientes.length) return null;
+  if (regla.estrategia === 'reciente') return suficientes.at(-1).nivelLogro;
+  if (regla.estrategia === 'prioridad') {
+    return suficientes.reduce(
+      (mejor, item) =>
+        niveles.indexOf(item.nivelLogro) > niveles.indexOf(mejor) ? item.nivelLogro : mejor,
+      suficientes[0].nivelLogro,
+    );
+  }
+
+  const conteos = new Map();
+  for (const item of suficientes)
+    conteos.set(item.nivelLogro, (conteos.get(item.nivelLogro) || 0) + 1);
+  const maximo = Math.max(...conteos.values());
+  const candidatas = niveles.filter((nivel) => conteos.get(nivel) === maximo);
+  if (candidatas.length === 1 || regla.desempate === 'alto')
+    return candidatas[candidatas.length - 1];
+  if (regla.desempate === 'bajo') return candidatas[0];
+  return [...suficientes].reverse().find((item) => candidatas.includes(item.nivelLogro)).nivelLogro;
+}
+
+export function agregarLogroConsolidado(calificaciones) {
+  const grupos = new Map();
+  for (const calificacion of calificaciones) {
+    for (const item of calificacion.competencias ?? []) {
+      const clave = `${calificacion.matriculaId}:${calificacion.asignacionId}:${item.competenciaId}`;
+      const grupo = grupos.get(clave) ?? [];
+      grupo.push({ nivelLogro: item.nivelLogro, modificadoEn: calificacion.modificadoEn });
+      grupos.set(clave, grupo);
+    }
+  }
+  return calificaciones.map((calificacion) => ({
+    ...calificacion,
+    competencias: calificacion.competencias?.map((item) => {
+      const clave = `${calificacion.matriculaId}:${calificacion.asignacionId}:${item.competenciaId}`;
+      return {
+        ...item,
+        logroConsolidado: consolidar(grupos.get(clave) ?? [], calificacion.regla?.metodo),
+      };
+    }),
+  }));
 }
 
 export async function listarSalones(actor) {
@@ -71,10 +128,19 @@ export async function obtenerCalificaciones(matriculaId, { bimestreId }, actor) 
   const { bimestre, cursos } = await resolverCursos(matriculaId, bimestreId, actor);
   const niveles = await repository.listNiveles({
     matriculaId,
-    bimestreId,
     asignacionIds: cursos.map(({ asignacionId }) => asignacionId),
   });
-  const nivelDe = new Map(niveles.map((item) => [item.competenciaId, item.nivelLogro]));
+  const nivelDe = new Map(
+    niveles
+      .filter((item) => item.calificacion.bimestreId === bimestreId)
+      .map((item) => [item.competenciaId, item]),
+  );
+  const nivelesPorCompetencia = new Map();
+  for (const nivel of niveles) {
+    const anteriores = nivelesPorCompetencia.get(nivel.competenciaId) ?? [];
+    anteriores.push(nivel);
+    nivelesPorCompetencia.set(nivel.competenciaId, anteriores);
+  }
   return {
     bimestre: { id: bimestre.id, nombre: bimestre.nombre },
     cursos: cursos.map(({ curso, regla }) => ({
@@ -83,7 +149,12 @@ export async function obtenerCalificaciones(matriculaId, { bimestreId }, actor) 
       regla: regla && { id: regla.id, nombre: regla.nombre },
       competencias: curso.competencias.map((competencia) => ({
         ...competencia,
-        nivelLogro: nivelDe.get(competencia.id) ?? null,
+        nivelLogro: nivelDe.get(competencia.id)?.nivelLogro ?? null,
+        conclusionDescriptiva: nivelDe.get(competencia.id)?.conclusionDescriptiva ?? null,
+        logroConsolidado: consolidar(
+          nivelesPorCompetencia.get(competencia.id) ?? [],
+          regla?.metodo ?? 'frecuencia',
+        ),
       })),
     })),
   };
@@ -98,7 +169,7 @@ export async function guardarCalificaciones(matriculaId, input, actor, requestId
       ),
     );
     const resultados = [];
-    for (const { competenciaId, nivelLogro } of input.calificaciones) {
+    for (const { competenciaId, nivelLogro, conclusionDescriptiva } of input.calificaciones) {
       const destino = destinos.get(competenciaId);
       if (!destino)
         fail(
@@ -112,7 +183,7 @@ export async function guardarCalificaciones(matriculaId, input, actor, requestId
           'RULE_NOT_FOUND',
           `El curso ${destino.curso.nombre} no tiene una regla de consolidación vigente.`,
         );
-      const { calificacionId, nivelAnterior } = await repository.guardarNivel(
+      const { calificacionId, anterior, nuevo } = await repository.guardarNivel(
         {
           matriculaId,
           bimestreId: input.bimestreId,
@@ -120,19 +191,22 @@ export async function guardarCalificaciones(matriculaId, input, actor, requestId
           reglaId: destino.regla.id,
           competenciaId,
           nivelLogro,
+          conclusionDescriptiva,
           actorId: actor.id,
         },
         db,
       );
-      await auditCalificacion(db, {
-        usuarioId: actor.id,
-        tipoEvento: 'CALIFICACION_GUARDADA',
-        calificacionId,
-        valorAnterior: nivelAnterior && { competenciaId, nivelLogro: nivelAnterior },
-        valorNuevo: { competenciaId, nivelLogro },
+      await registrarTransaccionCritica(db, {
+        actorId: actor.id,
+        evento: anterior ? 'NOTA_MODIFICADA' : 'NOTA_REGISTRADA',
+        entidad: 'Calificacion',
+        entidadId: calificacionId,
+        anterior,
+        nuevo,
+        ...(anterior && { motivo: 'Actualización de calificación mediante carga masiva.' }),
         requestId,
       });
-      resultados.push({ calificacionId, competenciaId, nivelLogro });
+      resultados.push({ calificacionId, competenciaId, nivelLogro, conclusionDescriptiva });
     }
     return { total: resultados.length, resultados };
   });

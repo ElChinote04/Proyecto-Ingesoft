@@ -209,6 +209,7 @@ test('CAA-07 guarda varias competencias de una vez y el apoderado las ve', async
     ficha.cursos[1].competencias.map(({ nivelLogro }) => nivelLogro),
     ['B', 'A'],
   );
+  await docente.post(`${base}/calificaciones/bimestres/${bimestre.id}/publicacion`).expect(200);
   const libreta = await apoderado
     .get(`${base}/calificaciones?estudianteId=${alumno.id}`)
     .expect(200);
@@ -226,7 +227,8 @@ test('CAA-08 sobrescribir una nota conserva el valor anterior en la auditoría',
     where: { entidad: 'Calificacion', entidadId: resultados[0].calificacionId },
     orderBy: { id: 'desc' },
   });
-  assert.equal(registros[0].tipoEvento, 'CALIFICACION_GUARDADA');
+  assert.equal(registros[0].tipoEvento, 'NOTA_MODIFICADA');
+  assert.ok(registros[0].detalle.valorAnterior);
   assert.deepEqual(registros[0].detalle.valorAnterior, {
     competenciaId: competenciaMat.id,
     nivelLogro: 'B',

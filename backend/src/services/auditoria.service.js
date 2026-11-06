@@ -30,7 +30,12 @@ export function registrarTransaccionCritica(db, datos) {
     throw new Error(`Auditoría: ${evento} exige "anterior", "nuevo" y "motivo".`);
   // JSON.stringify convierte Decimal y Date a texto y omite los campos no enviados.
   const detalle = JSON.parse(
-    JSON.stringify({ anterior, nuevo, motivo: datos.motivo?.trim(), contexto: datos.contexto }),
+    JSON.stringify({
+      valorAnterior: anterior,
+      valorNuevo: nuevo,
+      motivo: datos.motivo?.trim(),
+      contexto: datos.contexto,
+    }),
   );
   return repository.registrarEvento(
     {

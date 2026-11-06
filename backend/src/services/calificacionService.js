@@ -1,5 +1,7 @@
 import * as repository from '../repositories/calificacionRepository.js';
 import * as detalleRepository from '../repositories/calificacionCompetencia.js';
+import { registrarTransaccionCritica } from './auditoria.service.js';
+import { agregarLogroConsolidado } from './calificacionesAlumno.service.js';
 import { AppError } from '../errors/AppError.js';
 
 const fail = (status, code, message) => {
@@ -74,31 +76,74 @@ export async function listarCalificaciones(user, estudianteId) {
     fail(403, 'FORBIDDEN', 'No tienes un rol habilitado para consultar calificaciones.');
   const requestedStudentId = estudianteId ? Number(estudianteId) : null;
   if (user.roles.includes('ADMINISTRADOR'))
-    return repository.listCalificaciones({
-      activo: true,
-      ...(requestedStudentId ? { matricula: { estudianteId: requestedStudentId } } : {}),
-    });
+    return agregarLogroConsolidado(
+      await repository.listCalificaciones({
+        activo: true,
+        ...(requestedStudentId ? { matricula: { estudianteId: requestedStudentId } } : {}),
+      }),
+    );
   if (user.roles.includes('ALUMNO')) {
     if (!user.estudianteId || (requestedStudentId && requestedStudentId !== user.estudianteId))
       fail(403, 'FORBIDDEN', 'Solo puedes consultar tus propias calificaciones.');
-    return repository.listCalificaciones({
+    const calificaciones = await repository.listCalificaciones({
       activo: true,
       matricula: { estudianteId: user.estudianteId },
     });
+    return agregarLogroConsolidado(await filtrarPublicadas(calificaciones));
   }
   if (user.roles.includes('APODERADO')) {
     const matricula = {
       ...(requestedStudentId ? { estudianteId: requestedStudentId } : {}),
       estudiante: { apoderados: { some: { apoderadoId: user.apoderadoId, activo: true } } },
     };
-    return repository.listCalificaciones({ activo: true, matricula });
+    return agregarLogroConsolidado(
+      await filtrarPublicadas(await repository.listCalificaciones({ activo: true, matricula })),
+    );
   }
+
   if (user.roles.includes('DOCENTE'))
-    return repository.listCalificaciones({
-      activo: true,
-      ...(user.docenteId ? { asignacion: { docenteId: user.docenteId } } : {}),
-    });
+    return agregarLogroConsolidado(
+      await repository.listCalificaciones({
+        activo: true,
+        ...(user.docenteId ? { asignacion: { docenteId: user.docenteId } } : {}),
+      }),
+    );
   fail(403, 'FORBIDDEN', 'Tu usuario no tiene un rol académico habilitado.');
+}
+
+async function filtrarPublicadas(calificaciones) {
+  const ids = [...new Set(calificaciones.map(({ bimestreId }) => bimestreId))];
+  if (!ids.length) return calificaciones;
+  const publicadas = await repository.listBimestresPublicados(ids);
+  const permitidas = new Set(publicadas.map(({ entidadId }) => entidadId));
+  return calificaciones.filter(({ bimestreId }) => permitidas.has(bimestreId));
+}
+
+export async function publicarBimestre(bimestreId, actor, requestId) {
+  requireRole(actor, 'DOCENTE');
+  return repository.transaction(async (db) => {
+    const asignaciones = await db.cursoSeccionDocente.count({
+      where: {
+        docenteId: actor.docenteId,
+        calificaciones: { some: { bimestreId, activo: true } },
+      },
+    });
+    if (!asignaciones)
+      fail(404, 'GRADES_NOT_FOUND', 'No tienes calificaciones para publicar en este bimestre.');
+    const existente = await db.registroAuditoria.findFirst({
+      where: { tipoEvento: 'NOTA_PUBLICADA', entidad: 'BimestreAcademico', entidadId: bimestreId },
+    });
+    if (existente) return { publicado: true, yaPublicado: true };
+    await registrarTransaccionCritica(db, {
+      actorId: actor.id,
+      evento: 'NOTA_PUBLICADA',
+      entidad: 'BimestreAcademico',
+      entidadId: bimestreId,
+      nuevo: { bimestreId },
+      requestId,
+    });
+    return { publicado: true, yaPublicado: false };
+  });
 }
 
 export async function obtenerCalificacion(id, user) {

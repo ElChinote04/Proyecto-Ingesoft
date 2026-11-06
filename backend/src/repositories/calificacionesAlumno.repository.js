@@ -87,7 +87,7 @@ export function listReglasVigentes({ gradoId, cursoIds }, db = prisma) {
       vigenteDesde: { lte: ahora },
       OR: [{ vigenteHasta: null }, { vigenteHasta: { gte: ahora } }],
     },
-    select: { id: true, cursoId: true, nombre: true },
+    select: { id: true, cursoId: true, nombre: true, metodo: true },
     orderBy: { version: 'desc' },
   });
 }
@@ -96,14 +96,32 @@ export const listNiveles = ({ matriculaId, bimestreId, asignacionIds }, db = pri
   db.calificacionCompetencia.findMany({
     where: {
       activo: true,
-      calificacion: { activo: true, matriculaId, bimestreId, asignacionId: { in: asignacionIds } },
+      calificacion: {
+        activo: true,
+        matriculaId,
+        ...(bimestreId ? { bimestreId } : {}),
+        asignacionId: { in: asignacionIds },
+      },
     },
-    select: { competenciaId: true, nivelLogro: true },
+    select: {
+      competenciaId: true,
+      nivelLogro: true,
+      conclusionDescriptiva: true,
+      calificacion: { select: { bimestreId: true, modificadoEn: true } },
+    },
   });
 
 export async function guardarNivel(datos, db) {
-  const { matriculaId, bimestreId, asignacionId, reglaId, competenciaId, nivelLogro, actorId } =
-    datos;
+  const {
+    matriculaId,
+    bimestreId,
+    asignacionId,
+    reglaId,
+    competenciaId,
+    nivelLogro,
+    conclusionDescriptiva,
+    actorId,
+  } = datos;
   const calificacion = await db.calificacion.upsert({
     where: { matriculaId_bimestreId_asignacionId: { matriculaId, bimestreId, asignacionId } },
     create: {
@@ -122,7 +140,7 @@ export async function guardarNivel(datos, db) {
   };
   const anterior = await db.calificacionCompetencia.findUnique({
     where: clave,
-    select: { nivelLogro: true, activo: true },
+    select: { nivelLogro: true, conclusionDescriptiva: true, activo: true },
   });
   await db.calificacionCompetencia.upsert({
     where: clave,
@@ -130,13 +148,32 @@ export async function guardarNivel(datos, db) {
       calificacionId: calificacion.id,
       competenciaId,
       nivelLogro,
+      conclusionDescriptiva: conclusionDescriptiva ?? null,
       creadoPorId: actorId,
       modificadoPorId: actorId,
     },
-    update: { nivelLogro, activo: true, modificadoPorId: actorId },
+    update: {
+      nivelLogro,
+      conclusionDescriptiva: conclusionDescriptiva ?? null,
+      activo: true,
+      modificadoPorId: actorId,
+    },
   });
   return {
     calificacionId: calificacion.id,
-    nivelAnterior: anterior?.activo ? anterior.nivelLogro : null,
+    anterior: anterior?.activo
+      ? {
+          competenciaId,
+          nivelLogro: anterior.nivelLogro,
+          ...(anterior.conclusionDescriptiva !== null && {
+            conclusionDescriptiva: anterior.conclusionDescriptiva,
+          }),
+        }
+      : null,
+    nuevo: {
+      competenciaId,
+      nivelLogro,
+      ...(conclusionDescriptiva != null && { conclusionDescriptiva }),
+    },
   };
 }
