@@ -58,8 +58,10 @@ function Screens() {
     return (
       <ResultadoPago key={retorno[1]} id={retorno[1]} cancelado={retorno[2] === 'cancelado'} />
     );
-  if (route === '/pagos' && user.roles.some((rol) => ['APODERADO', 'ADMINISTRADOR'].includes(rol)))
-    return <Pagos key={perfiles} />;
+  // /pagos/morosos y /pagos/reporte son vistas de cobranza del administrador (US-008, US-012).
+  const vistaPagos = route.match(/^\/pagos(?:\/(morosos|reporte))?$/);
+  if (vistaPagos && user.roles.some((rol) => ['APODERADO', 'ADMINISTRADOR'].includes(rol)))
+    return <Pagos key={`${perfiles}:${route}`} vista={vistaPagos[1] ?? 'boletas'} />;
   if (
     (route === '/gestion' || route === '/gestion/nueva' || /^\/gestion\/editar\/\d+$/.test(route)) &&
     user.roles.some((rol) => ['DOCENTE', 'ADMINISTRADOR'].includes(rol))

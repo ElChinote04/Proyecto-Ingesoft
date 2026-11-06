@@ -542,11 +542,11 @@ const descargar = (agente, boletaId) =>
 test('US-009: toda boleta pagada tiene un comprobante y el historial muestra su número', async () => {
   const pagadas = await prisma.compromisoPago.findMany({
     where: { estado: 'PAGADA' },
-    include: { comprobante: true },
+    include: { comprobantes: { where: { anuladoEn: null } } },
   });
   assert.ok(pagadas.length > 0, 'las pruebas anteriores dejan boletas pagadas');
   assert.ok(
-    pagadas.every((b) => b.comprobante),
+    pagadas.every((b) => b.comprobantes.length === 1),
     'ninguna boleta pagada queda sin comprobante',
   );
 
@@ -560,11 +560,11 @@ test('US-009: toda boleta pagada tiene un comprobante y el historial muestra su 
 test('US-009: el apoderado descarga el comprobante en PDF', async () => {
   const pagada = await prisma.compromisoPago.findFirst({
     where: { estado: 'PAGADA', planPago: { matriculaId: matricula.id } },
-    include: { comprobante: true },
+    include: { comprobantes: { where: { anuladoEn: null } } },
   });
   const respuesta = await descargar(apoderado, pagada.id).expect(200);
   assert.equal(respuesta.headers['content-type'], 'application/pdf');
-  const numero = `B001-${String(pagada.comprobante.id).padStart(8, '0')}`;
+  const numero = `B001-${String(pagada.comprobantes[0].id).padStart(8, '0')}`;
   assert.match(respuesta.headers['content-disposition'], new RegExp(`comprobante-${numero}\\.pdf`));
   assert.equal(respuesta.body.subarray(0, 5).toString(), '%PDF-');
   assert.ok(respuesta.body.length > 1000);

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import AppLayout from '../layouts/AppLayout';
 import { Feedback, Loading, ResourceError } from '../components/Feedback';
 import TablaDatos from '../components/TablaDatos';
+import AvisosVencimiento from '../components/AvisosVencimiento';
 import { useAuth } from '../hooks/useAuth';
 import { useResource } from '../hooks/useResource';
 
@@ -93,6 +94,7 @@ export default function Portal() {
         </div>
         <span className="badge success">Sesión segura</span>
       </div>
+      {esApoderado && <AvisosVencimiento />}
       {estudiantes.loading && <Loading>Cargando información…</Loading>}
       {estudiantes.error && <ResourceError {...estudiantes} />}
       {estudiantes.data && !estudiantes.data.length && (

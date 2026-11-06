@@ -106,6 +106,8 @@ export const inicioDelDia = (ahora = new Date()) =>
 export function resolverConfirmacion(pagoActual, resultadoProveedor) {
   if (!pagoActual) return { accion: 'IGNORAR', motivo: 'REFERENCIA_DESCONOCIDA' };
   if (pagoActual.estado === 'CONFIRMADO') return { accion: 'IGNORAR', motivo: 'YA_CONFIRMADO' };
+  // US-013: un pago anulado por la administración no revive con un reenvío del proveedor.
+  if (pagoActual.estado === 'ANULADO') return { accion: 'IGNORAR', motivo: 'ANULADO' };
   if (['RECHAZADO', 'CANCELADO'].includes(pagoActual.estado) && resultadoProveedor !== 'PAGADO')
     return { accion: 'IGNORAR', motivo: 'YA_CERRADO' };
   if (resultadoProveedor === 'PAGADO') return { accion: 'CONFIRMAR' };

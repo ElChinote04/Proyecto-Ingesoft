@@ -74,3 +74,13 @@ export const descargarComprobante = async (req, res) => {
     })
     .send(pdf);
 };
+
+export const anularPago = async (req, res) =>
+  res.json({
+    data: await service.anularPago(
+      req.validated.params.id,
+      req.validated.body,
+      req.user,
+      req.requestId,
+    ),
+  });

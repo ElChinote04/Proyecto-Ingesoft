@@ -92,6 +92,7 @@ enum EstadoPago {
   CONFIRMADO
   RECHAZADO
   CANCELADO
+  ANULADO
 }
 
 enum CondicionAsistencia {
@@ -137,6 +138,7 @@ model Usuario {
   asistenciasDocentesCreadas     AsistenciaDocente[] @relation("CreadorAsistenciaDocente")
   asistenciasDocentesModificadas AsistenciaDocente[] @relation("ModificadorAsistenciaDocente")
   pagosIniciados                 Pago[]              @relation("PagoIniciador")
+  pagosAnulados                  Pago[]              @relation("PagoAnulador")
 }
 
 model Instalacion {
@@ -353,20 +355,21 @@ model PlanPago {
 /// Boleta de pensión emitida a partir del plan (US-006, US-007A).
 /// El estado MOROSA no se almacena: se deriva de fechaVencimiento al consultar.
 model CompromisoPago {
-  id               Int          @id @default(autoincrement())
+  id               Int           @id @default(autoincrement())
   planPagoId       Int
-  planPago         PlanPago     @relation(fields: [planPagoId], references: [id])
+  planPago         PlanPago      @relation(fields: [planPagoId], references: [id])
   numeroCuota      Int
-  concepto         String       @db.VarChar(120)
-  periodo          String       @db.VarChar(7)
-  monto            Decimal      @db.Decimal(10, 2)
-  fechaVencimiento DateTime     @db.Date
-  estado           EstadoBoleta @default(PENDIENTE)
+  concepto         String        @db.VarChar(120)
+  periodo          String        @db.VarChar(7)
+  monto            Decimal       @db.Decimal(10, 2)
+  fechaVencimiento DateTime      @db.Date
+  estado           EstadoBoleta  @default(PENDIENTE)
   pagadaEn         DateTime?
-  creadoEn         DateTime     @default(now())
-  modificadoEn     DateTime     @updatedAt
+  creadoEn         DateTime      @default(now())
+  modificadoEn     DateTime      @updatedAt
   pagos            Pago[]
-  comprobante      Comprobante?
+  /// Uno vigente como máximo (índice parcial en SQL); los anulados se conservan (US-013).
+  comprobantes     Comprobante[]
 
   @@unique([planPagoId, numeroCuota])
   @@index([estado, fechaVencimiento])
@@ -387,6 +390,11 @@ model Pago {
   confirmadoEn      DateTime?
   iniciadoPorId     Int
   iniciadoPor       Usuario        @relation("PagoIniciador", fields: [iniciadoPorId], references: [id])
+  /// US-013: anulación por el administrador. El pago no se borra: queda ANULADO.
+  anuladoEn         DateTime?
+  anuladoPorId      Int?
+  anuladoPor        Usuario?       @relation("PagoAnulador", fields: [anuladoPorId], references: [id])
+  motivoAnulacion   String?        @db.VarChar(300)
   creadoEn          DateTime       @default(now())
   modificadoEn      DateTime       @updatedAt
   comprobante       Comprobante?
@@ -395,16 +403,22 @@ model Pago {
 }
 
 /// Comprobante de pago de una boleta (US-009). Se emite en la misma transacción
-/// que confirma el pago, de modo que toda boleta PAGADA tiene exactamente uno.
+/// que confirma el pago, de modo que toda boleta PAGADA tiene exactamente uno
+/// vigente. Si el pago se anula (US-013) el comprobante queda anulado y la boleta
+/// puede volver a pagarse con uno nuevo; un índice parcial en SQL impide dos
+/// comprobantes vigentes para la misma boleta.
 /// El id es el correlativo: se muestra como B001-00000001.
 model Comprobante {
   id               Int            @id @default(autoincrement())
   serie            String         @default("B001") @db.VarChar(4)
   pagoId           Int            @unique
   pago             Pago           @relation(fields: [pagoId], references: [id])
-  compromisoPagoId Int            @unique
+  compromisoPagoId Int
   compromisoPago   CompromisoPago @relation(fields: [compromisoPagoId], references: [id])
   emitidoEn        DateTime       @default(now())
+  anuladoEn        DateTime?
+
+  @@index([compromisoPagoId])
 }
 
 model ReglaConsolidacion {

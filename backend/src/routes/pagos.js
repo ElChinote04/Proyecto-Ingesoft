@@ -3,6 +3,8 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validate, idSchema } from '../validators/schemas.js';
 import * as schemas from '../validators/pagos.schemas.js';
 import * as controller from '../controllers/pagos.controller.js';
+import * as cobranza from '../controllers/cobranza.controller.js';
+import * as cobranzaSchemas from '../validators/cobranza.schemas.js';
 import { env } from '../config/env.js';
 
 export const pagosRouter = Router();
@@ -53,6 +55,42 @@ pagosRouter.delete(
   requireAuth,
   validate(idSchema, 'params'),
   controller.cancelarPago,
+);
+
+// US-013 — el administrador anula un pago confirmado que se registró por error.
+pagosRouter.put(
+  '/pagos/:id/anulacion',
+  requireAuth,
+  requireRole('ADMINISTRADOR'),
+  validate(idSchema, 'params'),
+  validate(schemas.anulacionSchema),
+  controller.anularPago,
+);
+
+// US-008 — estudiantes con pensiones morosas, para la cobranza.
+pagosRouter.get(
+  '/reportes/pagos/morosidad',
+  requireAuth,
+  requireRole('ADMINISTRADOR'),
+  validate(cobranzaSchemas.morosidadQuerySchema, 'query'),
+  cobranza.obtenerMorosidad,
+);
+
+// US-012 — reporte de pagos por periodo; ?formato=pdf|xlsx lo descarga.
+pagosRouter.get(
+  '/reportes/pagos',
+  requireAuth,
+  requireRole('ADMINISTRADOR'),
+  validate(cobranzaSchemas.reportePagosQuerySchema, 'query'),
+  cobranza.obtenerReporte,
+);
+
+// US-011 — boletas de los estudiantes a cargo que están por vencer.
+pagosRouter.get(
+  '/avisos-vencimiento',
+  requireAuth,
+  requireRole('APODERADO'),
+  cobranza.obtenerAvisos,
 );
 
 // Atajo de desarrollo para recorrer el flujo a mano: fija el resultado de la

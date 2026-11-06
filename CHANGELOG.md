@@ -1,5 +1,28 @@
 # Registro de cambios
 
+## Cobranza y anulación de pagos (US-008, US-011, US-012, US-013) — 2026-11-06
+
+- **US-008 Morosidad:** `GET /reportes/pagos/morosidad` agrupa las boletas vencidas por
+  estudiante, con su deuda, cantidad de boletas, atraso y apoderados vinculados. Filtros por año,
+  grado y sección. Pestaña **Morosidad** en Pagos y boletas (administrador).
+- **US-012 Reporte de pagos:** `GET /reportes/pagos?desde&hasta` devuelve lo emitido, recaudado,
+  pendiente y moroso, en total y por periodo, filtrable por año, grado y sección. Con
+  `formato=pdf|xlsx` lo descarga (PDF con `pdfkit`, Excel con la nueva dependencia
+  `write-excel-file`). Pestaña **Reporte de pagos**.
+- **US-013 Anulación:** `PUT /pagos/:id/anulacion` con `{ motivo }` (administrador). El pago queda
+  ANULADO con quién, cuándo y por qué; su comprobante queda anulado y la boleta vuelve a
+  PENDIENTE para cobrarse de nuevo. Se audita como `PAGO_ANULADO` con
+  `registrarTransaccionCritica`. Botón **Anular pago** en el historial de boletas.
+- **US-011 Aviso de vencimiento:** `GET /avisos-vencimiento` (apoderado) lista las boletas que vencen
+  en los próximos `PAGOS_DIAS_AVISO` días (5 por defecto, nueva variable en `.env.example`). Aviso
+  en el portal del apoderado y en Pagos y boletas. Sin correo.
+- Migración `20261106150000_anulacion_pagos`: estado `ANULADO` en `EstadoPago`, columnas de
+  anulación en `Pago` y `anuladoEn` en `Comprobante`. La unicidad del comprobante por boleta pasa a
+  un índice parcial (solo el vigente), por lo que la relación `CompromisoPago.comprobante` ahora es
+  `comprobantes` (las dos pruebas de US-009 que la consultaban se adaptaron).
+- Un reenvío tardío de la pasarela sobre un pago anulado se ignora (`resolverConfirmacion`).
+- Nueva suite `tests/cobranza.test.js` (22 pruebas).
+
 ## Log de errores (US-004) — 2026-11-05
 
 - `GET /errores` con filtros (severidad, código, usuario, rango de fechas) y paginación 10/25/50.

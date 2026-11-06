@@ -1425,3 +1425,100 @@ a {
     content: none;
   }
 }
+
+/* Cobranza (US-008, US-012), anulación (US-013) y avisos de vencimiento (US-011). */
+.pagos-pestanas {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 24px;
+  border-bottom: 1px solid var(--border);
+}
+.pagos-pestanas .pestana {
+  padding: 10px 16px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-weight: 500;
+  text-decoration: none;
+}
+.pagos-pestanas .pestana:hover {
+  color: var(--brand);
+}
+.pagos-pestanas .pestana.activa {
+  border-bottom-color: var(--brand);
+  color: var(--brand);
+}
+.cobranza-filtros {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  margin: 0 0 24px;
+}
+.monto-moroso {
+  color: #b91c1c;
+}
+.cobranza-totales {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.cobranza-total {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+}
+.cobranza-total strong {
+  font-size: 18px;
+}
+.cobranza-encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.cobranza-encabezado h2 {
+  margin-bottom: 0;
+}
+.celda-doble {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.anulacion-motivo {
+  margin-top: 16px;
+}
+.anulacion-motivo textarea {
+  font: inherit;
+  font-weight: 400;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  resize: vertical;
+}
+.avisos-vencimiento {
+  margin-bottom: 24px;
+}
+.avisos-vencimiento ul {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+.aviso-cuando {
+  font-weight: 600;
+}
+.avisos-enlace {
+  font-weight: 600;
+  color: var(--brand);
+}
+@media (max-width: 900px) {
+  .cobranza-totales {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .cobranza-totales {
+    grid-template-columns: 1fr;
+  }
+  .pagos-pestanas {
+    overflow-x: auto;
+  }
+}
