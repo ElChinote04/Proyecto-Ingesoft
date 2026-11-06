@@ -28,7 +28,8 @@ const EN_CURSO = ['INICIADO', 'PROCESANDO'];
 const boletaInclude = {
   // Como mucho uno, por el índice único parcial sobre los pagos en curso.
   pagos: { where: { estado: { in: EN_CURSO } }, select: { id: true, iniciadoPorId: true } },
-  comprobante: { select: { id: true, serie: true } },
+  // El comprobante vigente; los de pagos anulados (US-013) se conservan aparte.
+  comprobantes: { where: { anuladoEn: null }, select: { id: true, serie: true, pagoId: true } },
   planPago: {
     include: {
       matricula: {
@@ -84,10 +85,10 @@ export const marcarBoletaPagada = (id, fecha, db = prisma) =>
 export const crearComprobante = ({ pagoId, compromisoPagoId, emitidoEn }, db = prisma) =>
   db.comprobante.create({ data: { pagoId, compromisoPagoId, emitidoEn } });
 
-/** Todo lo que se imprime en el comprobante, en una sola consulta. */
+/** Todo lo que se imprime en el comprobante vigente, en una sola consulta. */
 export const buscarComprobanteDeBoleta = (compromisoPagoId, db = prisma) =>
-  db.comprobante.findUnique({
-    where: { compromisoPagoId },
+  db.comprobante.findFirst({
+    where: { compromisoPagoId, anuladoEn: null },
     include: {
       pago: { include: { iniciadoPor: { include: { persona: true } } } },
       compromisoPago: {
@@ -138,3 +139,110 @@ export const actualizarPago = (id, data, db = prisma) => db.pago.update({ where:
  */
 export const cerrarPago = async (id, desde, data, db = prisma) =>
   (await db.pago.updateMany({ where: { id, estado: { in: desde } }, data })).count;
+
+// ------------------------------------------------------------ anulación (US-013)
+/** Devuelve 0 si la boleta ya no estaba PAGADA (otra solicitud la cambió). */
+export const reabrirBoleta = async (id, db = prisma) =>
+  (
+    await db.compromisoPago.updateMany({
+      where: { id, estado: 'PAGADA' },
+      data: { estado: 'PENDIENTE', pagadaEn: null },
+    })
+  ).count;
+
+export const anularComprobanteDePago = async (pagoId, fecha, db = prisma) =>
+  (
+    await db.comprobante.updateMany({
+      where: { pagoId, anuladoEn: null },
+      data: { anuladoEn: fecha },
+    })
+  ).count;
+
+export const buscarComprobanteDePago = (pagoId, db = prisma) =>
+  db.comprobante.findUnique({ where: { pagoId } });
+
+// ------------------------------------------------------------ reportes (US-008, US-012)
+/** Filtro común por año, grado y sección de la matrícula de la boleta. */
+const filtroMatricula = ({ anioAcademicoId, gradoId, seccionId }) => ({
+  planPago: {
+    matricula: {
+      ...(anioAcademicoId && { anioAcademicoId }),
+      ...(seccionId && { seccionId }),
+      ...(gradoId && { seccion: { gradoId } }),
+    },
+  },
+});
+
+/** Boletas morosas (PENDIENTE y vencidas) con su estudiante, aula y apoderados. */
+export const listarBoletasMorosas = (filtros, morosaAntesDe) =>
+  prisma.compromisoPago.findMany({
+    where: {
+      estado: 'PENDIENTE',
+      fechaVencimiento: { lt: morosaAntesDe },
+      ...filtroMatricula(filtros),
+    },
+    select: {
+      id: true,
+      monto: true,
+      fechaVencimiento: true,
+      planPago: {
+        select: {
+          matricula: {
+            select: {
+              anioAcademico: { select: { codigo: true } },
+              seccion: { select: { nombre: true, grado: { select: { nombre: true } } } },
+              estudiante: {
+                select: {
+                  id: true,
+                  codigoEstudiante: true,
+                  persona: { select: { nombres: true, apellidos: true, numeroDocumento: true } },
+                  apoderados: {
+                    where: { activo: true },
+                    select: {
+                      parentesco: true,
+                      apoderado: {
+                        select: { persona: { select: { nombres: true, apellidos: true } } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { fechaVencimiento: 'asc' },
+  });
+
+/** Boletas no anuladas que vencen en el rango, para el reporte de pagos. */
+export const listarBoletasDelPeriodo = (filtros, desde, hasta) =>
+  prisma.compromisoPago.findMany({
+    where: {
+      estado: { in: ['PENDIENTE', 'PAGADA'] },
+      fechaVencimiento: { gte: desde, lte: hasta },
+      ...filtroMatricula(filtros),
+    },
+    select: { periodo: true, monto: true, estado: true, fechaVencimiento: true },
+    orderBy: { periodo: 'asc' },
+  });
+
+export const buscarSeccion = (id) =>
+  prisma.seccion.findUnique({
+    where: { id },
+    select: { nombre: true, grado: { select: { nombre: true } }, anioAcademico: true },
+  });
+export const buscarGrado = (id) => prisma.grado.findUnique({ where: { id } });
+export const buscarAnio = (id) => prisma.anioAcademico.findUnique({ where: { id } });
+
+// ------------------------------------------------------------ avisos (US-011)
+export const listarBoletasPorVencer = (estudianteIds, desde, hasta) =>
+  prisma.compromisoPago.findMany({
+    where: {
+      estado: 'PENDIENTE',
+      fechaVencimiento: { gte: desde, lte: hasta },
+      planPago: { matricula: { estudianteId: { in: estudianteIds } } },
+    },
+    include: boletaInclude,
+    orderBy: [{ fechaVencimiento: 'asc' }, { id: 'asc' }],
+  });

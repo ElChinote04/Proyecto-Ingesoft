@@ -10,6 +10,7 @@ import {
 import { AppError } from '../errors/AppError.js';
 import { logger } from '../logging/logger.js';
 import { env } from '../config/env.js';
+import { registrarTransaccionCritica } from './auditoria.service.js';
 import { generarComprobantePdf, numeroComprobante } from '../domain/comprobante.js';
 
 const fail = (status, code, message) => {
@@ -103,8 +104,8 @@ const boletaResumenDto = (b) => ({
   fechaVencimiento: b.fechaVencimiento.toISOString().slice(0, 10),
   estado: estadoVisible(b),
   pagadaEn: b.pagadaEn?.toISOString() ?? null,
-  // US-009: número del comprobante de una boleta pagada, para ofrecer su descarga.
-  comprobante: b.comprobante ? numeroComprobante(b.comprobante) : null,
+  // US-009: número del comprobante vigente de una boleta pagada, para ofrecer su descarga.
+  comprobante: b.comprobantes?.[0] ? numeroComprobante(b.comprobantes[0]) : null,
 });
 
 /**
@@ -118,6 +119,10 @@ const boletaDetalleDto = (b, actor) => ({
     (b.pagos ?? []).find(
       (p) => actor?.roles.includes('ADMINISTRADOR') || p.iniciadoPorId === actor?.id,
     )?.id ?? null,
+  // US-013: solo el administrador puede anular el pago que dejó la boleta pagada.
+  ...(actor?.roles.includes('ADMINISTRADOR') && {
+    pagoConfirmadoId: b.comprobantes?.[0]?.pagoId ?? null,
+  }),
   estudiante: {
     id: b.planPago.matricula.estudianteId,
     nombres: b.planPago.matricula.estudiante.persona.nombres,
@@ -485,4 +490,66 @@ export async function simularResultadoPasarela(pagoId, resultado, actor, request
   });
   const aplicado = await confirmarDesdeNotificacion({ referencia: pago.referencia }, requestId);
   return { pagoId, resultadoSimulado: resultado, ...aplicado };
+}
+
+// ------------------------------------------------------------------ US-013
+/**
+ * Anula un pago confirmado que se registró por error. Nada se borra: el pago
+ * queda ANULADO con quién, cuándo y por qué; su comprobante queda anulado y la
+ * boleta vuelve a PENDIENTE (o MOROSA si ya venció), de modo que puede cobrarse
+ * de nuevo. Así se corrige un pago: se anula el equivocado y se registra el
+ * correcto. La devolución del dinero, si corresponde, se gestiona en la pasarela.
+ */
+export async function anularPago(id, { motivo }, actor, requestId) {
+  const pago = await repository.buscarPago(id);
+  if (!pago) fail(404, 'REFERENCE_NOT_FOUND', 'El pago no existe.');
+  if (pago.estado === 'ANULADO') fail(409, 'PAGO_YA_ANULADO', 'Este pago ya fue anulado.');
+  if (pago.estado !== 'CONFIRMADO')
+    fail(409, 'PAGO_NO_ANULABLE', 'Solo se puede anular un pago confirmado por la pasarela.');
+
+  const ahora = new Date();
+  const anulado = await repository.transaction(async (db) => {
+    // Condicional al estado de partida: si dos administradores anulan a la vez,
+    // solo uno lo aplica y el otro recibe el conflicto.
+    const cambiados = await repository.cerrarPago(
+      id,
+      ['CONFIRMADO'],
+      { estado: 'ANULADO', anuladoEn: ahora, anuladoPorId: actor.id, motivoAnulacion: motivo },
+      db,
+    );
+    if (!cambiados) return false;
+    const comprobante = await repository.buscarComprobanteDePago(id, db);
+    await repository.anularComprobanteDePago(id, ahora, db);
+    await repository.reabrirBoleta(pago.compromisoPagoId, db);
+    await registrarTransaccionCritica(db, {
+      actorId: actor.id,
+      evento: 'PAGO_ANULADO',
+      entidad: 'Pago',
+      entidadId: id,
+      anterior: {
+        estadoPago: 'CONFIRMADO',
+        estadoBoleta: 'PAGADA',
+        comprobante: comprobante ? numeroComprobante(comprobante) : null,
+      },
+      nuevo: { estadoPago: 'ANULADO', estadoBoleta: 'PENDIENTE', comprobante: null },
+      motivo,
+      contexto: {
+        compromisoPagoId: pago.compromisoPagoId,
+        referencia: pago.referencia,
+        monto: dinero(pago.monto),
+      },
+      requestId,
+    });
+    return true;
+  });
+  if (!anulado) fail(409, 'PAGO_YA_ANULADO', 'Este pago ya fue anulado.');
+
+  logger.info('PAGO_ANULADO', { module: 'pagos', requestId, userId: actor.id, entidadId: id });
+  const boleta = await repository.buscarBoleta(pago.compromisoPagoId);
+  return {
+    id,
+    estado: 'ANULADO',
+    anuladoEn: ahora.toISOString(),
+    boleta: boletaResumenDto(boleta),
+  };
 }

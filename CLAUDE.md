@@ -173,6 +173,14 @@ muestra como `B001-00000001`). El PDF se genera al descargarlo con `pdfkit` en
 descargan el apoderado a cargo y el administrador. Es un comprobante interno,
 no el electrónico de SUNAT.
 
+**Cobranza (US-008, US-011, US-012) y anulación (US-013).** Las reglas puras
+están en `domain/cobranza.js` y la exportación en `domain/reportePagos.js`
+(PDF con `pdfkit`, Excel con `write-excel-file`). Anular un pago no borra nada:
+el pago queda `ANULADO`, su comprobante queda con `anuladoEn` y la boleta vuelve
+a `PENDIENTE`. Por eso una boleta puede tener varios comprobantes, pero solo uno
+vigente: lo garantiza un índice único parcial en SQL, igual que el de pagos en
+curso. Consulta siempre el vigente (`anuladoEn: null`).
+
 Pendiente: evaluación por competencias, justificaciones de inasistencia y
 reportes.
 

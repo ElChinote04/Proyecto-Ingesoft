@@ -448,3 +448,40 @@ DELETE sin body responde 200 con bloque activo=false. Conserva sesiones/asistenc
 deja de aparecer en horarios personales. Es posible crear después el mismo intervalo
 en un bloque nuevo. No se borra físicamente. Un año inactivo responde 409 INACTIVE_YEAR
 al crear/editar/retirar bloques o crear sesiones. Un bloque retirado no permite nuevas sesiones.
+
+## Cobranza y anulación de pagos
+
+### GET /reportes/pagos/morosidad (US-008)
+
+Solo administrador. Filtros opcionales `anioAcademicoId`, `gradoId`, `seccionId`. Responde
+`{ fechaCorte, resumen: { estudiantes, boletas, deuda }, estudiantes[{ estudiante: { id, codigo,
+nombre, documento }, aula, anioAcademico, apoderados[{ nombre, parentesco }], boletasMorosas,
+deuda, vencimientoMasAntiguo, diasAtraso }] }`, de mayor a menor deuda. Una boleta es morosa si
+está PENDIENTE y venció antes de hoy, el mismo corte que el historial de boletas.
+
+### GET /reportes/pagos?desde&hasta (US-012)
+
+Solo administrador. `desde` y `hasta` (`YYYY-MM-DD`, obligatorias, máximo tres años) acotan la
+fecha de vencimiento de las boletas; filtros opcionales `anioAcademicoId`, `gradoId`, `seccionId`.
+Responde `{ desde, hasta, filtros: { anioAcademico, grado, seccion }, totales, periodos[] }`, donde
+cada total tiene `{ boletas, emitido, recaudado, pendiente, moroso, porcentajeCobranza }`. Las
+boletas ANULADAS no cuentan. Con `formato=pdf` o `formato=xlsx` responde el archivo
+(`Content-Disposition: attachment`). Un id de filtro inexistente devuelve 404.
+
+### PUT /pagos/:id/anulacion (US-013)
+
+Solo administrador. Cuerpo `{ "motivo": "..." }` (10 a 300 caracteres). Solo se anula un pago
+CONFIRMADO: 409 `PAGO_NO_ANULABLE` en otro estado y 409 `PAGO_YA_ANULADO` si ya se anuló (también
+para la segunda de dos anulaciones simultáneas). El pago no se borra: pasa a ANULADO con
+`anuladoEn`, `anuladoPorId` y `motivoAnulacion`; su comprobante queda con `anuladoEn` y la boleta
+vuelve a PENDIENTE, lista para pagarse otra vez con un comprobante nuevo. Se audita como
+`PAGO_ANULADO` con `anterior`, `nuevo` y `motivo`. La devolución del dinero, si corresponde, se
+gestiona en la pasarela. En `GET /compromisos-pago`, el administrador recibe `pagoConfirmadoId` en
+cada boleta pagada para poder anularla.
+
+### GET /avisos-vencimiento (US-011)
+
+Solo apoderado. Responde `{ diasAnticipacion, avisos[{ boletaId, estudiante, concepto, periodo,
+monto, fechaVencimiento, diasRestantes }] }` con las boletas PENDIENTES de sus estudiantes
+vinculados que vencen entre hoy y `PAGOS_DIAS_AVISO` días después. Las que tienen un pago en curso
+no se avisan.

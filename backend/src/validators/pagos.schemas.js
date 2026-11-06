@@ -41,3 +41,14 @@ export const boletasQuerySchema = z
 export const simularSchema = z
   .object({ resultado: z.enum(['PAGADO', 'RECHAZADO', 'EXPIRADO', 'PENDIENTE']).default('PAGADO') })
   .strict();
+
+/** US-013: el administrador anula un pago confirmado indicando el motivo. */
+export const anulacionSchema = z
+  .object({
+    motivo: z
+      .string()
+      .trim()
+      .min(10, 'Explica el motivo de la anulación (al menos 10 caracteres).')
+      .max(300),
+  })
+  .strict();
