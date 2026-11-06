@@ -3,6 +3,7 @@ import AppLayout from '../layouts/AppLayout';
 import { Feedback, Loading } from '../components/Feedback';
 import { api } from '../api/client';
 import DescargarComprobante from '../components/DescargarComprobante';
+import { conceptoDe, periodoLargo } from '../utils/pagos';
 
 // Estados en los que la pasarela todavía no ha dicho la última palabra.
 const EN_CURSO = ['INICIADO', 'PROCESANDO'];
@@ -123,7 +124,7 @@ export default function ResultadoPago({ id, cancelado = false }) {
         <h1>Resultado del pago</h1>
         {pago && (
           <p className="muted">
-            {pago.boleta.concepto} · cuota {pago.boleta.numeroCuota} de{' '}
+            {conceptoDe(pago.boleta)} · {periodoLargo(pago.boleta.periodo)} de{' '}
             {pago.boleta.estudiante.nombres} {pago.boleta.estudiante.apellidos} ·{' '}
             {soles(pago.monto)}
           </p>
