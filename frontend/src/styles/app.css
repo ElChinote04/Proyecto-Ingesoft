@@ -1756,6 +1756,8 @@ a {
   }
   .libreta-cierre {
     padding-top: 10mm;
+  }
+}
 
 /* Cobranza (US-008, US-012), anulación (US-013) y avisos de vencimiento (US-011). */
 .pagos-pestanas {
