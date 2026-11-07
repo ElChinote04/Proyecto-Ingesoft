@@ -13,7 +13,10 @@ RUN npm ci
 COPY . .
 # prisma.config.js exige DATABASE_URL incluso para generar el cliente. La URL
 # real llega en tiempo de ejecución; esta solo satisface la validación.
+# La carpeta de evidencias se crea aquí, con dueño `node`, para que el volumen
+# que la monta herede ese dueño y el proceso pueda escribir en ella.
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma generate \
+    && mkdir -p storage/evidencias \
     && chown -R node:node /app
 
 ENV NODE_ENV=production \

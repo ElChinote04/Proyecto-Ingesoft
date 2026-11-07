@@ -34,6 +34,10 @@ services:
       PAGOS_PROVEEDOR: stripe
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?Falta STRIPE_SECRET_KEY en deploy/.env}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?Falta STRIPE_WEBHOOK_SECRET en deploy/.env}
+    volumes:
+      # Archivos de evidencia pedagógica (US-019): sin volumen se perderían en
+      # cada reconstrucción. No entran en el volcado de PostgreSQL.
+      - sage_evidencias:/app/storage/evidencias
 
   web:
     build: ./frontend
@@ -52,5 +56,6 @@ services:
 
 volumes:
   sage_postgres:
+  sage_evidencias:
   caddy_data:
   caddy_config:

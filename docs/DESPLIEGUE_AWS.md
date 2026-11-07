@@ -212,6 +212,13 @@ migración que cambie datos, haz una copia de seguridad (sección 11).
   docker compose -f docker-compose.prod.yml --env-file deploy/.env exec -T db pg_dump -U sage sage > sage-$(date +%F).sql
   ```
 
+- **Archivos de evidencia pedagógica.** Viven en el volumen `sage_evidencias`,
+  no en la base, así que el volcado no los incluye. Para copiarlos:
+
+  ```bash
+  docker compose -f docker-compose.prod.yml --env-file deploy/.env exec -T backend tar -cz -C storage evidencias > evidencias-$(date +%F).tar.gz
+  ```
+
 ## 12. Problemas habituales
 
 | Síntoma                                                 | Causa probable                                                                |
