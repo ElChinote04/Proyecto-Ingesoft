@@ -37,6 +37,13 @@ const schema = z.object({
   SESSION_IDLE_SECONDS: z.coerce.number().int().min(60).max(86400).default(1800),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   LOG_DIR: z.string().default('logs'),
+  EVIDENCIAS_DIR: z.string().default('storage/evidencias'),
+  // Encabezado de la libreta. Sin valor, la celda del documento queda en blanco.
+  INSTITUCION_NOMBRE: vacioEsAusente(z.string().optional()),
+  INSTITUCION_DRE: vacioEsAusente(z.string().optional()),
+  INSTITUCION_UGEL: vacioEsAusente(z.string().optional()),
+  INSTITUCION_CODIGO_MODULAR: vacioEsAusente(z.string().optional()),
+  INSTITUCION_NIVEL: vacioEsAusente(z.string().optional()),
   // Pasarela de pagos (ADR-002). 'simulada' permite desarrollar y probar sin
   // credenciales; 'stripe' exige las llaves del proveedor.
   PAGOS_PROVEEDOR: z.enum(['simulada', 'stripe']).default('simulada'),

@@ -1,5 +1,7 @@
 import { prisma } from '../config/database.js';
 
+export const transaction = (operation) => prisma.$transaction(operation);
+
 const include = {
   calificacion: {
     include: {
@@ -37,7 +39,7 @@ export const deleteCalificacionCompetencia = (id, db = prisma) =>
 
 export const auditCalificacionCompetencia = (
   db,
-  { usuarioId, tipoEvento, detalleId, valorAnterior, valorNuevo, requestId },
+  { usuarioId, tipoEvento, detalleId, valorAnterior, valorNuevo, motivo, requestId },
 ) =>
   db.registroAuditoria.create({
     data: {
@@ -50,6 +52,7 @@ export const auditCalificacionCompetencia = (
       detalle: {
         valorAnterior: valorAnterior ?? null,
         valorNuevo: valorNuevo ?? null,
+        ...(motivo && { motivo }),
       },
     },
   });

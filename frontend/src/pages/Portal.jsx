@@ -159,19 +159,14 @@ export default function Portal() {
                     Ver pagos y boletas
                   </button>
                 )}
+                <button
+                  onClick={() => {
+                    window.location.hash = '/evaluaciones';
+                  }}
+                >
+                  Ver y descargar libreta
+                </button>
               </div>
-            </section>
-          )}
-          {user.roles.includes('APODERADO') && (
-            <section className="portal-historial">
-              <h2>Acciones frecuentes</h2>
-              <button
-                onClick={() => {
-                  window.location.hash = '/evaluaciones';
-                }}
-              >
-                Ver y descargar libreta
-              </button>
             </section>
           )}
           <Historial key={estudiante.id} estudiante={estudiante} />

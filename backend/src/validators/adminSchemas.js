@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { normalizeUserField, userFieldRules, userRoles } from './usuario.reglas.js';
 import { planPagoSchema } from './pagos.schemas.js';
+import { motivoCorreccion } from './calificacion.schemas.js';
 const id = z.number().int().positive().max(2147483647);
 const text = (label, max = 100) => z.string().trim().min(1, `Ingresa ${label}.`).max(max);
 const password = z
@@ -121,6 +122,7 @@ export const updateCalificacionSchema = z
   .object({
     conclusionDescriptiva: z.string().trim().max(500).optional(),
     competencias: z.array(calificacionCompetenciaInput).min(1).optional(),
+    motivo: motivoCorreccion.optional(),
   })
   .strict()
   .refine((value) => value.conclusionDescriptiva !== undefined || value.competencias !== undefined, {
@@ -188,7 +190,7 @@ export const createCalificacionCompetenciaSchema = z
   .object({ calificacionId: id, competenciaId: id, nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional() })
   .strict();
 export const updateCalificacionCompetenciaSchema = z
-  .object({ nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional() })
+  .object({ nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional(), motivo: motivoCorreccion.optional() })
   .strict();
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Usa una hora válida HH:mm.');
 export const blockSchema = z

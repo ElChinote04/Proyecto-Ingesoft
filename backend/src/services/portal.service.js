@@ -1,12 +1,17 @@
 import * as repository from '../repositories/portal.repository.js';
 import { AppError } from '../errors/AppError.js';
 
-async function estudiantesAutorizados(user) {
+export function filtrosEstudiantesAutorizados(user) {
   const permisos = [];
   if (user.roles.includes('ALUMNO') && user.estudianteId) permisos.push({ id: user.estudianteId });
   if (user.roles.includes('APODERADO') && user.apoderadoId) {
     permisos.push({ apoderados: { some: { apoderadoId: user.apoderadoId, activo: true } } });
   }
+  return permisos;
+}
+
+async function estudiantesAutorizados(user) {
+  const permisos = filtrosEstudiantesAutorizados(user);
   if (!permisos.length) return [];
   return repository.obtenerEstudiantes({ OR: permisos });
 }
