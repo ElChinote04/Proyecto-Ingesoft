@@ -17,17 +17,17 @@ const admin = request.agent(app),
 const password = 'PruebaFlujo123!';
 const teacherPassword = 'DocentePersonal123!';
 const initial = {
-  numeroDocumento: 'ADMIN-01',
-  nombres: 'María',
-  apellidos: 'Dirección',
+  numeroDocumento: '90000000',
+  nombres: 'Maria',
+  apellidos: 'Direccion',
   identificador: 'admin@prueba.local',
   contrasena: password,
   claveInstalacion: env.INITIAL_SETUP_KEY,
 };
 const teacherInput = {
-  numeroDocumento: 'DOC-01',
+  numeroDocumento: '10000001',
   nombres: 'Elena',
-  apellidos: 'Pérez',
+  apellidos: 'Perez',
   identificador: 'docente@prueba.local',
   contrasena: password,
   roles: ['DOCENTE', 'APODERADO'],
@@ -129,6 +129,17 @@ test('04 duplicados y datos inválidos no dejan personas o perfiles huérfanos',
   for (const input of [teacherInput, { ...teacherInput, identificador: 'otro@prueba.local' }])
     await post('usuarios', input, 409);
   for (const input of [
+    { ...teacherInput, identificador: 'correo-sin-arroba' },
+    { ...teacherInput, nombres: 'Elena123' },
+    { ...teacherInput, apellidos: 'Perez@' },
+    { ...teacherInput, numeroDocumento: '1234567' },
+    { ...teacherInput, numeroDocumento: '123456789' },
+    { ...teacherInput, nombres: 'Elena_Luz' },
+    { ...teacherInput, apellidos: 'Perez_Lopez' },
+    { ...teacherInput, nombres: 'Elena.' },
+    { ...teacherInput, apellidos: 'Perez, Lopez' },
+    { ...teacherInput, nombres: 'A'.repeat(101) },
+    { ...teacherInput, numeroDocumento: '1234567a' },
     { ...teacherInput, roles: [] },
     { ...teacherInput, roles: ['DOCENTE', 'DOCENTE'] },
     { ...teacherInput, contrasena: 'á'.repeat(40) },
@@ -185,7 +196,7 @@ test('06 crea todos los catálogos académicos por API, sin seed', async () => {
 });
 test('07 registra alumno y matrícula con año coherente derivado de la sección', async () => {
   student = (
-    await post('estudiantes', { numeroDocumento: 'EST-01', nombres: 'Lucía', apellidos: 'Gómez' })
+    await post('estudiantes', { numeroDocumento: '20000001', nombres: 'Lucia', apellidos: 'Gomez' })
   ).body.data;
   enrollment = (await post('matriculas', { estudianteId: student.id, seccionId: section.id })).body
     .data;
@@ -207,9 +218,9 @@ test('07 registra alumno y matrícula con año coherente derivado de la sección
 test('08 vincula cuenta ALUMNO a la misma persona y evita duplicarla', async () => {
   const account = (
     await post('usuarios', {
-      numeroDocumento: 'EST-01',
-      nombres: 'Lucía',
-      apellidos: 'Gómez',
+      numeroDocumento: '20000001',
+      nombres: 'Lucia',
+      apellidos: 'Gomez',
       identificador: 'alumna@prueba.local',
       contrasena: password,
       roles: ['ALUMNO'],
@@ -219,12 +230,12 @@ test('08 vincula cuenta ALUMNO a la misma persona y evita duplicarla', async () 
   assert.equal(await prisma.estudiante.count(), 1);
   await post(
     'estudiantes',
-    { numeroDocumento: 'EST-01', nombres: 'Lucía', apellidos: 'Gómez' },
+    { numeroDocumento: '20000001', nombres: 'Lucia', apellidos: 'Gomez' },
     409,
   );
   await post(
     'estudiantes',
-    { numeroDocumento: 'EST-01', nombres: 'Otra', apellidos: 'Persona' },
+    { numeroDocumento: '20000001', nombres: 'Otra', apellidos: 'Persona' },
     409,
   );
 });
@@ -244,7 +255,7 @@ test('09 asigna curso/sección/docente/aula y el bloque semanal', async () => {
   otherTeacher = (
     await post('usuarios', {
       ...teacherInput,
-      numeroDocumento: 'DOC-02',
+      numeroDocumento: '10000002',
       identificador: 'docente2@prueba.local',
       nombres: 'Carlos',
       roles: ['DOCENTE'],
