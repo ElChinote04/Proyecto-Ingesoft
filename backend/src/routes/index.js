@@ -26,10 +26,13 @@ import { reglaConsolidacionRouter } from './reglaConsolidacion.js';
 import { planAcademicoRouter } from './planAcademico.js';
 import { evidenciaPedagogicaRouter } from './evidenciaPedagogica.js';
 import { calificacionCompetenciaRouter } from './calificacionCompetencia.js';
+import { calificacionesAlumnoRouter } from './calificacionesAlumno.js';
+import { evidenciasCalificacionRouter } from './evidenciasCalificacion.js';
 import { prisma } from '../config/database.js';
 import { asistenciaDocenteRouter } from './asistenciaDocenteRoutes.js';
 import { pagosRouter } from './pagos.js';
 import { erroresRouter } from './errores.js';
+import { libretasRouter } from './libretas.js';
 
 export const router = Router();
 
@@ -92,6 +95,14 @@ router.use('/errores', erroresRouter);
 router.use('/cursos', cursoRouter);
 router.use('/competencias', competenciaRouter);
 router.use('/calificaciones', calificacionRouter);
+router.use('/libretas', libretasRouter);
+router.get('/bimestres', requireAuth, async (_req, res) => {
+  const bimestres = await prisma.bimestreAcademico.findMany({
+    where: { activo: true, anioAcademico: { activo: true } },
+    orderBy: [{ anioAcademicoId: 'asc' }, { numero: 'asc' }],
+  });
+  res.json({ data: bimestres });
+});
 
 router.get(
   '/bimestres',
@@ -116,6 +127,8 @@ router.use('/reglas-consolidacion', reglaConsolidacionRouter);
 router.use('/planes-academicos', planAcademicoRouter);
 router.use('/evidencias-pedagogicas', evidenciaPedagogicaRouter);
 router.use('/calificaciones-competencias', calificacionCompetenciaRouter);
+router.use(calificacionesAlumnoRouter);
+router.use(evidenciasCalificacionRouter);
 router.use(pagosRouter);
 
 router.post(
@@ -189,5 +202,6 @@ router.get(
   requireAuth,
   requireAttendanceReport,
   validate(reporteAsistenciaSchema, 'query'),
+  session.report,
   session.report
 );

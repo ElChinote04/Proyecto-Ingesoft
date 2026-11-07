@@ -37,17 +37,25 @@ Campos opcionales: `contexto` (datos extra, por ejemplo `{ referencia, proveedor
 
 ## 3. Eventos disponibles
 
-| Módulo    | Evento                       | Cuándo                                      | Exige `anterior`, `nuevo` y `motivo`   |
-| --------- | ---------------------------- | ------------------------------------------- | -------------------------------------- |
-| Académica | `NOTA_REGISTRADA`            | Primera calificación de un alumno           | No (envía `nuevo`)                     |
-| Académica | `NOTA_MODIFICADA`            | Cambio de una calificación existente        | **Sí**                                 |
-| Académica | `NOTA_PUBLICADA`             | Publicación de resultados del periodo       | No                                     |
-| Pagos     | `COMPROMISO_PAGO_EMITIDO`    | Se genera el compromiso de pago             | No (envía `nuevo`)                     |
-| Pagos     | `COMPROMISO_PAGO_MODIFICADO` | Cambio de monto o cronograma                | **Sí**                                 |
-| Pagos     | `PAGO_INICIADO`              | Se inicia un pago                           | No (envía `nuevo`)                     |
-| Pagos     | `PAGO_CONFIRMADO`            | La pasarela confirma el pago                | No (recomendado: estado antes/después) |
-| Pagos     | `PAGO_NO_COMPLETADO`         | Pago rechazado o cancelado                  | No (recomendado: estado antes/después) |
-| Pagos     | `PAGO_ANULADO`               | Anulación o corrección por el administrador | **Sí**                                 |
+| Módulo    | Evento                                | Cuándo                                      | Exige `anterior`, `nuevo` y `motivo`       |
+| --------- | ------------------------------------- | ------------------------------------------- | ------------------------------------------ |
+| Académica | `NOTA_REGISTRADA`                     | Primera calificación de un alumno           | No (envía `nuevo`)                         |
+| Académica | `NOTA_MODIFICADA`                     | Cambio de una calificación existente        | **Sí**                                     |
+| Académica | `NOTA_PUBLICADA`                      | Publicación de resultados del periodo       | No                                         |
+| Académica | `EVIDENCIA_CALIFICACION_REGISTRADA`   | Se registra evidencia de una nota           | No (envía `nuevo`)                         |
+| Académica | `EVIDENCIA_CALIFICACION_MODIFICADA`   | Cambio de evidencia o de sus archivos       | No (recomendado: estado antes/después)     |
+| Académica | `EVIDENCIA_CALIFICACION_DADA_DE_BAJA` | Baja lógica de una evidencia                | No (`motivo` si la sección está publicada) |
+| Pagos     | `COMPROMISO_PAGO_EMITIDO`             | Se genera el compromiso de pago             | No (envía `nuevo`)                         |
+| Pagos     | `COMPROMISO_PAGO_MODIFICADO`          | Cambio de monto o cronograma                | **Sí**                                     |
+| Pagos     | `PAGO_INICIADO`                       | Se inicia un pago                           | No (envía `nuevo`)                         |
+| Pagos     | `PAGO_CONFIRMADO`                     | La pasarela confirma el pago                | No (recomendado: estado antes/después)     |
+| Pagos     | `PAGO_NO_COMPLETADO`                  | Pago rechazado o cancelado                  | No (recomendado: estado antes/después)     |
+| Pagos     | `PAGO_ANULADO`                        | Anulación o corrección por el administrador | **Sí**                                     |
+
+Desde US-019, `NOTA_PUBLICADA` se registra por sección con entidad `PublicacionSeccion` y
+`{ bimestreId, seccionId }` como valor nuevo; en una publicación masiva lleva
+`contexto: { masiva: true }`. Los eventos anteriores, con entidad `BimestreAcademico`, se conservan.
+Las correcciones del administrador sobre una sección publicada guardan `motivo` en `detalle`.
 
 Si necesitas un evento nuevo, pídelo al módulo de Seguridad y Acceso: se agrega a
 `EVENTOS_CRITICOS` en `auditoria.service.js`. Un evento fuera de la lista, o una modificación sin

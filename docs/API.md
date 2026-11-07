@@ -376,6 +376,70 @@ Eventos administrativos: ADMINISTRADOR_INICIAL_CREADO, USUARIO_CREADO, USUARIO_A
 Catálogos, matrículas y sesiones conservan altas y consultas. Los bloques admiten
 edición y retiro según las reglas siguientes, conservando registros con historial.
 
+## Calificaciones por alumno
+
+Rutas exclusivas del rol DOCENTE. Un docente solo accede a los salones donde tiene una asignación activa en el año académico activo; no hace falta que existan sesiones de clase.
+
+| Ruta                                            | Respuesta o cuerpo                                                                                                                                                                                                                                                                |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /secciones                                  | `[{ id, nombre, anioAcademicoId, anioAcademico }]`                                                                                                                                                                                                                                |
+| GET /secciones/:id/alumnos                      | `[{ matriculaId, codigo, nombre }]`; 403 si el salón no es del docente                                                                                                                                                                                                            |
+| GET /matriculas/:id/calificaciones?bimestreId=1 | `{ bimestre: { id, nombre, publicado }, cursos: [{ id, nombre, regla, competencias: [{ id, codigo, nombre, nivelLogro, calificacionCompetenciaId, totalEvidencias }] }] }`; `regla` es null si el curso no tiene una vigente; `publicado` se refiere a la sección de la matrícula |
+| PUT /matriculas/:id/calificaciones              | `{ bimestreId, calificaciones: [{ competenciaId, nivelLogro }] }`, niveles AD, A, B o C; devuelve `{ total, resultados }`                                                                                                                                                         |
+
+El PUT guarda solo las competencias enviadas, en una transacción: si una falla no se guarda ninguna. Responde 400 `INVALID_COMPETENCY_CONTEXT` si la competencia no pertenece a un curso del docente en ese salón, 404 `RULE_NOT_FOUND` si el curso no tiene regla vigente y 409 `TERM_PUBLISHED` si la libreta de la sección ya fue publicada.
+
+## Evidencia pedagógica de la calificación (US-019)
+
+Cada evidencia sustenta una nota por competencia y bimestre. El alumno, el curso y la competencia se derivan de esa nota. Consulta y modifica quien hoy dicta el curso en la sección; el administrador consulta y da de baja.
+
+| Ruta                                                      | Rol                    | Cuerpo o respuesta                                                                                            |
+| --------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| GET /calificaciones-competencias/:id/evidencias           | Docente, administrador | `{ contexto: { alumno, curso, competencia, bimestre, nivelActual }, publicado, evidencias }`, activas primero |
+| POST /calificaciones-competencias/:id/evidencias          | Docente                | multipart: `titulo`, `descripcion?`, `archivos` (0 a 3); 201 con la evidencia                                 |
+| PATCH /evidencias-calificaciones/:id                      | Docente                | `{ titulo?, descripcion? }`; `descripcion: null` la borra                                                     |
+| DELETE /evidencias-calificaciones/:id                     | Docente, administrador | Baja lógica. Cuerpo `{ motivo }` obligatorio para el administrador si la sección está publicada               |
+| POST /evidencias-calificaciones/:id/archivos              | Docente                | multipart: `archivos` (1 a 3); 201                                                                            |
+| DELETE /evidencias-calificaciones/:id/archivos/:archivoId | Docente                | Retira el archivo de la evidencia; sigue en disco                                                             |
+| GET /evidencias-calificaciones/:id/archivos/:archivoId    | Docente, administrador | Descarga con `Content-Disposition: attachment`. También funciona si la evidencia está inactiva                |
+
+Una evidencia lleva título y, además, descripción o al menos un archivo. Los archivos son PDF, JPG o PNG, verificados por sus primeros bytes, de hasta 5 MB y con un máximo de 3 activos por evidencia. El nivel registrado lo fija el servidor al crear y no cambia si después cambia la nota.
+
+Errores propios: 400 `EVIDENCE_EMPTY`, `FILE_TYPE_NOT_ALLOWED`, `FILE_TOO_LARGE`, `TOO_MANY_FILES` y `CORRECTION_REASON_REQUIRED`; 404 `GRADE_DETAIL_NOT_FOUND`, `EVIDENCE_NOT_FOUND` y `FILE_NOT_FOUND`; 409 `TERM_PUBLISHED` y `EVIDENCE_INACTIVE`.
+
+## Publicación de libretas
+
+Rutas exclusivas del rol ADMINISTRADOR. La publicación es por sección y bimestre, y no se puede deshacer.
+
+| Ruta                                                                | Cuerpo o respuesta                                                                                                                                                                                               |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /calificaciones/bimestres/:id/publicacion?pagina=1&limite=10    | `{ bimestre, resumen, seccionesListas, secciones: [{ id, nombre, estado, totalEsperado, totalCompleto, publicadoEn, pendientes }], paginacion }`; `limite` admite 10, 25 o 50                                    |
+| POST /calificaciones/bimestres/:id/secciones/:seccionId/publicacion | Publica la sección: 201, o 200 con `yaPublicado: true`. 409 `PUBLICATION_INCOMPLETE`, 404 `GRADES_NOT_FOUND`, 400 `INVALID_TERM_CONTEXT`                                                                         |
+| POST /calificaciones/bimestres/:id/publicacion                      | Masiva: `{ seccionIds }` (1 a 200, sin repetir). Devuelve `{ publicadas, omitidas: [{ id, nombre, razon }] }`; `razon` es `CON_PENDIENTES`, `YA_PUBLICADA`, `SIN_DATOS`, `OTRO_ANIO_ACADEMICO` o `NO_ENCONTRADA` |
+
+`estado` es `PUBLICADA`, `LISTA`, `CON_PENDIENTES` o `SIN_DATOS`. Cada pendiente trae `{ curso, docente, sinNota, sinEvidencia, sinRegla }`, sin nombres de alumnos. Una sección está lista cuando cada matrícula activa tiene nota y al menos una evidencia activa en cada competencia activa de sus cursos.
+
+Con la sección publicada, `POST /calificaciones`, `POST /calificaciones-competencias` y `PUT /matriculas/:id/calificaciones` responden 409 `TERM_PUBLISHED`. El administrador conserva `PUT` y `DELETE` de `/calificaciones/:id` y `/calificaciones-competencias/:id`, pero debe enviar `motivo` (5 a 500 caracteres); sin él responden 400 `CORRECTION_REASON_REQUIRED`.
+
+## Libreta de notas (US-020)
+
+Solo la consultan el propio alumno y su apoderado con vínculo activo. Quien entra lo decide ese vínculo, no un rol: el administrador y el docente reciben 403, salvo que además sean apoderados del estudiante. El `:id` es el de la matrícula, porque hay una libreta por alumno y año.
+
+| Ruta              | Respuesta                                                                                                                                                                                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /libretas     | `[{ id, nombre, matriculas: [{ id, anioAcademico, seccion, activa }] }]`, con todos los años y el más reciente primero. Incluye matrículas inactivas                                                                                                             |
+| GET /libretas/:id | `{ institucion, estudiante: { apellidosNombres, codigo, dni }, matricula, periodos: [{ id, numero, nombre, publicado }], anualCompleta, areas: [{ id, codigo, nombre, calificacionFinal, competencias: [{ id, codigo, nombre, logros, calificacionAnual }] }] }` |
+
+`logros` tiene una clave por número de bimestre; un bimestre sin publicar siempre vale `null`, porque esas notas no salen del servidor. Áreas y competencias se ordenan por código.
+
+`calificacionAnual` y `calificacionFinal` son `null` hasta que se publican todos los bimestres (`anualCompleta`). La anual aplica la regla con la que se calificó el último bimestre del curso e ignora su mínimo. La final del área aplica esa estrategia a las notas anuales, y es `null` si falta alguna; como las competencias no tienen orden en el tiempo, `reciente` pasa a nivel más frecuente y su empate, al nivel más bajo.
+
+`institucion` sale de las variables `INSTITUCION_*`; sin valor, cada campo es `null`.
+
+Errores propios: 403 `FORBIDDEN` sin perfil de alumno ni apoderado, 403 `STUDENT_FORBIDDEN` si la matrícula es de un estudiante sin vínculo, y 404 `ENROLLMENT_NOT_FOUND`.
+
+`GET /calificaciones` y `GET /calificaciones/:id` responden 403 a alumnos y apoderados: las notas publicadas se consultan únicamente aquí.
+
 ## Portal privado y horario semanal
 
 ### GET /portal/estudiantes

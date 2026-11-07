@@ -1,7 +1,12 @@
 import { prisma } from '../config/database.js';
 
 const include = {
-  matricula: { include: { estudiante: { include: { persona: true } }, seccion: { include: { grado: true, anioAcademico: true } } } },
+  matricula: {
+    include: {
+      estudiante: { include: { persona: true } },
+      seccion: { include: { grado: true, anioAcademico: true } },
+    },
+  },
   bimestre: true,
   asignacion: { include: { curso: true, seccion: true, docente: { include: { persona: true } } } },
   regla: true,
@@ -20,8 +25,7 @@ export const findCalificacionByKey = ({ matriculaId, bimestreId, asignacionId },
     include,
   });
 
-export const createCalificacion = (data, db = prisma) =>
-  db.calificacion.create({ data, include });
+export const createCalificacion = (data, db = prisma) => db.calificacion.create({ data, include });
 
 export const updateCalificacion = (id, data, db = prisma) =>
   db.calificacion.update({ where: { id }, data, include });
@@ -31,7 +35,10 @@ export const deleteCalificacion = (id, db = prisma) =>
 
 export const transaction = (operation) => prisma.$transaction(operation);
 
-export const auditCalificacion = (db, { usuarioId, tipoEvento, calificacionId, valorAnterior, valorNuevo, requestId }) =>
+export const auditCalificacion = (
+  db,
+  { usuarioId, tipoEvento, calificacionId, valorAnterior, valorNuevo, motivo, requestId },
+) =>
   db.registroAuditoria.create({
     data: {
       usuarioId,
@@ -43,6 +50,7 @@ export const auditCalificacion = (db, { usuarioId, tipoEvento, calificacionId, v
       detalle: {
         valorAnterior: valorAnterior ?? null,
         valorNuevo: valorNuevo ?? null,
+        ...(motivo && { motivo }),
       },
     },
   });

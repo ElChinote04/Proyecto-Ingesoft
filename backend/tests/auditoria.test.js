@@ -93,8 +93,8 @@ test('AUD-01 un cambio de nota queda registrado con usuario, fecha, valores y mo
   assert.equal(registro.requestId, 'req-prueba-auditoria');
   assert.ok(registro.fechaHora);
   assert.deepEqual(registro.detalle, {
-    anterior: { nivelLogro: 'B' },
-    nuevo: { nivelLogro: 'A' },
+    valorAnterior: { nivelLogro: 'B' },
+    valorNuevo: { nivelLogro: 'A' },
     motivo: 'Rectificación aprobada',
   });
 });

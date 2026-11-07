@@ -5,6 +5,7 @@ work/
 test-results/
 playwright-report/
 backend/generated/
+backend/storage/
 .env.*
 !.env.example
 
@@ -38,3 +39,4 @@ Thumbs.db
 !.vscode/extensions.json
 
 CLAUDE.local.md
+CLAUDE.md
