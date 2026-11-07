@@ -1,40 +1,57 @@
 
 import * as repository from '../repositories/sessionRepository.js';
+import { prisma } from '../config/database.js';
 import { AppError } from '../errors/AppError.js';
 import { logger } from '../logging/logger.js';
 
 function requireTeacher(user) {
-  if (!user.docenteId)
-    throw new AppError(403, 'NO_TEACHER_PROFILE', 'Tu cuenta no tiene un perfil docente asociado.');
+  if (!user.docenteId) {
+    throw new AppError(
+      403,
+      'NO_TEACHER_PROFILE',
+      'Tu cuenta no tiene un perfil docente asociado.',
+    );
+  }
 }
 
 function checkSession(session, user) {
   requireTeacher(user);
-  if (!session || !session.activo)
+
+  if (!session || !session.activo) {
     throw new AppError(
       404,
       'SESSION_NOT_FOUND',
       'La sesión de clase no existe o no está disponible.',
     );
-  if (session.bloque.asignacion.docenteId !== user.docenteId)
+  }
+
+  if (session.bloque.asignacion.docenteId !== user.docenteId) {
     throw new AppError(
       403,
       'SESSION_FORBIDDEN',
       'Solo puedes acceder a tus propias sesiones de clase.',
     );
+  }
 }
 
 function dto(session) {
   const { curso, seccion, docente } = session.bloque.asignacion;
+
   return {
     id: session.id,
-    curso: { id: curso.id, nombre: curso.nombre },
+    curso: {
+      id: curso.id,
+      nombre: curso.nombre,
+    },
     seccion: {
       id: seccion.id,
       gradoId: seccion.gradoId,
       nombre: `${seccion.grado.nombre} ${seccion.nombre}`,
     },
-    docente: { id: docente.id, nombre: `${docente.persona.nombres} ${docente.persona.apellidos}` },
+    docente: {
+      id: docente.id,
+      nombre: `${docente.persona.nombres} ${docente.persona.apellidos}`,
+    },
     anioAcademicoId: seccion.anioAcademico.id,
     anioAcademico: seccion.anioAcademico.codigo,
     fecha: session.fecha.toISOString().slice(0, 10),
@@ -46,6 +63,7 @@ function dto(session) {
 
 function studentDto(matricula) {
   const asistencia = matricula.asistencias[0];
+
   return {
     alumnoId: matricula.estudianteId,
     nombre: `${matricula.estudiante.persona.nombres} ${matricula.estudiante.persona.apellidos}`,
@@ -57,65 +75,120 @@ function studentDto(matricula) {
 
 export async function list(user, requestId) {
   requireTeacher(user);
+
   const sessions = await repository.listSessions(user.docenteId);
-  logger.info('Consulta de sesiones', { module: 'asistencia', userId: user.id, requestId });
+
+  logger.info('Consulta de sesiones', {
+    module: 'asistencia',
+    userId: user.id,
+    requestId,
+  });
+
   return sessions.map(dto);
 }
 
 export async function detail(id, user) {
   const session = await repository.findSession(id);
+
   checkSession(session, user);
+
   return dto(session);
 }
 
 export async function students(id, user) {
   const session = await repository.findSession(id);
+
   checkSession(session, user);
+
   return {
     sesion: dto(session),
-    alumnos: (await repository.findStudents(session.bloque.asignacion.seccionId, id)).map(
-      studentDto,
-    ),
+    alumnos: (
+      await repository.findStudents(
+        session.bloque.asignacion.seccionId,
+        id
+      )
+    ).map(studentDto),
   };
 }
 
 export async function save(id, input, user, requestId) {
-  const result = await repository.inTransaction(id, async (db) => {
-    const session = await repository.findSession(id, db);
-    checkSession(session, user);
-    const students = await repository.findStudents(session.bloque.asignacion.seccionId, id, db);
-    const ids = input.asistencias.map((a) => a.alumnoId);
-    if (new Set(ids).size !== ids.length)
-      throw new AppError(409, 'DUPLICATE_STUDENT', 'Cada alumno debe aparecer una sola vez.');
-    const byId = new Map(students.map((m) => [m.estudianteId, m]));
-    if (ids.some((studentId) => !byId.has(studentId)))
-      throw new AppError(
-        400,
-        'STUDENT_NOT_ENROLLED',
-        'Uno de los alumnos no tiene matrícula activa en esta sección.',
+  const result = await repository.inTransaction(
+    id,
+    async (db) => {
+      const session = await repository.findSession(id, db);
+
+      checkSession(session, user);
+
+      const students = await repository.findStudents(
+        session.bloque.asignacion.seccionId,
+        id,
+        db
       );
-    if (ids.length !== students.length)
-      throw new AppError(
-        400,
-        'INCOMPLETE_ATTENDANCE',
-        'Registra un estado para cada alumno matriculado.',
+
+      const ids = input.asistencias.map((a) => a.alumnoId);
+
+      if (new Set(ids).size !== ids.length) {
+        throw new AppError(
+          409,
+          'DUPLICATE_STUDENT',
+          'Cada alumno debe aparecer una sola vez.',
+        );
+      }
+
+      const byId = new Map(
+        students.map((m) => [m.estudianteId, m])
       );
-    const records = input.asistencias.map((a) => ({
-      ...a,
-      matriculaId: byId.get(a.alumnoId).id,
-      anterior: byId.get(a.alumnoId).asistencias[0]?.condicion ?? null,
-    }));
-    const saved = await repository.saveAttendance(db, id, records, user.id);
-    const resumen = { PRESENTE: 0, TARDANZA: 0, AUSENTE: 0 };
-    records.forEach((r) => resumen[r.estado]++);
-    return {
-      ...saved,
-      sesion: dto(session),
-      total: records.length,
-      resumen,
-      registradoPor: user.nombre,
-    };
-  });
+
+      if (ids.some((studentId) => !byId.has(studentId))) {
+        throw new AppError(
+          400,
+          'STUDENT_NOT_ENROLLED',
+          'Uno de los alumnos no tiene matrícula activa en esta sección.',
+        );
+      }
+
+      if (ids.length !== students.length) {
+        throw new AppError(
+          400,
+          'INCOMPLETE_ATTENDANCE',
+          'Registra un estado para cada alumno matriculado.',
+        );
+      }
+
+      const records = input.asistencias.map((a) => ({
+        ...a,
+        matriculaId: byId.get(a.alumnoId).id,
+        anterior:
+          byId.get(a.alumnoId).asistencias[0]?.condicion ?? null,
+      }));
+
+      const saved = await repository.saveAttendance(
+        db,
+        id,
+        records,
+        user.id
+      );
+
+      const resumen = {
+        PRESENTE: 0,
+        TARDANZA: 0,
+        AUSENTE: 0,
+      };
+
+      records.forEach((r) => {
+        resumen[r.estado]++;
+      });
+
+      return {
+        ...saved,
+        sesion: dto(session),
+        total: records.length,
+        resumen,
+        registradoPor: user.nombre,
+      };
+    }
+  );
+
   logger.info('Asistencia guardada', {
     module: 'asistencia',
     userId: user.id,
@@ -123,18 +196,43 @@ export async function save(id, input, user, requestId) {
     sesionId: id,
     total: result.total,
   });
+
   return result;
 }
 
+function validarIdOpcional(valor, campo) {
+  if (valor == null || valor === '') {
+    return undefined;
+  }
 
-// ============================================================
-// NUEVA FUNCIÓN: REPORTE DE ASISTENCIA ESTUDIANTIL
-// ============================================================
+  const texto = String(valor);
+
+  if (!/^[1-9]\d*$/.test(texto)) {
+    throw new AppError(
+      400,
+      'INVALID_FILTER',
+      `El identificador de ${campo} no es válido.`,
+    );
+  }
+
+  const id = Number(texto);
+
+  if (!Number.isSafeInteger(id) || id > 2147483647) {
+    throw new AppError(
+      400,
+      'INVALID_FILTER',
+      `El identificador de ${campo} no es válido.`,
+    );
+  }
+
+  return id;
+}
 
 export async function report(filtros, user, requestId) {
+  const esAdministrador = user?.roles?.includes('ADMINISTRADOR');
+  const esDocente = user?.roles?.includes('DOCENTE');
 
-  // 1. Verificar que el usuario sea administrador
-  if (!user?.roles?.includes('ADMINISTRADOR')) {
+  if (!esAdministrador && !esDocente) {
     throw new AppError(
       403,
       'FORBIDDEN',
@@ -142,16 +240,29 @@ export async function report(filtros, user, requestId) {
     );
   }
 
-  // 2. Obtener los filtros
-  const { fechaInicio, fechaFin, seccionId } = filtros ?? {};
+  if (!esAdministrador && !user.docenteId) {
+    throw new AppError(
+      403,
+      'NO_TEACHER_PROFILE',
+      'Tu cuenta no tiene un perfil docente asociado.',
+    );
+  }
 
-  // 3. Validar el identificador de la sección
+  const {
+    fechaInicio,
+    fechaFin,
+    seccionId,
+    alumnoId,
+    cursoId,
+  } = filtros ?? {};
+
   const idSeccion = Number(seccionId);
 
   if (
     seccionId == null ||
+    !/^[1-9]\d*$/.test(String(seccionId)) ||
     !Number.isSafeInteger(idSeccion) ||
-    idSeccion <= 0
+    idSeccion > 2147483647
   ) {
     throw new AppError(
       400,
@@ -160,7 +271,9 @@ export async function report(filtros, user, requestId) {
     );
   }
 
-  // 4. Validar y convertir las fechas
+  const idAlumno = validarIdOpcional(alumnoId, 'alumno');
+  const idCurso = validarIdOpcional(cursoId, 'curso');
+
   const convertirFecha = (valor) => {
     if (
       typeof valor !== 'string' ||
@@ -192,7 +305,6 @@ export async function report(filtros, user, requestId) {
   const inicio = convertirFecha(fechaInicio);
   const fin = convertirFecha(fechaFin);
 
-  // 5. Validar el rango de fechas
   if (inicio > fin) {
     throw new AppError(
       400,
@@ -201,32 +313,78 @@ export async function report(filtros, user, requestId) {
     );
   }
 
-  // 6. Consultar las asistencias mediante el Repository
+  if (!esAdministrador) {
+    const asignacion = await prisma.cursoSeccionDocente.findFirst({
+      where: {
+        docenteId: user.docenteId,
+        seccionId: idSeccion,
+        ...(idCurso != null && {
+          cursoId: idCurso,
+        }),
+        bloques: {
+          some: {
+            activo: true,
+          },
+        },
+      },
+    });
+
+    if (!asignacion) {
+      throw new AppError(
+        403,
+        'REPORT_FORBIDDEN',
+        'No tienes una asignación activa para la sección y el curso solicitados.',
+      );
+    }
+  }
+
   const asistencias = await repository.findAttendanceReport({
     fechaInicio: inicio,
     fechaFin: fin,
     seccionId: idSeccion,
+    alumnoId: idAlumno,
+    cursoId: idCurso,
+    docenteId: esAdministrador ? undefined : user.docenteId,
   });
 
-  // 7. Crear el resumen general
   const resumen = {
     PRESENTE: 0,
     TARDANZA: 0,
     AUSENTE: 0,
   };
 
-  // 8. Agrupar asistencias por estudiante
   const alumnosMap = new Map();
 
-  for (const asistencia of asistencias) {
-
+  const detalle = asistencias.map((asistencia) => {
     const estudiante = asistencia.matricula.estudiante;
-    const alumnoId = estudiante.id;
+    const asignacion = asistencia.sesion.bloque.asignacion;
 
-    // Crear el resumen del estudiante si todavía no existe
-    if (!alumnosMap.has(alumnoId)) {
-      alumnosMap.set(alumnoId, {
-        alumnoId,
+    return {
+      id: asistencia.id,
+      sesionId: asistencia.sesionId,
+      fecha: asistencia.sesion.fecha.toISOString().slice(0, 10),
+      alumnoId: estudiante.id,
+      estudiante: `${estudiante.persona.nombres} ${estudiante.persona.apellidos}`,
+      codigo: estudiante.codigoEstudiante,
+      curso: asignacion.curso.nombre,
+      estado: asistencia.condicion,
+      observacion: asistencia.observacion ?? '',
+    };
+  }).sort((a, b) =>
+    a.fecha.localeCompare(b.fecha) ||
+    a.estudiante.localeCompare(b.estudiante, 'es') ||
+    a.curso.localeCompare(b.curso, 'es') ||
+    a.sesionId - b.sesionId ||
+    a.id - b.id
+  );
+
+  for (const asistencia of asistencias) {
+    const estudiante = asistencia.matricula.estudiante;
+    const alumnoIdActual = estudiante.id;
+
+    if (!alumnosMap.has(alumnoIdActual)) {
+      alumnosMap.set(alumnoIdActual, {
+        alumnoId: alumnoIdActual,
         codigo: estudiante.codigoEstudiante,
         nombre: `${estudiante.persona.nombres} ${estudiante.persona.apellidos}`,
         total: 0,
@@ -238,39 +396,38 @@ export async function report(filtros, user, requestId) {
       });
     }
 
-    const alumno = alumnosMap.get(alumnoId);
+    const alumno = alumnosMap.get(alumnoIdActual);
 
-    // Actualizar el resumen individual
     alumno.resumen[asistencia.condicion]++;
     alumno.total++;
 
-    // Actualizar el resumen general
     resumen[asistencia.condicion]++;
   }
 
-  // 9. Calcular porcentajes por estudiante
-  const alumnos = Array.from(alumnosMap.values()).map((alumno) => {
+  const alumnos = Array.from(alumnosMap.values()).map(
+    (alumno) => {
+      const asistenciasValidas =
+        alumno.resumen.PRESENTE +
+        alumno.resumen.TARDANZA;
 
-    const asistenciasValidas =
-      alumno.resumen.PRESENTE + alumno.resumen.TARDANZA;
+      const porcentajeAsistencia =
+        alumno.total > 0
+          ? Math.round(
+              (asistenciasValidas / alumno.total) * 10000
+            ) / 100
+          : 0;
 
-    const porcentajeAsistencia =
-      alumno.total > 0
-        ? Math.round((asistenciasValidas / alumno.total) * 10000) / 100
-        : 0;
+      return {
+        ...alumno,
+        porcentajeAsistencia,
+      };
+    }
+  );
 
-    return {
-      ...alumno,
-      porcentajeAsistencia,
-    };
-  });
-
-  // 10. Ordenar estudiantes por nombre
   alumnos.sort((a, b) =>
     a.nombre.localeCompare(b.nombre, 'es')
   );
 
-  // 11. Calcular el porcentaje general
   const total = asistencias.length;
 
   const totalAsistencias =
@@ -281,23 +438,27 @@ export async function report(filtros, user, requestId) {
       ? Math.round((totalAsistencias / total) * 10000) / 100
       : 0;
 
-  // 12. Registrar la consulta en el logger
   logger.info('Consulta de reporte de asistencia estudiantil', {
     module: 'asistencia',
     userId: user.id,
     requestId,
     seccionId: idSeccion,
+    alumnoId: idAlumno,
+    cursoId: idCurso,
+    docenteId: esAdministrador ? null : user.docenteId,
     total,
   });
 
-  // 13. Construir la respuesta
   return {
     fechaInicio,
     fechaFin,
     seccionId: idSeccion,
+    alumnoId: idAlumno ?? null,
+    cursoId: idCurso ?? null,
     total,
     resumen,
     porcentajeGeneral,
+    detalle,
     alumnos,
   };
 }

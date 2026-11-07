@@ -18,6 +18,7 @@ try {
   for (const suite of [
     'api',
     'administracion',
+    'validacion-usuarios',
     'perfiles',
     'instalacion',
     'pagos',
@@ -25,7 +26,7 @@ try {
     'auditoria',
     'calificaciones-permisos',
     'errores',
-    'despliegue',
+    'cobranza',
   ]) {
     const databaseName = `sage_run_${randomBytes(8).toString('hex')}_test`;
     const testUrl = new URL(template);
