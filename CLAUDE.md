@@ -163,10 +163,34 @@ y fuera de producción.
 ## Estado actual
 
 Implementado: acceso y roles, gestión de usuarios, catálogos, estudiantes,
-matrícula, horarios, sesiones, asistencia, auditoría y el módulo de pagos.
+matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos y el
+comprobante de pago en PDF (US-009).
 
-Pendiente: evaluación por competencias, justificaciones de inasistencia,
-reportes, y la boleta en PDF (US-009).
+**Comprobante (US-009).** Se emite en la misma transacción que confirma el pago
+(tabla `Comprobante`, una fila por boleta pagada; el id es el correlativo y se
+muestra como `B001-00000001`). El PDF se genera al descargarlo con `pdfkit` en
+`domain/comprobante.js`, desde `GET /compromisos-pago/:id/comprobante`; lo
+descargan el apoderado a cargo y el administrador. Es un comprobante interno,
+no el electrónico de SUNAT.
+
+**Pago en cuotas (US-010).** El administrador divide una boleta pendiente en
+2 a 6 boletas hijas (`boletaOrigenId`, `numeroFraccion` de 1 a N; la original
+tiene 0). La original queda `PARCIAL` y ya no se cobra entera: se cobran sus
+cuotas, cada una con su comprobante, y pasa a `PAGADA` con la última. Por eso
+los reportes excluyen las boletas que tienen fracciones (`fracciones: { none:
+{} }`) para no contar dos veces el mismo dinero. La regla del reparto está en
+`domain/fraccionamiento.js`.
+
+**Cobranza (US-008, US-011, US-012) y anulación (US-013).** Las reglas puras
+están en `domain/cobranza.js` y la exportación en `domain/reportePagos.js`
+(PDF con `pdfkit`, Excel con `write-excel-file`). Anular un pago no borra nada:
+el pago queda `ANULADO`, su comprobante queda con `anuladoEn` y la boleta vuelve
+a `PENDIENTE`. Por eso una boleta puede tener varios comprobantes, pero solo uno
+vigente: lo garantiza un índice único parcial en SQL, igual que el de pagos en
+curso. Consulta siempre el vigente (`anuladoEn: null`).
+
+Pendiente: evaluación por competencias, justificaciones de inasistencia y
+reportes.
 
 ## Cosas que no hay que hacer
 

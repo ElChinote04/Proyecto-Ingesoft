@@ -93,13 +93,16 @@ function Screens() {
     );
   }
 
+  // /pagos/morosos y /pagos/reporte son vistas de cobranza del administrador (US-008, US-012).
+  const vistaPagos = route.match(/^\/pagos(?:\/(morosos|reporte))?$/);
+
   if (
-    route === '/pagos' &&
+    vistaPagos &&
     user.roles.some((rol) => ['APODERADO', 'ADMINISTRADOR'].includes(rol))
   ) {
-    return <Pagos key={perfiles} />;
+    return <Pagos key={`${perfiles}:${route}`} vista={vistaPagos[1] ?? 'boletas'} />;
   }
-
+  
   if (
     (
       route === '/gestion' ||
