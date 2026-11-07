@@ -55,6 +55,54 @@ function sinVersion({ version, ...detalle }) {
   return detalle;
 }
 
+// Recorre todo el detalle porque cada módulo anida sus datos de forma distinta.
+function recolectarIds(valor, ids) {
+  if (!valor || typeof valor !== 'object') return;
+  for (const [campo, dato] of Object.entries(valor)) {
+    if (Object.hasOwn(ids, campo) && Number.isInteger(dato)) ids[campo].add(dato);
+    else recolectarIds(dato, ids);
+  }
+}
+
+const claveEntidad = (entidad, id) => `${entidad}#${id}`;
+
+async function obtenerDatosDeNotas(registros) {
+  const idsDe = (entidad) =>
+    registros.filter((evento) => evento.entidad === entidad).map((evento) => evento.entidadId);
+  const filas = await repository.obtenerDatosDeNotas(
+    idsDe('Calificacion'),
+    idsDe('CalificacionCompetencia'),
+  );
+  const datos = new Map();
+  for (const { calificacionId, detalleIds, ...nota } of filas) {
+    datos.set(claveEntidad('Calificacion', calificacionId), nota);
+    for (const id of detalleIds) datos.set(claveEntidad('CalificacionCompetencia', id), nota);
+  }
+  return datos;
+}
+
+const GUARDADO_DOCENTE = 'CALIFICACION_GUARDADA';
+
+// El guardado del docente no registra la nota anterior: se toma del guardado previo de la misma
+// calificación y competencia. Así también se ven bien los registros que ya existen.
+async function obtenerNotasAnteriores(registros) {
+  const pendientes = registros.filter(
+    (evento) => evento.tipoEvento === GUARDADO_DOCENTE && !evento.detalle?.valorAnterior,
+  );
+  const guardados = await repository.buscarGuardadosDeNotas(
+    GUARDADO_DOCENTE,
+    pendientes.map((evento) => evento.entidadId),
+  );
+  const ultimas = new Map();
+  const anteriores = new Map();
+  for (const { id, entidadId, detalle } of guardados) {
+    const clave = `${entidadId}-${detalle.valorNuevo?.competenciaId}`;
+    if (ultimas.has(clave)) anteriores.set(id, ultimas.get(clave));
+    ultimas.set(clave, detalle.valorNuevo);
+  }
+  return anteriores;
+}
+
 export async function obtenerEventos(consulta) {
   const { pagina, limite, desde, hasta, ...filtros } = consulta;
   const where = {
@@ -67,22 +115,39 @@ export async function obtenerEventos(consulta) {
     repository.buscarEventos(where, pagina, limite),
     repository.obtenerTiposEvento(),
   ]);
+  const ids = { apoderadoId: new Set(), estudianteId: new Set(), competenciaId: new Set() };
+  recolectarIds(
+    registros.map((evento) => evento.detalle),
+    ids,
+  );
+  const [nombres, datosDeNotas, notasAnteriores] = await Promise.all([
+    repository.obtenerNombres(ids),
+    obtenerDatosDeNotas(registros),
+    obtenerNotasAnteriores(registros),
+  ]);
   return {
     total,
     pagina,
     limite,
     tiposEvento,
-    registros: registros.map((evento) => ({
-      id: evento.id,
-      fechaHora: evento.fechaHora,
-      usuario: evento.usuario?.identificador ?? null,
-      tipoEvento: evento.tipoEvento,
-      entidad: evento.entidad,
-      entidadId: evento.entidadId,
-      resultado: evento.resultado,
-      requestId: evento.requestId,
-      detalle:
-        evento.tipoEvento === 'ASISTENCIA_GUARDADA' ? sinVersion(evento.detalle) : evento.detalle,
-    })),
+    nombres,
+    registros: registros.map((evento) => {
+      const detalle =
+        evento.tipoEvento === 'ASISTENCIA_GUARDADA' ? sinVersion(evento.detalle) : evento.detalle;
+      return {
+        id: evento.id,
+        fechaHora: evento.fechaHora,
+        usuario: evento.usuario?.identificador ?? null,
+        tipoEvento: evento.tipoEvento,
+        entidad: evento.entidad,
+        entidadId: evento.entidadId,
+        resultado: evento.resultado,
+        requestId: evento.requestId,
+        nota: datosDeNotas.get(claveEntidad(evento.entidad, evento.entidadId)) ?? null,
+        detalle: notasAnteriores.has(evento.id)
+          ? { ...detalle, valorAnterior: notasAnteriores.get(evento.id) }
+          : detalle,
+      };
+    }),
   };
 }

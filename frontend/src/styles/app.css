@@ -1055,6 +1055,20 @@ a {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.auditoria-campos {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.auditoria-campos dt {
+  color: var(--muted);
+}
+.auditoria-campos dd {
+  margin: 0;
+}
 .portal-table pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
