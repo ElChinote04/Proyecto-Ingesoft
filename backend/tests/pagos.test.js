@@ -24,11 +24,12 @@ let matricula, matriculaAjena;
 const alta = async (ruta, datos, estado = 201) =>
   (await admin.post(`${base}/admin/${ruta}`).send(datos).expect(estado)).body.data;
 
+let documentoCuenta = 10000000;
 async function crearCuenta(identificador, roles, agente) {
   const cuenta = await alta('usuarios', {
     identificador,
-    numeroDocumento: identificador,
-    nombres: identificador,
+    numeroDocumento: String(++documentoCuenta),
+    nombres: 'Usuario',
     apellidos: 'Prueba',
     contrasena: claveInicial,
     roles,
@@ -54,29 +55,29 @@ before(async () => {
   await request(app)
     .post(`${base}/instalacion`)
     .send({
-      numeroDocumento: 'ADMIN-PAGOS',
+      numeroDocumento: '90000000',
       nombres: 'Administrador',
       apellidos: 'Pagos',
-      identificador: 'admin-pagos',
+      identificador: 'admin-pagos@prueba.local',
       contrasena: clave,
       claveInstalacion: env.INITIAL_SETUP_KEY,
     })
     .expect(201);
   await admin
     .post(`${base}/auth/login`)
-    .send({ identificador: 'admin-pagos', contrasena: clave })
+    .send({ identificador: 'admin-pagos@prueba.local', contrasena: clave })
     .expect(200);
 
-  cuentaApoderado = await crearCuenta('apoderado-pagos', ['APODERADO'], apoderado);
-  cuentaOtro = await crearCuenta('apoderado-ajeno', ['APODERADO'], otroApoderado);
+  cuentaApoderado = await crearCuenta('apoderado-pagos@prueba.local', ['APODERADO'], apoderado);
+  cuentaOtro = await crearCuenta('apoderado-ajeno@prueba.local', ['APODERADO'], otroApoderado);
 
   estudiante = await alta('estudiantes', {
-    numeroDocumento: 'EST-PAGOS',
+    numeroDocumento: '20000001',
     nombres: 'Hijo',
     apellidos: 'Delapoderado',
   });
   otroEstudiante = await alta('estudiantes', {
-    numeroDocumento: 'EST-AJENO-PAGOS',
+    numeroDocumento: '20000002',
     nombres: 'Ajeno',
     apellidos: 'Estudiante',
   });
@@ -195,7 +196,7 @@ test('US-007A: un apoderado no ve las boletas de otros estudiantes', async () =>
 
 test('US-007A: sin boletas devuelve una lista vacía, no un error', async () => {
   const sinHijos = request.agent(app);
-  await crearCuenta('apoderado-sin-hijos', ['APODERADO'], sinHijos);
+  await crearCuenta('apoderado-sin-hijos@prueba.local', ['APODERADO'], sinHijos);
   const respuesta = await sinHijos.get(`${base}/compromisos-pago`).expect(200);
   assert.deepEqual(respuesta.body.data.boletas, []);
   assert.equal(respuesta.body.data.total, 0);

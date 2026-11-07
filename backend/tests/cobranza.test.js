@@ -27,11 +27,12 @@ let matriculaMorosa, matriculaAlDia, matriculaAjena;
 const alta = async (ruta, datos, estado = 201) =>
   (await admin.post(`${base}/admin/${ruta}`).send(datos).expect(estado)).body.data;
 
+let documentoCuenta = 10000000;
 async function crearCuenta(identificador, roles, agente) {
   const cuenta = await alta('usuarios', {
     identificador,
-    numeroDocumento: identificador,
-    nombres: identificador,
+    numeroDocumento: String(++documentoCuenta),
+    nombres: 'Usuario',
     apellidos: 'Prueba',
     contrasena: claveInicial,
     roles,
@@ -97,35 +98,37 @@ before(async () => {
   await request(app)
     .post(`${base}/instalacion`)
     .send({
-      numeroDocumento: 'ADMIN-COBRANZA',
+      numeroDocumento: '90000000',
       nombres: 'Administrador',
       apellidos: 'Cobranza',
-      identificador: 'admin-cobranza',
+      identificador: 'admin-cobranza@prueba.local',
       contrasena: clave,
       claveInstalacion: env.INITIAL_SETUP_KEY,
     })
     .expect(201);
   await admin
     .post(`${base}/auth/login`)
-    .send({ identificador: 'admin-cobranza', contrasena: clave })
+    .send({ identificador: 'admin-cobranza@prueba.local', contrasena: clave })
     .expect(200);
-  cuentaAdmin = await prisma.usuario.findUnique({ where: { identificador: 'admin-cobranza' } });
+  cuentaAdmin = await prisma.usuario.findUnique({
+    where: { identificador: 'admin-cobranza@prueba.local' },
+  });
 
-  cuentaApoderado = await crearCuenta('apoderado-cobranza', ['APODERADO'], apoderado);
-  cuentaOtro = await crearCuenta('apoderado-otro', ['APODERADO'], otroApoderado);
+  cuentaApoderado = await crearCuenta('apoderado-cobranza@prueba.local', ['APODERADO'], apoderado);
+  cuentaOtro = await crearCuenta('apoderado-otro@prueba.local', ['APODERADO'], otroApoderado);
 
   estudianteMoroso = await alta('estudiantes', {
-    numeroDocumento: 'EST-MOROSO',
+    numeroDocumento: '20000001',
     nombres: 'Mario',
     apellidos: 'Moroso',
   });
   estudianteAlDia = await alta('estudiantes', {
-    numeroDocumento: 'EST-ALDIA',
+    numeroDocumento: '20000002',
     nombres: 'Ana',
     apellidos: 'Aldia',
   });
   estudianteAjeno = await alta('estudiantes', {
-    numeroDocumento: 'EST-AJENO',
+    numeroDocumento: '20000003',
     nombres: 'Elena',
     apellidos: 'Ajena',
   });
@@ -194,7 +197,7 @@ test('US-008: lista a los estudiantes morosos agrupados, con su deuda y apoderad
   assert.equal(primeroDeLaLista.vencimientoMasAntiguo, '2020-03-10');
   assert.ok(primeroDeLaLista.diasAtraso > 365);
   assert.deepEqual(primeroDeLaLista.apoderados, [
-    { nombre: 'apoderado-cobranza Prueba', parentesco: 'Padre' },
+    { nombre: 'Usuario Prueba', parentesco: 'Padre' },
   ]);
   assert.equal(segundoDeLaLista.estudiante.id, estudianteAjeno.id);
   assert.equal(segundoDeLaLista.deuda, '600.00');
@@ -556,7 +559,7 @@ test('US-011: cada apoderado solo recibe los avisos de sus estudiantes', async (
 
 test('US-011: sin estudiantes no hay avisos, y solo es para apoderados', async () => {
   const sinHijos = request.agent(app);
-  await crearCuenta('apoderado-sin-hijos-cobranza', ['APODERADO'], sinHijos);
+  await crearCuenta('apoderado-sin-hijos-cobranza@prueba.local', ['APODERADO'], sinHijos);
   const respuesta = await sinHijos.get(`${base}/avisos-vencimiento`).expect(200);
   assert.deepEqual(respuesta.body.data.avisos, []);
   await admin.get(`${base}/avisos-vencimiento`).expect(403);

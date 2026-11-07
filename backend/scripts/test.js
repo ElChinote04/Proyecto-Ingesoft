@@ -18,6 +18,7 @@ try {
   for (const suite of [
     'api',
     'administracion',
+    'validacion-usuarios',
     'perfiles',
     'instalacion',
     'pagos',
