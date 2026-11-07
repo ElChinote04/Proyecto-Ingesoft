@@ -18,10 +18,14 @@ let competenciaMat, competenciaMat2, competenciaArte, competenciaAjena;
 const alta = async (ruta, datos) =>
   (await admin.post(`${base}/${ruta}`).send(datos).expect(201)).body.data;
 
-async function crearCuenta(identificador, roles, agente) {
+// Las reglas de usuarios exigen correo, DNI de 8 dígitos y nombres solo con letras.
+let documentoCuenta = 20000000;
+
+async function crearCuenta(nombre, roles, agente) {
+  const identificador = `${nombre}@sage.test`.toLowerCase();
   const cuenta = await alta('admin/usuarios', {
-    numeroDocumento: identificador,
-    nombres: identificador,
+    numeroDocumento: String(++documentoCuenta),
+    nombres: nombre.replace(/[^\p{L}]+/gu, ' ').trim(),
     apellidos: 'Notas',
     identificador,
     contrasena: 'InicialTemporal123!',
@@ -110,7 +114,7 @@ before(async () => {
   await bloque(comunicacion.id, cuentaAjena.docenteId, 3);
 
   alumno = await alta('admin/estudiantes', {
-    numeroDocumento: 'DNI-SECRETO',
+    numeroDocumento: '40000001',
     nombres: 'Lucía',
     apellidos: 'Notas',
   });
@@ -185,7 +189,7 @@ test('CAA-03 la lista de alumnos trae solo lo que muestra la pantalla', async ()
   assert.deepEqual(respuesta.body.data, [
     { matriculaId: matricula.id, codigo: alumno.codigoEstudiante, nombre: 'Lucía Notas' },
   ]);
-  assert.doesNotMatch(JSON.stringify(respuesta.body), /DNI-SECRETO|numeroDocumento|nivelLogro/);
+  assert.doesNotMatch(JSON.stringify(respuesta.body), /40000001|numeroDocumento|nivelLogro/);
 });
 
 test('CAA-04 un salón ajeno o un id inválido no devuelve alumnos', async () => {

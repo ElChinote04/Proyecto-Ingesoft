@@ -197,10 +197,7 @@ model Usuario {
   asistenciasDocentesModificadas AsistenciaDocente[]   @relation("ModificadorAsistenciaDocente")
   pagosIniciados                 Pago[]                @relation("PagoIniciador")
   evidenciasRevisadas            EvidenciaPedagogica[] @relation("EvidenciaRevisor")
-  asistenciasDocentesCreadas     AsistenciaDocente[] @relation("CreadorAsistenciaDocente")
-  asistenciasDocentesModificadas AsistenciaDocente[] @relation("ModificadorAsistenciaDocente")
-  pagosIniciados                 Pago[]              @relation("PagoIniciador")
-  pagosAnulados                  Pago[]              @relation("PagoAnulador")
+  pagosAnulados                  Pago[]                @relation("PagoAnulador")
 }
 
 model Instalacion {
