@@ -7,12 +7,13 @@ import { userFormBody } from '../utils/userForm';
 import { useAdminData } from '../hooks/useAdminData';
 import { useAuth } from '../hooks/useAuth';
 import AppLayout from '../layouts/AppLayout';
-import { AdminForm, Field, PersonFields, Select } from '../components/AdminForm';
+import { AdminForm, Field, PersonFields, Select, UserField } from '../components/AdminForm';
+import { userRoles } from '../utils/userValidation.js';
 import { Loading, ResourceError } from '../components/Feedback';
 import TeacherAttendance from './TeacherAttendance';
 import StudentAttendanceReport from './StudentAttendanceReport';
 
-const roles = ['ADMINISTRADOR', 'DOCENTE', 'ALUMNO', 'APODERADO'];
+const roles = userRoles;
 const sectionLabel = (s) => `${s.anioAcademico.codigo} · ${s.grado.nombre} ${s.nombre}`;
 const options = (list, label) => list.map((i) => ({ id: i.id, label: label(i) }));
 const numbers = (form, keys) =>
@@ -210,12 +211,12 @@ function Users() {
               return `Cuenta ${updated.identificador} guardada. Roles: ${updated.roles.join(', ')}.${updated.docenteId ? ` Perfil docente: ${updated.docenteId}.` : ''}`;
             }}
           >
-            {!editing && <PersonFields />}
-            <Field
-              label="Usuario o correo"
+            {!editing && <PersonFields userAccount />}
+            <UserField
+              label="Correo electrónico"
               name="identificador"
+              type="email"
               defaultValue={editing?.identificador}
-              maxLength={200}
               autoComplete="off"
             />
             <Field
@@ -248,9 +249,11 @@ function Users() {
               ))}
             </fieldset>
             <p className="muted form-wide">
-              Una misma persona puede tener varios roles. Al asignar Docente se crea su perfil; la
-              asignación de cursos y sesiones se realiza en Horarios. Las contraseñas asignadas aquí
-              son temporales: el usuario debe cambiarlas al iniciar sesión.
+              El DNI debe tener exactamente 8 dígitos. Los nombres y apellidos admiten hasta 100
+              caracteres: letras, incluidas tildes y ñ, y espacios. Una misma persona puede tener
+              varios roles. Al asignar Docente se crea su perfil; la asignación de cursos y sesiones
+              se realiza en Horarios. Las contraseñas asignadas aquí son temporales: el usuario debe
+              cambiarlas al iniciar sesión.
             </p>
           </AdminForm>
           <h2>Cuentas registradas</h2>
@@ -412,7 +415,7 @@ function Enrollments() {
               return `Alumno #${estudiante.id} registrado (${estudiante.codigoEstudiante}). Ya puedes matricularlo o crear su cuenta ALUMNO con el mismo documento.`;
             }}
           >
-            <PersonFields />
+            <PersonFields userAccount />
           </AdminForm>
           <AdminForm
             title="Asignar grado y sección"

@@ -18,10 +18,11 @@ const alta = async (ruta, datos) =>
   (await admin.post(`${base}/${ruta}`).send(datos).expect(201)).body.data;
 
 // Crea la cuenta y deja hecha la sesión con la contraseña inicial ya cambiada.
+let documentoCuenta = 10000000;
 async function crearCuenta(identificador, roles, agente) {
   const cuenta = await alta('admin/usuarios', {
-    numeroDocumento: identificador,
-    nombres: identificador,
+    numeroDocumento: String(++documentoCuenta),
+    nombres: 'Usuario',
     apellidos: 'Permisos',
     identificador,
     contrasena: 'InicialTemporal123!',
@@ -42,7 +43,7 @@ async function crearCuenta(identificador, roles, agente) {
 async function crearAlumnoMatriculado(numeroDocumento, seccionId) {
   const alumno = await alta('admin/estudiantes', {
     numeroDocumento,
-    nombres: numeroDocumento,
+    nombres: 'Alumno',
     apellidos: 'Permisos',
   });
   const matricula = await alta('admin/matriculas', { estudianteId: alumno.id, seccionId });
@@ -53,23 +54,27 @@ before(async () => {
   await request(app)
     .post(`${base}/instalacion`)
     .send({
-      numeroDocumento: 'ADMIN-PERMISOS',
+      numeroDocumento: '90000000',
       nombres: 'Administrador',
       apellidos: 'Permisos',
-      identificador: 'admin-permisos',
+      identificador: 'admin-permisos@prueba.local',
       contrasena: clave,
       claveInstalacion: env.INITIAL_SETUP_KEY,
     })
     .expect(201);
   await admin
     .post(`${base}/auth/login`)
-    .send({ identificador: 'admin-permisos', contrasena: clave })
+    .send({ identificador: 'admin-permisos@prueba.local', contrasena: clave })
     .expect(200);
 
-  const cuentaDocente = await crearCuenta('docente-permisos', ['DOCENTE'], docente);
-  await crearCuenta('docente-ajeno-permisos', ['DOCENTE'], docenteAjeno);
-  const cuentaApoderado = await crearCuenta('apoderado-permisos', ['APODERADO'], apoderado);
-  await crearCuenta('apoderado-sin-hijos-permisos', ['APODERADO'], apoderadoSinHijos);
+  const cuentaDocente = await crearCuenta('docente-permisos@prueba.local', ['DOCENTE'], docente);
+  await crearCuenta('docente-ajeno-permisos@prueba.local', ['DOCENTE'], docenteAjeno);
+  const cuentaApoderado = await crearCuenta(
+    'apoderado-permisos@prueba.local',
+    ['APODERADO'],
+    apoderado,
+  );
+  await crearCuenta('apoderado-sin-hijos-permisos@prueba.local', ['APODERADO'], apoderadoSinHijos);
 
   const anio = await alta('admin/catalogos/anios', { codigo: '2030' });
   const grado = await alta('admin/catalogos/grados', { nombre: 'Primero' });
@@ -103,8 +108,8 @@ before(async () => {
     horaFin: '09:00',
   });
 
-  const hijo = await crearAlumnoMatriculado('EST-HIJO', seccion.id);
-  const otroAlumno = await crearAlumnoMatriculado('EST-OTRO', seccion.id);
+  const hijo = await crearAlumnoMatriculado('20000001', seccion.id);
+  const otroAlumno = await crearAlumnoMatriculado('20000002', seccion.id);
   await admin
     .put(`${base}/admin/apoderados/estudiantes`)
     .send({

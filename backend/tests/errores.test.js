@@ -23,12 +23,13 @@ const consultar = async (filtros) =>
       .expect(200)
   ).body.data;
 
+let documentoCuenta = 10000000;
 async function crearCuenta(identificador, roles, agente) {
   await admin
     .post(`${base}/admin/usuarios`)
     .send({
-      numeroDocumento: identificador,
-      nombres: identificador,
+      numeroDocumento: String(++documentoCuenta),
+      nombres: 'Usuario',
       apellidos: 'Errores',
       identificador,
       contrasena: 'InicialTemporal123!',
@@ -50,10 +51,10 @@ before(async () => {
   await request(app)
     .post(`${base}/instalacion`)
     .send({
-      numeroDocumento: 'ADMIN-ERRORES',
+      numeroDocumento: '90000000',
       nombres: 'Administrador',
       apellidos: 'Errores',
-      identificador: 'admin-errores',
+      identificador: 'admin-errores@prueba.local',
       contrasena: clave,
       claveInstalacion: env.INITIAL_SETUP_KEY,
     })
@@ -61,11 +62,11 @@ before(async () => {
   const adminId = (
     await admin
       .post(`${base}/auth/login`)
-      .send({ identificador: 'admin-errores', contrasena: clave })
+      .send({ identificador: 'admin-errores@prueba.local', contrasena: clave })
       .expect(200)
   ).body.data.id;
-  await crearCuenta('docente-errores', ['DOCENTE'], docente);
-  await crearCuenta('apoderado-errores', ['APODERADO'], apoderado);
+  await crearCuenta('docente-errores@prueba.local', ['DOCENTE'], docente);
+  await crearCuenta('apoderado-errores@prueba.local', ['APODERADO'], apoderado);
   // Se simula una copia rotada: así las pruebas no dependen de cuándo Winston escribe a disco.
   const lineas = [
     {
@@ -130,7 +131,7 @@ test('ERR-04 lista errores y advertencias, del más reciente al más antiguo', a
       modulo: 'pagos',
       codigo: 'INTERNAL_ERROR',
       descripcion: 'Error interno de aplicación (TypeError)',
-      usuario: 'admin-errores',
+      usuario: 'admin-errores@prueba.local',
       requestId: 'req-1',
     },
   ]);
@@ -141,7 +142,7 @@ test('ERR-05 filtra por severidad, código, usuario y fechas', async () => {
   const unico = async (filtros) => (await consultar(filtros)).registros.map((r) => r.requestId);
   assert.deepEqual(await unico({ severidad: 'ERROR' }), ['req-1']);
   assert.deepEqual(await unico({ codigo: 'FORBIDDEN' }), ['req-2']);
-  assert.deepEqual(await unico({ usuario: 'admin-errores' }), ['req-1']);
+  assert.deepEqual(await unico({ usuario: 'admin-errores@prueba.local' }), ['req-1']);
   assert.deepEqual(await unico({ desde: '2020-01-11', hasta: '2020-01-11' }), ['req-2']);
   assert.deepEqual(await unico({ codigo: 'NO_EXISTE' }), []);
 });

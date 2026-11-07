@@ -48,6 +48,8 @@ const schema = z.object({
   PAGOS_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(10000),
   STRIPE_SECRET_KEY: vacioEsAusente(z.string().min(20).optional()),
   STRIPE_WEBHOOK_SECRET: vacioEsAusente(z.string().min(16).default('secreto_de_pruebas_simulada')),
+  // US-011: con cuántos días de anticipación se avisa al apoderado de un vencimiento.
+  PAGOS_DIAS_AVISO: z.coerce.number().int().min(1).max(30).default(5),
 });
 const result = schema.safeParse(process.env);
 if (!result.success)

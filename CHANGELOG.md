@@ -40,6 +40,44 @@
 - Se retiran `GET /calificaciones/contexto` y `POST /calificaciones/competencias/bulk`.
 - Al sobrescribir una nota, la auditoría conserva el nivel anterior.
 - Nueva suite `tests/calificaciones-alumno.test.js` (CAA-01 a CAA-13).
+## Pago en cuotas (US-010) — 2026-11-06
+
+- `POST /compromisos-pago/:id/fracciones` (administrador) con `{ numeroCuotas, montoCuota,
+  fechaPrimerVencimiento }` divide una boleta pendiente en 2 a 6 cuotas que vencen una por mes. La
+  última cuota se ajusta para que la suma sea exactamente el total (RF140): 400
+  `FRACCIONES_EXCEDEN_TOTAL` o `FRACCIONES_NO_CUBREN_TOTAL` si no cuadra. Se audita como
+  `BOLETA_FRACCIONADA`.
+- Cada cuota es una boleta hija (`boletaOrigenId`, `numeroFraccion`) que el apoderado paga por la
+  pasarela y que tiene su propio comprobante. La original pasa al nuevo estado `PARCIAL` y ya no se
+  paga entera (409 `BOLETA_FRACCIONADA`); queda PAGADA al pagarse la última cuota (RF139).
+- No se divide una boleta pagada, ya dividida, que ya es una cuota o con un pago en curso (409).
+- Integración con lo existente: el reporte de pagos (US-012) cuenta las cuotas y no la original;
+  anular el pago de una cuota (US-013) devuelve la original a `PARCIAL`.
+- Botón **Pagar en cuotas** en Pagos y boletas (administrador) con vista previa de las cuotas.
+- Migración `20261106170000_fraccionamiento_boletas`.
+
+## Cobranza y anulación de pagos (US-008, US-011, US-012, US-013) — 2026-11-06
+
+- **US-008 Morosidad:** `GET /reportes/pagos/morosidad` agrupa las boletas vencidas por
+  estudiante, con su deuda, cantidad de boletas, atraso y apoderados vinculados. Filtros por año,
+  grado y sección. Pestaña **Morosidad** en Pagos y boletas (administrador).
+- **US-012 Reporte de pagos:** `GET /reportes/pagos?desde&hasta` devuelve lo emitido, recaudado,
+  pendiente y moroso, en total y por periodo, filtrable por año, grado y sección. Con
+  `formato=pdf|xlsx` lo descarga (PDF con `pdfkit`, Excel con la nueva dependencia
+  `write-excel-file`). Pestaña **Reporte de pagos**.
+- **US-013 Anulación:** `PUT /pagos/:id/anulacion` con `{ motivo }` (administrador). El pago queda
+  ANULADO con quién, cuándo y por qué; su comprobante queda anulado y la boleta vuelve a
+  PENDIENTE para cobrarse de nuevo. Se audita como `PAGO_ANULADO` con
+  `registrarTransaccionCritica`. Botón **Anular pago** en el historial de boletas.
+- **US-011 Aviso de vencimiento:** `GET /avisos-vencimiento` (apoderado) lista las boletas que vencen
+  en los próximos `PAGOS_DIAS_AVISO` días (5 por defecto, nueva variable en `.env.example`). Aviso
+  en el portal del apoderado y en Pagos y boletas. Sin correo.
+- Migración `20261106150000_anulacion_pagos`: estado `ANULADO` en `EstadoPago`, columnas de
+  anulación en `Pago` y `anuladoEn` en `Comprobante`. La unicidad del comprobante por boleta pasa a
+  un índice parcial (solo el vigente), por lo que la relación `CompromisoPago.comprobante` ahora es
+  `comprobantes` (las dos pruebas de US-009 que la consultaban se adaptaron).
+- Un reenvío tardío de la pasarela sobre un pago anulado se ignora (`resolverConfirmacion`).
+- Nueva suite `tests/cobranza.test.js` (22 pruebas).
 
 ## Log de errores (US-004) — 2026-11-05
 

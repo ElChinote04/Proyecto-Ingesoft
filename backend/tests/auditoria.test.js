@@ -19,11 +19,12 @@ const alta = async (ruta, datos) =>
   (await admin.post(`${base}/${ruta}`).send(datos).expect(201)).body.data;
 
 // Crea la cuenta y deja hecha la sesión con la contraseña inicial ya cambiada.
+let documentoCuenta = 10000000;
 async function crearCuenta(identificador, roles, agente) {
   const cuenta = await alta('admin/usuarios', {
-    numeroDocumento: identificador,
-    nombres: identificador,
-    apellidos: 'Auditoría',
+    numeroDocumento: String(++documentoCuenta),
+    nombres: 'Usuario',
+    apellidos: 'Auditoria',
     identificador,
     contrasena: 'InicialTemporal123!',
     roles,
@@ -53,10 +54,10 @@ before(async () => {
   await request(app)
     .post(`${base}/instalacion`)
     .send({
-      numeroDocumento: 'ADMIN-AUDITORIA',
+      numeroDocumento: '90000000',
       nombres: 'Administrador',
-      apellidos: 'Auditoría',
-      identificador: 'admin-auditoria',
+      apellidos: 'Auditoria',
+      identificador: 'admin-auditoria@prueba.local',
       contrasena: clave,
       claveInstalacion: env.INITIAL_SETUP_KEY,
     })
@@ -64,12 +65,12 @@ before(async () => {
   adminId = (
     await admin
       .post(`${base}/auth/login`)
-      .send({ identificador: 'admin-auditoria', contrasena: clave })
+      .send({ identificador: 'admin-auditoria@prueba.local', contrasena: clave })
       .expect(200)
   ).body.data.id;
   // El docente sirve para el 403 por rol y para registrar notas; el apoderado, para pagar.
-  cuentaDocente = await crearCuenta('docente-auditoria', ['DOCENTE'], docente);
-  cuentaApoderado = await crearCuenta('apoderado-auditoria', ['APODERADO'], apoderado);
+  cuentaDocente = await crearCuenta('docente-auditoria@prueba.local', ['DOCENTE'], docente);
+  cuentaApoderado = await crearCuenta('apoderado-auditoria@prueba.local', ['APODERADO'], apoderado);
   // Año futuro, como en las pruebas de pagos, para que ninguna boleta nazca morosa.
   anio = await alta('admin/catalogos/anios', { codigo: '2030' });
   grado = await alta('admin/catalogos/grados', { nombre: 'Primero' });
@@ -86,7 +87,7 @@ test('AUD-01 un cambio de nota queda registrado con usuario, fecha, valores y mo
     registrarTransaccionCritica(db, { actorId: adminId, ...cambioDeNota }),
   );
   const [registro] = (await consultar({ tipoEvento: 'NOTA_MODIFICADA' })).registros;
-  assert.equal(registro.usuario, 'admin-auditoria');
+  assert.equal(registro.usuario, 'admin-auditoria@prueba.local');
   assert.equal(registro.entidad, 'Calificacion');
   assert.equal(registro.resultado, 'EXITO');
   assert.equal(registro.requestId, 'req-prueba-auditoria');
@@ -161,9 +162,9 @@ test('AUD-06 filtros, paginación y validación de la consulta', async () => {
 // De punta a punta: se usan las rutas reales del módulo de Matrícula y Pagos (pasarela simulada).
 test('AUD-07 cada operación de un pago queda registrada con usuario, fecha y detalle', async () => {
   const estudiante = await alta('admin/estudiantes', {
-    numeroDocumento: 'EST-PAGO-AUD',
+    numeroDocumento: '20000001',
     nombres: 'Hijo',
-    apellidos: 'Auditoría',
+    apellidos: 'Auditoria',
   });
   await admin
     .put(`${base}/admin/apoderados/estudiantes`)
@@ -185,9 +186,9 @@ test('AUD-07 cada operación de un pago queda registrada con usuario, fecha y de
   await apoderado.post(`${base}/pagos/${pagoId}/simular`).send({ resultado: 'PAGADO' }).expect(200);
 
   for (const [evento, usuario] of [
-    ['COMPROMISO_PAGO_EMITIDO', 'admin-auditoria'],
-    ['PAGO_INICIADO', 'apoderado-auditoria'],
-    ['PAGO_CONFIRMADO', 'apoderado-auditoria'],
+    ['COMPROMISO_PAGO_EMITIDO', 'admin-auditoria@prueba.local'],
+    ['PAGO_INICIADO', 'apoderado-auditoria@prueba.local'],
+    ['PAGO_CONFIRMADO', 'apoderado-auditoria@prueba.local'],
   ]) {
     // La consulta devuelve primero lo más reciente: el registro de este pago.
     const [registro] = (await consultar({ tipoEvento: evento })).registros;
@@ -228,9 +229,9 @@ test('AUD-08 un cambio de nota queda registrado con usuario, fecha, valor anteri
     horaFin: '09:00',
   });
   const alumno = await alta('admin/estudiantes', {
-    numeroDocumento: 'EST-NOTA-AUD',
+    numeroDocumento: '20000002',
     nombres: 'Alumno',
-    apellidos: 'Auditoría',
+    apellidos: 'Auditoria',
   });
   const matricula = await alta('admin/matriculas', {
     estudianteId: alumno.id,
@@ -261,10 +262,10 @@ test('AUD-08 un cambio de nota queda registrado con usuario, fecha, valor anteri
     .expect(200);
 
   const [creada] = (await consultar({ tipoEvento: 'CALIFICACION_CREADA' })).registros;
-  assert.equal(creada.usuario, 'docente-auditoria');
+  assert.equal(creada.usuario, 'docente-auditoria@prueba.local');
   assert.equal(creada.entidadId, nota.id);
   const [modificada] = (await consultar({ tipoEvento: 'CALIFICACION_MODIFICADA' })).registros;
-  assert.equal(modificada.usuario, 'admin-auditoria');
+  assert.equal(modificada.usuario, 'admin-auditoria@prueba.local');
   assert.equal(modificada.entidad, 'Calificacion');
   assert.equal(modificada.entidadId, nota.id);
   assert.ok(modificada.fechaHora && modificada.requestId);

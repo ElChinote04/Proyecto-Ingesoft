@@ -1,9 +1,10 @@
+
 import { api } from '../api/client';
 import { useAdminData } from '../hooks/useAdminData';
 import { AdminForm, Field, Select } from '../components/AdminForm';
 import { Feedback, Loading, ResourceError } from '../components/Feedback';
 import { statuses } from '../utils/format';
-import TeacherHistory from './TeacherHistory';
+import TeacherAttendanceReport from './TeacherAttendanceReport';
 
 export default function TeacherAttendance() {
   const { data, error, retry } = useAdminData('catalogos');
@@ -37,7 +38,10 @@ export default function TeacherAttendance() {
       `/asistencias/docentes/${docenteId}/dias/${fecha}`,
       {
         method: 'PUT',
-        body: { condicion, observacion },
+        body: {
+          condicion,
+          observacion,
+        },
       }
     );
 
@@ -45,47 +49,47 @@ export default function TeacherAttendance() {
   }
 
   return (
-  <>
-    <AdminForm
-      title="Registro de asistencia docente"
-      submit="Guardar asistencia"
-      reset={false}
-      onSave={guardar}
-    >
-      <Select
-        label="Docente"
-        name="docenteId"
-        items={docentes.map((d) => ({
-          id: d.id,
-          label: d.nombre,
-        }))}
-      />
+    <>
+      <AdminForm
+        title="Registro de asistencia docente"
+        submit="Guardar asistencia"
+        reset={false}
+        onSave={guardar}
+      >
+        <Select
+          label="Docente"
+          name="docenteId"
+          items={docentes.map((docente) => ({
+            id: docente.id,
+            label: docente.nombre,
+          }))}
+        />
 
-      <Field
-        label="Fecha"
-        name="fecha"
-        type="date"
-      />
+        <Field
+          label="Fecha"
+          name="fecha"
+          type="date"
+        />
 
-      <Select
-        label="Estado de asistencia"
-        name="condicion"
-        items={statuses.map(([value, label]) => ({
-          id: value,
-          label,
-        }))}
-      />
+        <Select
+          label="Estado de asistencia"
+          name="condicion"
+          items={statuses.map(([value, label]) => ({
+            id: value,
+            label,
+          }))}
+        />
 
-      <Field
-        label="Observación"
-        name="observacion"
-        required={false}
-        maxLength={300}
-        placeholder="Opcional"
-      />
-        </AdminForm>
+        <Field
+          label="Observación"
+          name="observacion"
+          required={false}
+          maxLength={300}
+          placeholder="Opcional"
+        />
+      </AdminForm>
 
-    <TeacherHistory docentes={docentes} />
-  </>
+      <TeacherAttendanceReport docentes={docentes} />
+    </>
   );
 }

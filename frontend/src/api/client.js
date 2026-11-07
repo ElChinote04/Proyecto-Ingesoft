@@ -45,10 +45,40 @@ export async function api(path, { body, headers, ...options } = {}) {
 export async function descargar(path, nombre) {
   const response = await solicitar(path);
   if (!response.ok) rechazar(response, path, await leerJson(response));
+
+/**
+ * Descarga un archivo del API (por ejemplo, un PDF) y lo guarda en el equipo.
+ * Usa la misma cookie de sesión que api(); los errores llegan como ApiError.
+ */
+export async function descargarArchivo(path, nombrePorDefecto = 'archivo') {
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, { credentials: 'include' });
+  } catch {
+    throw new ApiError(0, {
+      message: 'No pudimos conectar con el servidor. Comprueba la conexión y vuelve a intentar.',
+      code: 'NETWORK_ERROR',
+    });
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) window.dispatchEvent(new Event('sage:expired'));
+    throw new ApiError(
+      response.status,
+      payload.error ?? { message: 'No pudimos descargar el archivo.', code: 'DOWNLOAD_FAILED' },
+    );
+  }
+  const nombre =
+    /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ??
+    nombrePorDefecto;
   const url = URL.createObjectURL(await response.blob());
   const enlace = document.createElement('a');
   enlace.href = url;
   enlace.download = nombre;
   enlace.click();
   URL.revokeObjectURL(url);
+  document.body.append(enlace);
+  enlace.click();
+  enlace.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

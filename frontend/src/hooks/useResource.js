@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+// Con path vacío (null) no consulta nada: sirve para esperar a que los filtros sean válidos.
 export function useResource(path) {
   const [state, setState] = useState({ key: null, data: null, error: null });
   const [attempt, setAttempt] = useState(0);
   const key = `${path}:${attempt}`;
   useEffect(() => {
+    if (!path) return undefined;
     const abort = new AbortController();
     api(path, { signal: abort.signal })
       .then((data) => {
@@ -17,7 +19,7 @@ export function useResource(path) {
   }, [path, key]);
   return {
     ...(state.key === key ? state : { data: null, error: null }),
-    loading: state.key !== key,
+    loading: Boolean(path) && state.key !== key,
     retry: () => setAttempt((a) => a + 1),
   };
 }
