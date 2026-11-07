@@ -4,7 +4,6 @@ import { useAdminData } from '../hooks/useAdminData';
 import { AdminForm, Field, Select } from '../components/AdminForm';
 import { Feedback, Loading, ResourceError } from '../components/Feedback';
 import { statuses } from '../utils/format';
-import TeacherHistory from './TeacherHistory';
 import TeacherAttendanceReport from './TeacherAttendanceReport';
 
 export default function TeacherAttendance() {
@@ -39,7 +38,10 @@ export default function TeacherAttendance() {
       `/asistencias/docentes/${docenteId}/dias/${fecha}`,
       {
         method: 'PUT',
-        body: { condicion, observacion },
+        body: {
+          condicion,
+          observacion,
+        },
       }
     );
 
@@ -87,7 +89,6 @@ export default function TeacherAttendance() {
         />
       </AdminForm>
 
-      <TeacherHistory docentes={docentes} />
       <TeacherAttendanceReport docentes={docentes} />
     </>
   );
