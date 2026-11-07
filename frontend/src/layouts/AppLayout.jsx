@@ -1,6 +1,8 @@
+
 import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Feedback } from '../components/Feedback';
+
 export default function AppLayout({
   children,
   step = 'Seleccionar sesión',
@@ -9,13 +11,17 @@ export default function AppLayout({
   onLeave = (action) => action(),
 }) {
   const { user, logout } = useAuth();
+
   useEffect(() => {
     document.title = `SAGE | ${section} · ${step}`;
   }, [section, step]);
+
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
   async function close() {
     setBusy(true);
+
     try {
       await logout();
     } catch (e) {
@@ -24,12 +30,17 @@ export default function AppLayout({
       setBusy(false);
     }
   }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-top">
           <div className="brand">SAGE</div>
-          <p className="caption">{user.roles.join(' · ')}</p>
+
+          <p className="caption">
+            {user.roles.join(' · ')}
+          </p>
+
           <nav aria-label="Menú principal">
             {!user.requiereCambioContrasena &&
               user.roles.includes('ADMINISTRADOR') &&
@@ -47,15 +58,20 @@ export default function AppLayout({
                 <button
                   key={route}
                   className={
-                    (route === 'reglas'
-                      ? window.location.hash.startsWith('#/gestion')
-                      : window.location.hash === `#/admin/${route}`)
+                    (
+                      route === 'reglas'
+                        ? window.location.hash.startsWith('#/gestion')
+                        : window.location.hash === `#/admin/${route}`
+                    )
                       ? 'nav-active'
                       : 'nav-item'
                   }
                   onClick={() =>
                     onLeave(() => {
-                      window.location.hash = route === 'reglas' ? '/gestion' : `/admin/${route}`;
+                      window.location.hash =
+                        route === 'reglas'
+                          ? '/gestion'
+                          : `/admin/${route}`;
                     })
                   }
                 >
@@ -67,45 +83,102 @@ export default function AppLayout({
                     }
                     alt=""
                   />
+
                   {label}
                 </button>
               ))}
-            {!user.requiereCambioContrasena && user.roles.includes('DOCENTE') && (
-              <button
-                className={section === 'Asistencia' ? 'nav-active' : 'nav-item'}
-                onClick={() =>
-                  onLeave(() => {
-                    window.location.hash = '/sesiones';
-                  })
-                }
-              >
-                <img
-                  src={section === 'Asistencia' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
-                  alt=""
-                />
-                Control de asistencia
-              </button>
-            )}
-            {!user.requiereCambioContrasena && user.roles.includes('DOCENTE') && (
-              <button
-                className={section === 'Gestión Académica' ? 'nav-active' : 'nav-item'}
-                onClick={() =>
-                  onLeave(() => {
-                    window.location.hash = '/gestion';
-                  })
-                }
-              >
-                <img
-                  src={section === 'Gestión Académica' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
-                  alt=""
-                />
-                Gestión Académica
-              </button>
-            )}
+
             {!user.requiereCambioContrasena &&
-              user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)) && (
+              user.roles.includes('DOCENTE') && (
                 <button
-                  className={section === 'Mis evaluaciones' ? 'nav-active' : 'nav-item'}
+                  className={
+                    section === 'Asistencia'
+                      ? 'nav-active'
+                      : 'nav-item'
+                  }
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/sesiones';
+                    })
+                  }
+                >
+                  <img
+                    src={
+                      section === 'Asistencia'
+                        ? '/figma/nav-active.svg'
+                        : '/figma/nav.svg'
+                    }
+                    alt=""
+                  />
+
+                  Control de asistencia
+                </button>
+              )}
+
+            {!user.requiereCambioContrasena &&
+              user.roles.includes('DOCENTE') && (
+                <button
+                  className={
+                    section === 'Reporte de asistencia estudiantil'
+                      ? 'nav-active'
+                      : 'nav-item'
+                  }
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/reportes/asistencia';
+                    })
+                  }
+                >
+                  <img
+                    src={
+                      section === 'Reporte de asistencia estudiantil'
+                        ? '/figma/nav-active.svg'
+                        : '/figma/nav.svg'
+                    }
+                    alt=""
+                  />
+
+                  Reporte de asistencia estudiantil
+                </button>
+              )}
+
+            {!user.requiereCambioContrasena &&
+              user.roles.includes('DOCENTE') && (
+                <button
+                  className={
+                    section === 'Gestión Académica'
+                      ? 'nav-active'
+                      : 'nav-item'
+                  }
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/gestion';
+                    })
+                  }
+                >
+                  <img
+                    src={
+                      section === 'Gestión Académica'
+                        ? '/figma/nav-active.svg'
+                        : '/figma/nav.svg'
+                    }
+                    alt=""
+                  />
+
+                  Gestión Académica
+                </button>
+              )}
+
+            {!user.requiereCambioContrasena &&
+              user.roles.some((rol) =>
+                ['ALUMNO', 'APODERADO'].includes(rol)
+              ) && (
+                <button
+                  className={
+                    section === 'Mis evaluaciones'
+                      ? 'nav-active'
+                      : 'nav-item'
+                  }
                   onClick={() =>
                     onLeave(() => {
                       window.location.hash = '/evaluaciones';
@@ -114,17 +187,27 @@ export default function AppLayout({
                 >
                   <img
                     src={
-                      section === 'Mis evaluaciones' ? '/figma/nav-active.svg' : '/figma/nav.svg'
+                      section === 'Mis evaluaciones'
+                        ? '/figma/nav-active.svg'
+                        : '/figma/nav.svg'
                     }
                     alt=""
                   />
+
                   Mis evaluaciones
                 </button>
               )}
+
             {!user.requiereCambioContrasena &&
-              user.roles.some((rol) => ['DOCENTE', 'ALUMNO'].includes(rol)) && (
+              user.roles.some((rol) =>
+                ['DOCENTE', 'ALUMNO'].includes(rol)
+              ) && (
                 <button
-                  className={section === 'Mi horario' ? 'nav-active' : 'nav-item'}
+                  className={
+                    section === 'Mi horario'
+                      ? 'nav-active'
+                      : 'nav-item'
+                  }
                   onClick={() =>
                     onLeave(() => {
                       window.location.hash = '/horario';
@@ -132,16 +215,28 @@ export default function AppLayout({
                   }
                 >
                   <img
-                    src={section === 'Mi horario' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                    src={
+                      section === 'Mi horario'
+                        ? '/figma/nav-active.svg'
+                        : '/figma/nav.svg'
+                    }
                     alt=""
                   />
+
                   Mi horario
                 </button>
               )}
+
             {!user.requiereCambioContrasena &&
-              user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)) && (
+              user.roles.some((rol) =>
+                ['ALUMNO', 'APODERADO'].includes(rol)
+              ) && (
                 <button
-                  className={section === 'Portal académico' ? 'nav-active' : 'nav-item'}
+                  className={
+                    section === 'Portal académico'
+                      ? 'nav-active'
+                      : 'nav-item'
+                  }
                   onClick={() =>
                     onLeave(() => {
                       window.location.hash = '/portal';
@@ -150,17 +245,27 @@ export default function AppLayout({
                 >
                   <img
                     src={
-                      section === 'Portal académico' ? '/figma/nav-active.svg' : '/figma/nav.svg'
+                      section === 'Portal académico'
+                        ? '/figma/nav-active.svg'
+                        : '/figma/nav.svg'
                     }
                     alt=""
                   />
+
                   Inicio
                 </button>
               )}
+
             {!user.requiereCambioContrasena &&
-              user.roles.some((rol) => ['APODERADO', 'ADMINISTRADOR'].includes(rol)) && (
+              user.roles.some((rol) =>
+                ['APODERADO', 'ADMINISTRADOR'].includes(rol)
+              ) && (
                 <button
-                  className={section === 'Pagos' ? 'nav-active' : 'nav-item'}
+                  className={
+                    section === 'Pagos'
+                      ? 'nav-active'
+                      : 'nav-item'
+                  }
                   onClick={() =>
                     onLeave(() => {
                       window.location.hash = '/pagos';
@@ -168,30 +273,51 @@ export default function AppLayout({
                   }
                 >
                   <img
-                    src={section === 'Pagos' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                    src={
+                      section === 'Pagos'
+                        ? '/figma/nav-active.svg'
+                        : '/figma/nav.svg'
+                    }
                     alt=""
                   />
+
                   Pagos y boletas
                 </button>
               )}
-            {!user.requiereCambioContrasena && user.permisos.includes('errores.consultar') && (
-              <button
-                className={section === 'Log de errores' ? 'nav-active' : 'nav-item'}
-                onClick={() =>
-                  onLeave(() => {
-                    window.location.hash = '/errores';
-                  })
-                }
-              >
-                <img
-                  src={section === 'Log de errores' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
-                  alt=""
-                />
-                Log de errores
-              </button>
-            )}
+
+            {!user.requiereCambioContrasena &&
+              user.permisos.includes('errores.consultar') && (
+                <button
+                  className={
+                    section === 'Log de errores'
+                      ? 'nav-active'
+                      : 'nav-item'
+                  }
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/errores';
+                    })
+                  }
+                >
+                  <img
+                    src={
+                      section === 'Log de errores'
+                        ? '/figma/nav-active.svg'
+                        : '/figma/nav.svg'
+                    }
+                    alt=""
+                  />
+
+                  Log de errores
+                </button>
+              )}
+
             <button
-              className={section === 'Seguridad' ? 'nav-active' : 'nav-item'}
+              className={
+                section === 'Seguridad'
+                  ? 'nav-active'
+                  : 'nav-item'
+              }
               onClick={() =>
                 onLeave(() => {
                   window.location.hash = '/contrasena';
@@ -199,18 +325,30 @@ export default function AppLayout({
               }
             >
               <img
-                src={section === 'Seguridad' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                src={
+                  section === 'Seguridad'
+                    ? '/figma/nav-active.svg'
+                    : '/figma/nav.svg'
+                }
                 alt=""
               />
+
               Cambiar contraseña
             </button>
           </nav>
         </div>
+
         <div className="sidebar-footer">
-          {anioAcademico ? `Año académico ${anioAcademico}` : 'SAGE'}
-          <span className="caption">{user.roles.join(' · ')}</span>
+          {anioAcademico
+            ? `Año académico ${anioAcademico}`
+            : 'SAGE'}
+
+          <span className="caption">
+            {user.roles.join(' · ')}
+          </span>
         </div>
       </aside>
+
       <div className="workspace">
         <header className="topbar">
           <strong>
@@ -220,20 +358,31 @@ export default function AppLayout({
                 ? step
                 : section}
           </strong>
+
           <div>
-            <span className="muted">{user.nombre}</span>
-            <button className="text-button" disabled={busy} onClick={() => onLeave(close)}>
+            <span className="muted">
+              {user.nombre}
+            </span>
+
+            <button
+              className="text-button"
+              disabled={busy}
+              onClick={() => onLeave(close)}
+            >
               {busy ? 'Cerrando…' : 'Cerrar sesión'}
             </button>
           </div>
         </header>
+
         <main>
           <div className="breadcrumb">
             Inicio
             <span aria-hidden="true">/</span>
             {step}
           </div>
+
           {error && <Feedback>{error}</Feedback>}
+
           {children}
         </main>
       </div>

@@ -10,9 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/inter": "5.2.8",
+    "exceljs": "^4.4.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "@fontsource/inter": "5.2.8"
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
