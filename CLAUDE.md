@@ -163,14 +163,10 @@ y fuera de producción.
 ## Estado actual
 
 Implementado: acceso y roles, gestión de usuarios, catálogos, estudiantes,
-matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos, la
-evidencia pedagógica de las notas (US-019), la publicación de libretas por
-sección y la consulta de la libreta por competencias (US-020).
-
-Pendiente: evaluación por competencias, justificaciones de inasistencia,
-reportes, y la boleta en PDF (US-009).
-matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos y el
-comprobante de pago en PDF (US-009).
+matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos
+(comprobante en PDF, cuotas, cobranza y anulación), la evidencia pedagógica
+de las notas (US-019), la publicación de libretas por sección y la consulta
+de la libreta por competencias (US-020).
 
 **Comprobante (US-009).** Se emite en la misma transacción que confirma el pago
 (tabla `Comprobante`, una fila por boleta pagada; el id es el correlativo y se

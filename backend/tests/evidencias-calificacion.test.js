@@ -28,10 +28,14 @@ const EXE = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(300, 3)]);
 const alta = async (ruta, datos) =>
   (await admin.post(`${base}/${ruta}`).send(datos).expect(201)).body.data;
 
-async function crearCuenta(identificador, roles, agente) {
+// Las reglas de usuarios exigen correo, DNI de 8 dígitos y nombres solo con letras.
+let documentoCuenta = 20000000;
+
+async function crearCuenta(nombre, roles, agente) {
+  const identificador = `${nombre}@sage.test`.toLowerCase();
   const cuenta = await alta('admin/usuarios', {
-    numeroDocumento: identificador,
-    nombres: identificador,
+    numeroDocumento: String(++documentoCuenta),
+    nombres: nombre.replace(/[^\p{L}]+/gu, ' ').trim(),
     apellidos: 'Evidencia',
     identificador,
     contrasena: 'InicialTemporal123!',
@@ -135,7 +139,7 @@ before(async () => {
     horaFin: '09:00',
   });
   const alumno = await alta('admin/estudiantes', {
-    numeroDocumento: 'DNI-EVID',
+    numeroDocumento: '40000002',
     nombres: 'Lucía',
     apellidos: 'Evidencia',
   });
