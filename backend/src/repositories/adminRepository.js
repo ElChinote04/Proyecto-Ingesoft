@@ -84,6 +84,7 @@ export async function catalogs() {
       prisma.aula.findMany({ orderBy: { codigo: 'asc' } }),
       prisma.docente.findMany({
         where: {
+          activo: true,
           persona: {
             activo: true,
             usuario: { is: { activo: true, roles: { some: { rol: { nombre: 'DOCENTE' } } } } },

@@ -287,7 +287,8 @@ export function enroll(input, actor, requestId) {
 }
 function validTeacher(t) {
   return (
-    t?.persona.activo &&
+    t?.activo &&
+    t.persona.activo &&
     t.persona.usuario?.activo &&
     t.persona.usuario.roles.some((r) => r.rol.nombre === 'DOCENTE')
   );
@@ -323,7 +324,9 @@ async function comprobarBloque(input, db, excluirId) {
   const section = exists(await repository.findSection(input.seccionId, db), 'La sección');
   if (!section.anioAcademico.activo)
     fail(409, 'INACTIVE_YEAR', 'Solo puedes asignar horarios al año académico activo.');
-  exists(await repository.findCourse(input.cursoId, db), 'El curso');
+  const curso = exists(await repository.findCourse(input.cursoId, db), 'El curso');
+  if (!curso.activo)
+    fail(409, 'INACTIVE_COURSE', 'El curso está inactivo. Selecciona un curso vigente.');
   exists(await repository.findRoom(input.aulaId, db), 'El aula');
   if (!validTeacher(await repository.findTeacher(input.docenteId, db)))
     fail(400, 'INVALID_TEACHER', 'Selecciona un docente con cuenta activa y rol DOCENTE.');
@@ -346,6 +349,8 @@ export function createClass(input, actor, requestId) {
   return mutation(actor, requestId, 'SESION_CLASE_CREADA', async (db) => {
     const block = exists(await repository.findBlock(input.bloqueId, db), 'El bloque');
     if (!block.activo) fail(409, 'INACTIVE_BLOCK', 'El bloque está inactivo.');
+    if (!block.asignacion.curso.activo)
+      fail(409, 'INACTIVE_COURSE', 'El curso está inactivo. Selecciona un curso vigente.');
     if (!block.asignacion.seccion.anioAcademico.activo)
       fail(409, 'INACTIVE_YEAR', 'Los horarios de años anteriores son de solo lectura.');
     if (!validTeacher(await repository.findTeacher(block.asignacion.docenteId, db)))

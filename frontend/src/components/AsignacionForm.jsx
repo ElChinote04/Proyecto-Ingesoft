@@ -110,7 +110,9 @@ export default function AsignacionForm({ catalogos, bloque, onSaved, onCancel, a
       <Select
         label="Curso"
         {...campo('cursoId')}
-        items={catalogos.cursos.map((c) => ({ id: c.id, label: c.nombre }))}
+        items={catalogos.cursos
+          .filter((c) => c.activo !== false)
+          .map((c) => ({ id: c.id, label: c.nombre }))}
       />
       <Select
         label="Docente"

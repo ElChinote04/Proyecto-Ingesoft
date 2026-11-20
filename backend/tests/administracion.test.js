@@ -426,6 +426,56 @@ test('horarios rechaza fines de semana en alta, edición, consulta previa y sesi
   );
 });
 
+test('cursos y perfiles docentes inactivos no admiten asignaciones ni sesiones', async () => {
+  const input = {
+    cursoId: course.id,
+    seccionId: section.id,
+    docenteId: teacherUser.docenteId,
+    aulaId: room.id,
+    diaSemana: 1,
+    horaInicio: '12:00',
+    horaFin: '13:00',
+  };
+  const anterior = await prisma.cursoSeccionDocenteAula.findUnique({ where: { id: block.id } });
+  const bloquesAntes = await prisma.cursoSeccionDocenteAula.count();
+  const sesionesAntes = await prisma.sesionClase.count();
+  for (const [modelo, id, status, codigo] of [
+    ['curso', course.id, 409, 'INACTIVE_COURSE'],
+    ['docente', teacherUser.docenteId, 400, 'INVALID_TEACHER'],
+  ]) {
+    await prisma[modelo].update({ where: { id }, data: { activo: false } });
+    try {
+      const responses = [
+        await admin.post(`${base}/admin/bloques/validar`).send(input).expect(status),
+        await admin
+          .post(`${base}/admin/bloques/validar`)
+          .send({ ...input, bloqueId: block.id })
+          .expect(status),
+        await admin.post(`${base}/admin/bloques`).send(input).expect(status),
+        await admin.put(`${base}/admin/bloques/${block.id}`).send(input).expect(status),
+        await admin
+          .post(`${base}/admin/sesiones`)
+          .send({ bloqueId: block.id, fecha: '2026-10-02' })
+          .expect(status),
+      ];
+      for (const response of responses) assert.equal(response.body.error.code, codigo);
+      if (modelo === 'docente') {
+        const catalogos = (await admin.get(`${base}/admin/catalogos`).expect(200)).body.data;
+        assert.ok(!catalogos.docentes.some((d) => d.id === id));
+      }
+      assert.equal(await prisma.cursoSeccionDocenteAula.count(), bloquesAntes);
+      assert.equal(await prisma.sesionClase.count(), sesionesAntes);
+      assert.deepEqual(
+        await prisma.cursoSeccionDocenteAula.findUnique({ where: { id: block.id } }),
+        anterior,
+      );
+    } finally {
+      await prisma[modelo].update({ where: { id }, data: { activo: true } });
+    }
+  }
+  await admin.post(`${base}/admin/bloques/validar`).send(input).expect(204);
+});
+
 test('12 valida fecha/día/año y crea una sola sesión coherente con el bloque', async () => {
   for (const fecha of ['2026-02-30', '2026-10-01', '2027-10-01'])
     await post('sesiones', { bloqueId: block.id, fecha }, 400);
