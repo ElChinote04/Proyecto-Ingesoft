@@ -1,4 +1,3 @@
-
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import * as auth from '../controllers/authController.js';
@@ -39,20 +38,14 @@ export const router = Router();
 
 const requirePortal = (req, res, next) => {
   if (!req.user.roles.some((role) => ['ALUMNO', 'APODERADO'].includes(role))) {
-    throw new AppError(
-      403,
-      'FORBIDDEN',
-      'Este portal está disponible para alumnos y apoderados.',
-    );
+    throw new AppError(403, 'FORBIDDEN', 'Este portal está disponible para alumnos y apoderados.');
   }
 
   next();
 };
 
 const requireAttendanceReport = (req, res, next) => {
-  const permitido = req.user.roles.some((role) =>
-    ['ADMINISTRADOR', 'DOCENTE'].includes(role)
-  );
+  const permitido = req.user.roles.some((role) => ['ADMINISTRADOR', 'DOCENTE'].includes(role));
 
   if (!permitido) {
     throw new AppError(
@@ -84,12 +77,7 @@ router.get('/health', health.check);
 
 router.get('/instalacion', admin.status);
 
-router.post(
-  '/instalacion',
-  loginLimit,
-  validate(setupSchema),
-  admin.initialize
-);
+router.post('/instalacion', loginLimit, validate(setupSchema), admin.initialize);
 
 router.use('/admin', adminRouter);
 router.use('/errores', erroresRouter);
@@ -108,37 +96,17 @@ router.use(calificacionesAlumnoRouter);
 router.use(evidenciasCalificacionRouter);
 router.use(pagosRouter);
 
-router.post(
-  '/auth/login',
-  loginLimit,
-  validate(loginSchema),
-  auth.login
-);
+router.post('/auth/login', loginLimit, validate(loginSchema), auth.login);
 
 router.get('/auth/me', requireAuth, auth.me);
 
-router.put(
-  '/auth/contrasena',
-  requireAuth,
-  validate(passwordSchema),
-  auth.cambiarContrasena
-);
+router.put('/auth/contrasena', requireAuth, validate(passwordSchema), auth.cambiarContrasena);
 
 router.post('/auth/logout', requireAuth, auth.logout);
 
-router.get(
-  '/horarios',
-  requireAuth,
-  validate(horarioSchema, 'query'),
-  portal.obtenerHorario
-);
+router.get('/horarios', requireAuth, validate(horarioSchema, 'query'), portal.obtenerHorario);
 
-router.get(
-  '/portal/estudiantes',
-  requireAuth,
-  requirePortal,
-  portal.obtenerPortal
-);
+router.get('/portal/estudiantes', requireAuth, requirePortal, portal.obtenerPortal);
 
 router.get(
   '/portal/estudiantes/:id/asistencias',
@@ -146,30 +114,22 @@ router.get(
   requirePortal,
   validate(idSchema, 'params'),
   validate(paginaSchema, 'query'),
-  portal.obtenerHistorial
+  portal.obtenerHistorial,
 );
 
 router.use('/sesiones', requireAuth, requireRole('DOCENTE'));
 
 router.get('/sesiones', session.list);
 
-router.get(
-  '/sesiones/:id',
-  validate(idSchema, 'params'),
-  session.detail
-);
+router.get('/sesiones/:id', validate(idSchema, 'params'), session.detail);
 
-router.get(
-  '/sesiones/:id/alumnos',
-  validate(idSchema, 'params'),
-  session.students
-);
+router.get('/sesiones/:id/alumnos', validate(idSchema, 'params'), session.students);
 
 router.put(
   '/sesiones/:id/asistencias',
   validate(idSchema, 'params'),
   validate(asistenciaSchema),
-  session.save
+  session.save,
 );
 
 router.use(asistenciaDocenteRouter);
@@ -179,5 +139,5 @@ router.get(
   requireAuth,
   requireAttendanceReport,
   validate(reporteAsistenciaSchema, 'query'),
-  session.report
+  session.report,
 );

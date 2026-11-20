@@ -163,7 +163,8 @@ y fuera de producción.
 ## Estado actual
 
 Implementado: acceso y roles, gestión de usuarios, catálogos, estudiantes,
-matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos, la
+matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos
+(comprobante en PDF, cuotas, cobranza y anulación), la
 evidencia de calificación (US-019), la publicación de libretas por sección, la
 consulta de la libreta por competencias (US-020) y el plan de trabajo semanal
 del docente.
