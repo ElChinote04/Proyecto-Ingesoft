@@ -18,7 +18,7 @@ const TARJETAS_RESUMEN = {
   LOGIN_FALLIDO: 'Logins fallidos',
   CUENTA_BLOQUEADA: 'Cuentas bloqueadas',
   ACCESO_DENEGADO: 'Accesos denegados',
-  CALIFICACION_MODIFICADA: 'Notas modificadas',
+  RESULTADO_EVALUACION_MODIFICADO: 'Notas modificadas',
   PAGO_ANULADO: 'Pagos anulados',
 };
 // Al llegar desde el log de errores, la tabla se abre filtrada por esa solicitud.

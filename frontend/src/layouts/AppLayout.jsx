@@ -171,6 +171,24 @@ export default function AppLayout({
               )}
 
             {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['DOCENTE'].includes(rol)) && (
+                <button
+                  className={section === 'Plan de trabajo' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/plan-trabajo';
+                    })
+                  }
+                >
+                  <img
+                    src={section === 'Plan de trabajo' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                    alt=""
+                  />
+                  Plan de trabajo
+                </button>
+              )}
+
+            {!user.requiereCambioContrasena &&
               user.roles.some((rol) =>
                 ['ALUMNO', 'APODERADO'].includes(rol)
               ) && (
@@ -196,6 +214,24 @@ export default function AppLayout({
                   />
 
                   Mis evaluaciones
+                </button>
+              )}
+
+            {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)) && (
+                <button
+                  className={section === 'Actividades de clase' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/actividades';
+                    })
+                  }
+                >
+                  <img
+                    src={section === 'Actividades de clase' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                    alt=""
+                  />
+                  Actividades de clase
                 </button>
               )}
 

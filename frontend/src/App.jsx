@@ -16,6 +16,9 @@ import ResultadoPago from './pages/ResultadoPago';
 import CambiarContrasena from './pages/CambiarContrasena';
 import Gestion from './pages/ReglasConsolidacion';
 import Libreta from './pages/Libreta';
+import PlanTrabajo from './pages/PlanTrabajo';
+import ActividadesClase from './pages/ActividadesClase';
+import RevisionPlanes from './pages/RevisionPlanes';
 import LogErrores from './pages/LogErrores';
 import TeacherStudentAttendanceReport from './pages/TeacherStudentAttendanceReport';
 import './styles/app.css';
@@ -112,6 +115,22 @@ function Screens() {
     user.roles.some((rol) => ['DOCENTE', 'ADMINISTRADOR'].includes(rol))
   ) {
     return <Gestion />;
+  }
+
+  // Plan de trabajo semanal: separado de las calificaciones (no las lee ni las escribe).
+  if (route === '/gestion/planes' && user.roles.includes('ADMINISTRADOR')) {
+    return <RevisionPlanes />;
+  }
+
+  if (route === '/plan-trabajo' && user.roles.includes('DOCENTE')) {
+    return <PlanTrabajo />;
+  }
+
+  if (
+    route === '/actividades' &&
+    user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol))
+  ) {
+    return <ActividadesClase key={perfiles} />;
   }
 
   if (

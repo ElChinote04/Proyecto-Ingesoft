@@ -22,18 +22,6 @@ export const listCalificacionesCompetencia = (where = {}, db = prisma) =>
 export const findCalificacionCompetencia = (id, db = prisma) =>
   db.calificacionCompetencia.findUnique({ where: { id }, include });
 
-export const findCalificacionCompetenciaByKey = ({ calificacionId, competenciaId }, db = prisma) =>
-  db.calificacionCompetencia.findUnique({
-    where: { calificacionId_competenciaId: { calificacionId, competenciaId } },
-    include,
-  });
-
-export const createCalificacionCompetencia = (data, db = prisma) =>
-  db.calificacionCompetencia.create({ data, include });
-
-export const updateCalificacionCompetencia = (id, data, db = prisma) =>
-  db.calificacionCompetencia.update({ where: { id }, data, include });
-
 export const deleteCalificacionCompetencia = (id, db = prisma) =>
   db.calificacionCompetencia.update({ where: { id }, data: { activo: false }, include });
 

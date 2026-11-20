@@ -1,5 +1,9 @@
 # Especificación: evidencia pedagógica de la calificación
 
+> Terminología (2026-11-20): en el código y la documentación esto se llama **evidencia de
+> calificación**. «Evidencia pedagógica» designa ahora la actividad del plan de trabajo del
+> docente (`.plans/plan-trabajo-semanal-e2e-spec.md`). La historia US-019 se conserva tal cual.
+
 **Módulo:** Gestión Académica y Evaluación · **Rama:** `rama/moduloGestionAcademica` · **Fecha:** 2026-11-06
 **Historia:** US-019.
 
@@ -8,10 +12,10 @@
 Como docente, puedo registrar evidencia pedagógica asociada a cada evaluación para sustentar la
 calificación otorgada a cada alumno.
 
-| Criterio de aceptación                                                 | Cómo se cumple                                                                                                |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Permite adjuntar o describir evidencia vinculada a una evaluación      | La evidencia lleva título y, como mínimo, una descripción o un archivo, y apunta a una `CalificacionCompetencia` |
-| La evidencia queda asociada al alumno, curso y competencia evaluada    | Se deriva de esa llave foránea: matrícula → alumno, asignación → curso, competencia → competencia             |
+| Criterio de aceptación                                              | Cómo se cumple                                                                                                   |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Permite adjuntar o describir evidencia vinculada a una evaluación   | La evidencia lleva título y, como mínimo, una descripción o un archivo, y apunta a una `CalificacionCompetencia` |
+| La evidencia queda asociada al alumno, curso y competencia evaluada | Se deriva de esa llave foránea: matrícula → alumno, asignación → curso, competencia → competencia                |
 
 Para que esa evidencia sustente de verdad lo publicado, esta especificación también cambia la
 publicación de libretas: la hace el administrador, sección por sección, solo con la evidencia
@@ -19,28 +23,28 @@ completa, y a partir de ahí las notas de esa sección quedan bloqueadas para el
 
 ## 2. Decisiones tomadas
 
-| Tema                  | Decisión                                                                                                    |
-| --------------------- | ----------------------------------------------------------------------------------------------------------- |
-| «Evaluación»          | La nota por competencia y bimestre (`CalificacionCompetencia`). Debe existir antes que la evidencia         |
-| Identificar la tarea  | Título libre en cada evidencia («Práctica 1»). No se crea una entidad `Evaluacion`                          |
-| Modelo                | Modelo nuevo. `EvidenciaPedagogica` (avance del plan académico) sigue siendo otro concepto                  |
-| Adjuntos              | Archivos reales en disco, fuera del repositorio, con metadatos en la base y descarga autenticada            |
-| Tipos y límites       | PDF, JPG y PNG · 5 MB por archivo · 3 archivos activos por evidencia · tipo verificado por sus primeros bytes |
-| Contenido mínimo      | Título obligatorio, más descripción o al menos un archivo                                                   |
-| Visibilidad           | Docente actual de la asignación y administrador. Alumno y apoderado no ven nada                             |
-| Pantalla              | Dentro del modal Calificar alumno, con un botón «Evidencias (n)» por competencia                            |
-| Tras guardar la nota  | El modal sigue abierto y habilita «Evidencias» de inmediato                                                 |
-| Quién publica         | Solo el administrador, por sección y bimestre. La publicación genera las libretas de los alumnos            |
-| Publicación masiva    | El administrador también puede publicar en una acción todas las secciones listas del bimestre               |
-| Condición de publicar | En esa sección, toda matrícula activa debe tener nota y al menos una evidencia activa en cada competencia activa de sus cursos |
-| Antes de publicar     | El docente cambia notas y evidencia sin límite                                                              |
-| Sección publicada     | Nota y evidencia de esa sección y bimestre quedan en solo lectura para el docente                           |
-| Corrección tras publicar | Solo el administrador, por API, con motivo obligatorio guardado en la auditoría                          |
-| Cambio de nota        | La evidencia conserva el nivel vigente al registrarse y sigue vinculada                                     |
-| Baja                  | Baja lógica, archivo conservado. Sigue visible con etiqueta «Inactiva», en solo lectura y descargable        |
-| Contador              | «Evidencias (n)» cuenta solo las activas. No hay reactivación                                               |
-| Administrador         | Pantalla para revisar pendientes y publicar. Consultar evidencia y corregir tras publicar son solo por API  |
-| Cambio de docente     | Consulta y edita quien tiene una asignación activa del curso en la sección. La auditoría conserva al autor  |
+| Tema                     | Decisión                                                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| «Evaluación»             | La nota por competencia y bimestre (`CalificacionCompetencia`). Debe existir antes que la evidencia                            |
+| Identificar la tarea     | Título libre en cada evidencia («Práctica 1»). No se crea una entidad `Evaluacion`                                             |
+| Modelo                   | Modelo nuevo. `EvidenciaPedagogica` (avance del plan académico) sigue siendo otro concepto                                     |
+| Adjuntos                 | Archivos reales en disco, fuera del repositorio, con metadatos en la base y descarga autenticada                               |
+| Tipos y límites          | PDF, JPG y PNG · 5 MB por archivo · 3 archivos activos por evidencia · tipo verificado por sus primeros bytes                  |
+| Contenido mínimo         | Título obligatorio, más descripción o al menos un archivo                                                                      |
+| Visibilidad              | Docente actual de la asignación y administrador. Alumno y apoderado no ven nada                                                |
+| Pantalla                 | Dentro del modal Calificar alumno, con un botón «Evidencias (n)» por competencia                                               |
+| Tras guardar la nota     | El modal sigue abierto y habilita «Evidencias» de inmediato                                                                    |
+| Quién publica            | Solo el administrador, por sección y bimestre. La publicación genera las libretas de los alumnos                               |
+| Publicación masiva       | El administrador también puede publicar en una acción todas las secciones listas del bimestre                                  |
+| Condición de publicar    | En esa sección, toda matrícula activa debe tener nota y al menos una evidencia activa en cada competencia activa de sus cursos |
+| Antes de publicar        | El docente cambia notas y evidencia sin límite                                                                                 |
+| Sección publicada        | Nota y evidencia de esa sección y bimestre quedan en solo lectura para el docente                                              |
+| Corrección tras publicar | Solo el administrador, por API, con motivo obligatorio guardado en la auditoría                                                |
+| Cambio de nota           | La evidencia conserva el nivel vigente al registrarse y sigue vinculada                                                        |
+| Baja                     | Baja lógica, archivo conservado. Sigue visible con etiqueta «Inactiva», en solo lectura y descargable                          |
+| Contador                 | «Evidencias (n)» cuenta solo las activas. No hay reactivación                                                                  |
+| Administrador            | Pantalla para revisar pendientes y publicar. Consultar evidencia y corregir tras publicar son solo por API                     |
+| Cambio de docente        | Consulta y edita quien tiene una asignación activa del curso en la sección. La auditoría conserva al autor                     |
 
 ## 3. Modelo de datos
 
@@ -114,15 +118,15 @@ Esas secciones quedan publicadas aunque no tengan evidencia, porque se publicaro
 Base `/api/v1`. Respuestas `{ "data": ... }`. El contrato de error real es el de `errorHandler.js`
 (`code`, `message`, `details`, `requestId`), que es el que lee el frontend.
 
-| Método y ruta                                                  | Rol                        | Cuerpo                                                     | Éxito |
-| -------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------- | ----- |
-| `GET /calificaciones-competencias/:id/evidencias`              | Docente actual, admin      | —                                                          | 200   |
-| `POST /calificaciones-competencias/:id/evidencias`             | Docente actual             | multipart: `titulo`, `descripcion?`, `archivos` (0 a 3)    | 201   |
-| `PATCH /evidencias-calificaciones/:id`                         | Docente actual             | JSON: `titulo?`, `descripcion?` (`null` la borra)          | 200   |
-| `DELETE /evidencias-calificaciones/:id`                        | Docente actual, admin      | —                                                          | 200   |
-| `POST /evidencias-calificaciones/:id/archivos`                 | Docente actual             | multipart: `archivos` (1 a 3)                              | 201   |
-| `DELETE /evidencias-calificaciones/:id/archivos/:archivoId`    | Docente actual             | —                                                          | 200   |
-| `GET /evidencias-calificaciones/:id/archivos/:archivoId`       | Docente actual, admin      | —                                                          | 200   |
+| Método y ruta                                               | Rol                   | Cuerpo                                                  | Éxito |
+| ----------------------------------------------------------- | --------------------- | ------------------------------------------------------- | ----- |
+| `GET /calificaciones-competencias/:id/evidencias`           | Docente actual, admin | —                                                       | 200   |
+| `POST /calificaciones-competencias/:id/evidencias`          | Docente actual        | multipart: `titulo`, `descripcion?`, `archivos` (0 a 3) | 201   |
+| `PATCH /evidencias-calificaciones/:id`                      | Docente actual        | JSON: `titulo?`, `descripcion?` (`null` la borra)       | 200   |
+| `DELETE /evidencias-calificaciones/:id`                     | Docente actual, admin | —                                                       | 200   |
+| `POST /evidencias-calificaciones/:id/archivos`              | Docente actual        | multipart: `archivos` (1 a 3)                           | 201   |
+| `DELETE /evidencias-calificaciones/:id/archivos/:archivoId` | Docente actual        | —                                                       | 200   |
+| `GET /evidencias-calificaciones/:id/archivos/:archivoId`    | Docente actual, admin | —                                                       | 200   |
 
 `GET /matriculas/:id/calificaciones` agrega `bimestre.publicado` (referido a la sección de esa
 matrícula) y, por competencia,
@@ -138,7 +142,9 @@ Forma de cada evidencia en la lista:
   "nivelLogroRegistrado": "A",
   "activo": true,
   "creadoEn": "2026-11-06T15:00:00.000Z",
-  "archivos": [{ "id": 3, "nombre": "practica.pdf", "tipoMime": "application/pdf", "tamanoBytes": 183042 }]
+  "archivos": [
+    { "id": 3, "nombre": "practica.pdf", "tipoMime": "application/pdf", "tamanoBytes": 183042 }
+  ]
 }
 ```
 
@@ -148,19 +154,19 @@ descendente.
 
 ### Reglas
 
-| Código                   | HTTP | Cuándo                                                                       |
-| ------------------------ | ---- | ---------------------------------------------------------------------------- |
-| `VALIDATION_ERROR`       | 400  | Título vacío o de más de 120 caracteres, descripción de más de 2000, campo extra |
-| `EVIDENCE_EMPTY`         | 400  | Quedaría sin descripción y sin archivos activos (crear, editar o quitar archivo) |
-| `FILE_TYPE_NOT_ALLOWED`  | 400  | Los primeros bytes no son PDF, JPG ni PNG                                    |
-| `FILE_TOO_LARGE`         | 400  | Un archivo supera 5 MB                                                       |
-| `TOO_MANY_FILES`         | 400  | Más de 3 archivos activos en la evidencia                                    |
-| `FORBIDDEN`              | 403  | No es el docente actual de la asignación ni, cuando aplica, administrador    |
-| `GRADE_DETAIL_NOT_FOUND` | 404  | La nota no existe o está inactiva                                            |
-| `EVIDENCE_NOT_FOUND`     | 404  | La evidencia no existe                                                       |
+| Código                   | HTTP | Cuándo                                                                                        |
+| ------------------------ | ---- | --------------------------------------------------------------------------------------------- |
+| `VALIDATION_ERROR`       | 400  | Título vacío o de más de 120 caracteres, descripción de más de 2000, campo extra              |
+| `EVIDENCE_EMPTY`         | 400  | Quedaría sin descripción y sin archivos activos (crear, editar o quitar archivo)              |
+| `FILE_TYPE_NOT_ALLOWED`  | 400  | Los primeros bytes no son PDF, JPG ni PNG                                                     |
+| `FILE_TOO_LARGE`         | 400  | Un archivo supera 5 MB                                                                        |
+| `TOO_MANY_FILES`         | 400  | Más de 3 archivos activos en la evidencia                                                     |
+| `FORBIDDEN`              | 403  | No es el docente actual de la asignación ni, cuando aplica, administrador                     |
+| `GRADE_DETAIL_NOT_FOUND` | 404  | La nota no existe o está inactiva                                                             |
+| `EVIDENCE_NOT_FOUND`     | 404  | La evidencia no existe                                                                        |
 | `FILE_NOT_FOUND`         | 404  | El archivo no existe, está dado de baja o falta en disco (esto último se registra como error) |
-| `TERM_PUBLISHED`         | 409  | El docente intenta modificar con la sección publicada en ese bimestre        |
-| `EVIDENCE_INACTIVE`      | 409  | Se intenta modificar una evidencia dada de baja                              |
+| `TERM_PUBLISHED`         | 409  | El docente intenta modificar con la sección publicada en ese bimestre                         |
+| `EVIDENCE_INACTIVE`      | 409  | Se intenta modificar una evidencia dada de baja                                               |
 
 - Se usa 400 y no 413 porque el contrato de la API no incluye 413.
 - Un archivo de una evidencia inactiva se descarga. Un archivo quitado individualmente no.
@@ -235,7 +241,13 @@ es una función pura en `domain/publicacionSeccion.js`.
       "totalCompleto": 37,
       "publicadoEn": null,
       "pendientes": [
-        { "curso": "Arte", "docente": "Ana Ríos", "sinNota": 1, "sinEvidencia": 2, "sinRegla": false }
+        {
+          "curso": "Arte",
+          "docente": "Ana Ríos",
+          "sinNota": 1,
+          "sinEvidencia": 2,
+          "sinRegla": false
+        }
       ]
     }
   ],
@@ -251,11 +263,11 @@ es una función pura en `domain/publicacionSeccion.js`.
 - `limite` admite 10, 25 o 50.
 - La lista solo incluye secciones del año académico del bimestre.
 
-| Código                   | HTTP | Cuándo                                                          |
-| ------------------------ | ---- | --------------------------------------------------------------- |
+| Código                   | HTTP | Cuándo                                                              |
+| ------------------------ | ---- | ------------------------------------------------------------------- |
 | `PUBLICATION_INCOMPLETE` | 409  | Faltan notas o evidencias en la sección. `details` trae los totales |
-| `GRADES_NOT_FOUND`       | 404  | La sección no tiene ninguna combinación esperada                |
-| `INVALID_TERM_CONTEXT`   | 400  | La sección no corresponde al año académico del bimestre         |
+| `GRADES_NOT_FOUND`       | 404  | La sección no tiene ninguna combinación esperada                    |
+| `INVALID_TERM_CONTEXT`   | 400  | La sección no corresponde al año académico del bimestre             |
 
 Publicar una sección ya publicada devuelve 200 con `{ publicado: true, yaPublicado: true }`.
 
@@ -404,17 +416,17 @@ Sección con H2 «Publicación de libretas» en la vista de administrador de Ges
 
 **Compartidos, autorizados:**
 
-| Archivo                                         | Cambio                                                |
-| ----------------------------------------------- | ----------------------------------------------------- |
-| `routes/index.js`                               | Montar el router                                      |
-| `backend/package.json` y `package-lock.json`    | `multer`                                              |
-| `backend/.env.example`, `config/env.js`         | `EVIDENCIAS_DIR`, por defecto `storage/evidencias`    |
-| `.gitignore`                                    | `backend/storage/`                                    |
-| `scripts/test.js`                               | Suites nuevas y `EVIDENCIAS_DIR` temporal por suite   |
-| `services/auditoria.service.js`                 | Los tres eventos                                      |
-| `frontend/src/api/client.js`                    | `FormData` y descarga                                 |
-| `docs/API.md`, `CHANGELOG.md`, `CLAUDE.md`      | Documentación                                         |
-| `docs/AUDITORIA_TRANSACCIONES.md`               | Solo agregar: tres filas de eventos y una nota sobre `motivo` en correcciones. No se elimina contenido |
+| Archivo                                      | Cambio                                                                                                 |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `routes/index.js`                            | Montar el router                                                                                       |
+| `backend/package.json` y `package-lock.json` | `multer`                                                                                               |
+| `backend/.env.example`, `config/env.js`      | `EVIDENCIAS_DIR`, por defecto `storage/evidencias`                                                     |
+| `.gitignore`                                 | `backend/storage/`                                                                                     |
+| `scripts/test.js`                            | Suites nuevas y `EVIDENCIAS_DIR` temporal por suite                                                    |
+| `services/auditoria.service.js`              | Los tres eventos                                                                                       |
+| `frontend/src/api/client.js`                 | `FormData` y descarga                                                                                  |
+| `docs/API.md`, `CHANGELOG.md`, `CLAUDE.md`   | Documentación                                                                                          |
+| `docs/AUDITORIA_TRANSACCIONES.md`            | Solo agregar: tres filas de eventos y una nota sobre `motivo` en correcciones. No se elimina contenido |
 
 ## 6.1 Ajustes hechos al implementar
 
@@ -441,57 +453,57 @@ edición, revisión o baja debería fallar con 500 y revertirse; falta confirmar
 
 Suite `evidencias-calificacion`, usando siempre una carpeta temporal.
 
-| ID     | Caso                                                                                |
-| ------ | ----------------------------------------------------------------------------------- |
-| EVC-01 | Registra solo con descripción (201), con auditoría y nivel fijado por el servidor   |
-| EVC-02 | Registra con PDF y JPG; el archivo queda en disco y se descarga idéntico            |
-| EVC-03 | La respuesta expone alumno, curso y competencia, y nunca `nombreAlmacenado`         |
-| EVC-04 | Rechaza sin descripción y sin archivos (`EVIDENCE_EMPTY`)                           |
-| EVC-05 | Rechaza campo extra y título demasiado largo (400)                                  |
-| EVC-06 | Rechaza un `.exe` renombrado a `.pdf` (`FILE_TYPE_NOT_ALLOWED`) sin dejar archivo    |
-| EVC-07 | Rechaza más de 5 MB y un cuarto archivo                                             |
-| EVC-08 | Sin sesión responde 401 en todas las rutas                                          |
-| EVC-09 | Otro docente, alumno y apoderado reciben 403 al consultar y al descargar            |
-| EVC-10 | Con la sección publicada: el docente recibe `TERM_PUBLISHED` y aún puede consultar y descargar |
-| EVC-11 | Tras publicar: el administrador da de baja con motivo y sin motivo recibe 400        |
-| EVC-12 | Cambiar la nota no altera `nivelLogroRegistrado` y la evidencia sigue vinculada     |
-| EVC-13 | La baja conserva el archivo, excluye del contador y mantiene la evidencia en la lista |
-| EVC-14 | Una evidencia inactiva no se edita (`EVIDENCE_INACTIVE`), pero se descarga          |
-| EVC-15 | Quitar el único contenido restante falla con `EVIDENCE_EMPTY`                       |
-| EVC-16 | Si falla la transacción no queda fila ni archivo en disco                           |
-| EVC-17 | Dos subidas simultáneas no superan 3 archivos activos                               |
+| ID     | Caso                                                                                                  |
+| ------ | ----------------------------------------------------------------------------------------------------- |
+| EVC-01 | Registra solo con descripción (201), con auditoría y nivel fijado por el servidor                     |
+| EVC-02 | Registra con PDF y JPG; el archivo queda en disco y se descarga idéntico                              |
+| EVC-03 | La respuesta expone alumno, curso y competencia, y nunca `nombreAlmacenado`                           |
+| EVC-04 | Rechaza sin descripción y sin archivos (`EVIDENCE_EMPTY`)                                             |
+| EVC-05 | Rechaza campo extra y título demasiado largo (400)                                                    |
+| EVC-06 | Rechaza un `.exe` renombrado a `.pdf` (`FILE_TYPE_NOT_ALLOWED`) sin dejar archivo                     |
+| EVC-07 | Rechaza más de 5 MB y un cuarto archivo                                                               |
+| EVC-08 | Sin sesión responde 401 en todas las rutas                                                            |
+| EVC-09 | Otro docente, alumno y apoderado reciben 403 al consultar y al descargar                              |
+| EVC-10 | Con la sección publicada: el docente recibe `TERM_PUBLISHED` y aún puede consultar y descargar        |
+| EVC-11 | Tras publicar: el administrador da de baja con motivo y sin motivo recibe 400                         |
+| EVC-12 | Cambiar la nota no altera `nivelLogroRegistrado` y la evidencia sigue vinculada                       |
+| EVC-13 | La baja conserva el archivo, excluye del contador y mantiene la evidencia en la lista                 |
+| EVC-14 | Una evidencia inactiva no se edita (`EVIDENCE_INACTIVE`), pero se descarga                            |
+| EVC-15 | Quitar el único contenido restante falla con `EVIDENCE_EMPTY`                                         |
+| EVC-16 | Si falla la transacción no queda fila ni archivo en disco                                             |
+| EVC-17 | Dos subidas simultáneas no superan 3 archivos activos                                                 |
 | EVC-18 | Tras cambiar de docente, el nuevo accede y actualiza la nota sin duplicarla, y el anterior recibe 403 |
-| EVC-19 | La ficha devuelve `calificacionCompetenciaId`, `totalEvidencias` y `bimestre.publicado` |
-| EVC-20 | Regresión: `POST /evidencias-pedagogicas` responde 201 y audita                     |
+| EVC-19 | La ficha devuelve `calificacionCompetenciaId`, `totalEvidencias` y `bimestre.publicado`               |
+| EVC-20 | Regresión: `POST /evidencias-pedagogicas` responde 201 y audita                                       |
 
 Suite `publicacion-libretas`:
 
-| ID     | Caso                                                                                      |
-| ------ | ----------------------------------------------------------------------------------------- |
-| PUB-01 | El docente recibe 403 al publicar y al consultar el estado                                |
-| PUB-02 | Con pendientes responde `PUBLICATION_INCOMPLETE` y no crea publicación ni evento          |
-| PUB-03 | El estado separa `sinNota` de `sinEvidencia`, pagina y no expone nombres de alumnos       |
-| PUB-04 | Una evidencia inactiva no cuenta como completa                                            |
-| PUB-05 | Una matrícula o competencia inactiva no se exige                                          |
+| ID     | Caso                                                                                       |
+| ------ | ------------------------------------------------------------------------------------------ |
+| PUB-01 | El docente recibe 403 al publicar y al consultar el estado                                 |
+| PUB-02 | Con pendientes responde `PUBLICATION_INCOMPLETE` y no crea publicación ni evento           |
+| PUB-03 | El estado separa `sinNota` de `sinEvidencia`, pagina y no expone nombres de alumnos        |
+| PUB-04 | Una evidencia inactiva no cuenta como completa                                             |
+| PUB-05 | Una matrícula o competencia inactiva no se exige                                           |
 | PUB-06 | Sección completa: publica (201), su Libreta muestra notas y repetir devuelve `yaPublicado` |
-| PUB-07 | Una sección con pendientes no impide publicar otra sección completa del mismo bimestre    |
-| PUB-08 | Los alumnos de la sección sin publicar no ven notas, aunque otra sección ya se publicó    |
-| PUB-09 | Una sección de otro año académico responde `INVALID_TERM_CONTEXT`                         |
-| PUB-10 | Antes de publicar, el docente cambia nota y evidencia varias veces                        |
-| PUB-11 | Tras publicar, las tres rutas de docente responden `TERM_PUBLISHED` y nada cambia         |
-| PUB-12 | El mismo docente sigue calificando en otra sección sin publicar                           |
-| PUB-13 | Tras publicar, `PUT` y `DELETE` del administrador sin motivo responden 400                |
-| PUB-14 | Con motivo, la corrección se aplica y `detalle.motivo` queda en la auditoría              |
-| PUB-15 | Antes de publicar, el administrador corrige sin motivo                                    |
-| PUB-16 | Publicar y dar de baja a la vez nunca deja publicada una sección incompleta               |
-| PUB-17 | Dos publicaciones simultáneas de la misma sección dejan una sola fila                     |
-| PUB-18 | La migración crea una publicación por sección a partir de un `NOTA_PUBLICADA` antiguo     |
-| PUB-19 | La masiva publica solo las secciones listas y detalla las omitidas con su razón           |
-| PUB-20 | La masiva publica solo los `seccionIds` enviados, aunque haya otra sección lista          |
-| PUB-21 | La masiva crea un evento por sección y repetirla no duplica nada                          |
-| PUB-22 | La masiva rechaza lista vacía, ids repetidos y campo extra (400), y al docente (403)      |
-| PUB-23 | Un curso sin regla vigente aparece con `sinRegla: true` y bloquea solo sus secciones      |
-| PUB-24 | Reasignar un curso no exige dos veces la misma competencia                                |
+| PUB-07 | Una sección con pendientes no impide publicar otra sección completa del mismo bimestre     |
+| PUB-08 | Los alumnos de la sección sin publicar no ven notas, aunque otra sección ya se publicó     |
+| PUB-09 | Una sección de otro año académico responde `INVALID_TERM_CONTEXT`                          |
+| PUB-10 | Antes de publicar, el docente cambia nota y evidencia varias veces                         |
+| PUB-11 | Tras publicar, las tres rutas de docente responden `TERM_PUBLISHED` y nada cambia          |
+| PUB-12 | El mismo docente sigue calificando en otra sección sin publicar                            |
+| PUB-13 | Tras publicar, `PUT` y `DELETE` del administrador sin motivo responden 400                 |
+| PUB-14 | Con motivo, la corrección se aplica y `detalle.motivo` queda en la auditoría               |
+| PUB-15 | Antes de publicar, el administrador corrige sin motivo                                     |
+| PUB-16 | Publicar y dar de baja a la vez nunca deja publicada una sección incompleta                |
+| PUB-17 | Dos publicaciones simultáneas de la misma sección dejan una sola fila                      |
+| PUB-18 | La migración crea una publicación por sección a partir de un `NOTA_PUBLICADA` antiguo      |
+| PUB-19 | La masiva publica solo las secciones listas y detalla las omitidas con su razón            |
+| PUB-20 | La masiva publica solo los `seccionIds` enviados, aunque haya otra sección lista           |
+| PUB-21 | La masiva crea un evento por sección y repetirla no duplica nada                           |
+| PUB-22 | La masiva rechaza lista vacía, ids repetidos y campo extra (400), y al docente (403)       |
+| PUB-23 | Un curso sin regla vigente aparece con `sinRegla: true` y bloquea solo sus secciones       |
+| PUB-24 | Reasignar un curso no exige dos veces la misma competencia                                 |
 
 **Pruebas existentes que cambian:** `calificaciones-alumno.test.js` y
 `calificaciones-permisos.test.js` publican como docente, con la ruta cuyo sentido cambia y sin evidencia, y

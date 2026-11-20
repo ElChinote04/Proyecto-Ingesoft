@@ -6,19 +6,6 @@ export const listar = async (req, res) =>
   });
 export const detalle = async (req, res) =>
   res.json({ data: await service.obtenerCalificacion(req.validated.params.id, req.user) });
-export const crear = async (req, res) =>
-  res
-    .status(201)
-    .json({ data: await service.crearCalificacion(req.validated.body, req.user, req.requestId) });
-export const modificar = async (req, res) =>
-  res.json({
-    data: await service.modificarCalificacion(
-      req.validated.params.id,
-      req.validated.body,
-      req.user,
-      req.requestId,
-    ),
-  });
 export const desactivar = async (req, res) =>
   res.json({
     data: await service.desactivarCalificacion(

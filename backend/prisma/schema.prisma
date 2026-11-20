@@ -9,7 +9,22 @@ enum NivelLogro {
   C
 }
 
-enum EstadoEvidenciaPedagogica {
+// Cómo queda un alumno en una evaluación. Sin resultado, la evaluación está pendiente para él.
+enum CondicionResultado {
+  CALIFICADA
+  NO_RINDIO
+  JUSTIFICADA
+}
+
+enum TipoActividadPedagogica {
+  EXPOSICION
+  EJERCICIO
+  VIDEO
+  AVANCE_PLAN
+  OTRO
+}
+
+enum EstadoRevisionEvidencia {
   PENDIENTE_REVISION
   OBSERVADA
   VALIDADA
@@ -31,6 +46,7 @@ model BimestreAcademico {
   calificaciones  Calificacion[]
   planes          PlanAcademico[]
   publicaciones   PublicacionSeccion[]
+  evaluaciones    Evaluacion[]
 
   @@unique([anioAcademicoId, numero])
 }
@@ -45,6 +61,10 @@ model Competencia {
   activo         Boolean                   @default(true)
   calificaciones CalificacionCompetencia[]
   planes         PlanAcademico[]
+  evaluaciones   Evaluacion[]
+
+  // Destino de la FK compuesta de Evaluacion: la competencia debe ser del curso evaluado.
+  @@unique([id, cursoId])
 }
 
 model Calificacion {
@@ -55,8 +75,9 @@ model Calificacion {
   bimestre        BimestreAcademico         @relation(fields: [bimestreId], references: [id])
   asignacionId    Int
   asignacion      CursoSeccionDocente       @relation(fields: [asignacionId], references: [id])
-  reglaId         Int
-  regla           ReglaConsolidacion        @relation(fields: [reglaId], references: [id])
+  // Se fija al publicar: la regla solo consolida la letra anual y no se exige para calificar.
+  reglaId         Int?
+  regla           ReglaConsolidacion?       @relation(fields: [reglaId], references: [id], onDelete: Restrict)
   activo          Boolean                   @default(true)
   creadoPorId     Int
   modificadoPorId Int
@@ -68,53 +89,23 @@ model Calificacion {
 }
 
 model CalificacionCompetencia {
-  id                    Int                     @id @default(autoincrement())
+  id                    Int          @id @default(autoincrement())
   calificacionId        Int
-  calificacion          Calificacion            @relation(fields: [calificacionId], references: [id])
+  calificacion          Calificacion @relation(fields: [calificacionId], references: [id])
   competenciaId         Int
-  competencia           Competencia             @relation(fields: [competenciaId], references: [id])
-  nivelLogro            NivelLogro
+  competencia           Competencia  @relation(fields: [competenciaId], references: [id])
+  // Calculados desde las evaluaciones del bimestre en la misma transacción que las cambia. Se
+  // guardan, no se derivan, para que una libreta publicada no cambie si cambia la escala.
+  nivelLogro            NivelLogro?
+  promedio              Decimal?     @db.Decimal(4, 2)
   conclusionDescriptiva String?
-  activo                Boolean                 @default(true)
+  activo                Boolean      @default(true)
   creadoPorId           Int
   modificadoPorId       Int
-  creadoEn              DateTime                @default(now())
-  modificadoEn          DateTime                @updatedAt
-  evidencias            EvidenciaCalificacion[]
+  creadoEn              DateTime     @default(now())
+  modificadoEn          DateTime     @updatedAt
 
   @@unique([calificacionId, competenciaId])
-}
-
-model EvidenciaCalificacion {
-  id                        Int                            @id @default(autoincrement())
-  calificacionCompetenciaId Int
-  calificacionCompetencia   CalificacionCompetencia        @relation(fields: [calificacionCompetenciaId], references: [id])
-  titulo                    String
-  descripcion               String?
-  nivelLogroRegistrado      NivelLogro
-  activo                    Boolean                        @default(true)
-  creadoPorId               Int
-  modificadoPorId           Int
-  creadoEn                  DateTime                       @default(now())
-  modificadoEn              DateTime                       @updatedAt
-  archivos                  ArchivoEvidenciaCalificacion[]
-
-  @@index([calificacionCompetenciaId, activo])
-}
-
-model ArchivoEvidenciaCalificacion {
-  id               Int                   @id @default(autoincrement())
-  evidenciaId      Int
-  evidencia        EvidenciaCalificacion @relation(fields: [evidenciaId], references: [id])
-  nombreOriginal   String
-  nombreAlmacenado String                @unique
-  tipoMime         String
-  tamanoBytes      Int
-  activo           Boolean               @default(true)
-  creadoPorId      Int
-  creadoEn         DateTime              @default(now())
-
-  @@index([evidenciaId, activo])
 }
 
 model PublicacionSeccion {
@@ -196,8 +187,8 @@ model Usuario {
   asistenciasDocentesCreadas     AsistenciaDocente[]   @relation("CreadorAsistenciaDocente")
   asistenciasDocentesModificadas AsistenciaDocente[]   @relation("ModificadorAsistenciaDocente")
   pagosIniciados                 Pago[]                @relation("PagoIniciador")
-  evidenciasRevisadas            EvidenciaPedagogica[] @relation("EvidenciaRevisor")
   pagosAnulados                  Pago[]                @relation("PagoAnulador")
+  evidenciasPedagogicasRevisadas EvidenciaPedagogica[] @relation("EvidenciaPedagogicaRevisor")
 }
 
 model Instalacion {
@@ -238,7 +229,6 @@ model Docente {
   codigoDocente String                @unique
   activo        Boolean               @default(true)
   asignaciones  CursoSeccionDocente[]
-  evidencias    EvidenciaPedagogica[]
 
   asistencias AsistenciaDocente[]
 }
@@ -299,24 +289,27 @@ model Seccion {
   matriculas      Matricula[]
   asignaciones    CursoSeccionDocente[]
   publicaciones   PublicacionSeccion[]
+  evaluaciones    Evaluacion[]
+  planes          PlanAcademico[]
 
   @@unique([gradoId, anioAcademicoId, nombre])
 }
 
 model Matricula {
-  id              Int                    @id @default(autoincrement())
-  estudianteId    Int
-  estudiante      Estudiante             @relation(fields: [estudianteId], references: [id])
-  seccionId       Int
-  seccion         Seccion                @relation(fields: [seccionId], references: [id])
-  anioAcademicoId Int
-  anioAcademico   AnioAcademico          @relation(fields: [anioAcademicoId], references: [id])
-  activo          Boolean                @default(true)
-  creadoEn        DateTime               @default(now())
-  modificadoEn    DateTime               @updatedAt
-  asistencias     AsistenciaEstudiante[]
-  calificaciones  Calificacion[]
-  planPago        PlanPago?
+  id                   Int                    @id @default(autoincrement())
+  estudianteId         Int
+  estudiante           Estudiante             @relation(fields: [estudianteId], references: [id])
+  seccionId            Int
+  seccion              Seccion                @relation(fields: [seccionId], references: [id])
+  anioAcademicoId      Int
+  anioAcademico        AnioAcademico          @relation(fields: [anioAcademicoId], references: [id])
+  activo               Boolean                @default(true)
+  creadoEn             DateTime               @default(now())
+  modificadoEn         DateTime               @updatedAt
+  asistencias          AsistenciaEstudiante[]
+  calificaciones       Calificacion[]
+  planPago             PlanPago?
+  resultadosEvaluacion ResultadoEvaluacion[]
 
   @@unique([estudianteId, anioAcademicoId])
   @@index([seccionId, activo])
@@ -333,6 +326,8 @@ model Curso {
   asignaciones    CursoSeccionDocente[]
   reglas          ReglaConsolidacion[]
   competencias    Competencia[]
+  evaluaciones    Evaluacion[]
+  planes          PlanAcademico[]
 }
 
 model CursoSeccionDocente {
@@ -347,8 +342,11 @@ model CursoSeccionDocente {
   bloques        CursoSeccionDocenteAula[]
   calificaciones Calificacion[]
   planes         PlanAcademico[]
+  evaluaciones   Evaluacion[]
 
   @@unique([cursoId, seccionId, docenteId])
+  // Destino de la FK compuesta de Evaluacion: su curso y sección no pueden desincronizarse.
+  @@unique([id, cursoId, seccionId])
 }
 
 model Aula {
@@ -520,12 +518,19 @@ model ReglaConsolidacion {
   @@index([gradoId, cursoId, activo])
 }
 
+// Plan de trabajo del docente para una clase y bimestre. cursoId/seccionId identifican la
+// clase (sobrevive a un cambio de docente) y la FK compuesta impide que contradigan a la
+// asignación. Un solo plan activo por clase y bimestre: índice único parcial en SQL.
 model PlanAcademico {
   id              Int                   @id @default(autoincrement())
   bimestreId      Int
   bimestre        BimestreAcademico     @relation(fields: [bimestreId], references: [id])
   asignacionId    Int
-  asignacion      CursoSeccionDocente   @relation(fields: [asignacionId], references: [id])
+  cursoId         Int
+  seccionId       Int
+  asignacion      CursoSeccionDocente   @relation(fields: [asignacionId, cursoId, seccionId], references: [id, cursoId, seccionId])
+  curso           Curso                 @relation(fields: [cursoId], references: [id])
+  seccion         Seccion               @relation(fields: [seccionId], references: [id])
   titulo          String
   objetivo        String
   fechaInicio     DateTime              @db.Date
@@ -541,28 +546,132 @@ model PlanAcademico {
   @@index([asignacionId, activo])
 }
 
+// Actividad del plan de trabajo en una semana del bimestre (exposición, ejercicios, video…).
+// No es una nota ni la sustenta: no tiene alumno ni competencia. El dueño es el docente
+// vigente de la clase del plan; el autor queda en creadoPorId y en la auditoría.
+// La visibilidad para alumnos no se almacena como estado: se deriva de publicadaDesde al
+// consultar (null = subida, futura = programada, hoy o antes = publicada), así una actividad
+// programada se publica sola sin ningún proceso programado.
 model EvidenciaPedagogica {
-  id                    Int                       @id @default(autoincrement())
-  docenteId             Int
-  docente               Docente                   @relation(fields: [docenteId], references: [id])
+  id                    Int                          @id @default(autoincrement())
   planId                Int
-  plan                  PlanAcademico             @relation(fields: [planId], references: [id])
+  plan                  PlanAcademico                @relation(fields: [planId], references: [id])
+  numeroSemana          Int
+  tipo                  TipoActividadPedagogica
+  titulo                String                       @db.VarChar(200)
+  descripcion           String?                      @db.VarChar(2000)
+  publicadaDesde        DateTime?                    @db.Date
+  enlaces               String[]
+  estadoRevision        EstadoRevisionEvidencia      @default(PENDIENTE_REVISION)
+  observacionesRevision String?                      @db.VarChar(2000)
   revisorId             Int?
-  revisor               Usuario?                  @relation("EvidenciaRevisor", fields: [revisorId], references: [id])
-  fechaRegistro         DateTime                  @db.Date
-  fechaEntrega          DateTime?                 @db.Date
-  descripcionAvance     String
-  archivos              String[]
-  observacionesRevision String?
-  estadoRevision        EstadoEvidenciaPedagogica @default(PENDIENTE_REVISION)
-  fechaRevision         DateTime?                 @db.Date
-  activo                Boolean                   @default(true)
+  revisor               Usuario?                     @relation("EvidenciaPedagogicaRevisor", fields: [revisorId], references: [id])
+  fechaRevision         DateTime?
+  activo                Boolean                      @default(true)
   creadoPorId           Int
   modificadoPorId       Int
-  creadoEn              DateTime                  @default(now())
-  modificadoEn          DateTime                  @updatedAt
+  creadoEn              DateTime                     @default(now())
+  modificadoEn          DateTime                     @updatedAt
+  archivos              ArchivoEvidenciaPedagogica[]
 
-  @@index([planId, activo])
+  @@index([planId, numeroSemana, activo])
+}
+
+model ArchivoEvidenciaPedagogica {
+  id               Int                 @id @default(autoincrement())
+  evidenciaId      Int
+  evidencia        EvidenciaPedagogica @relation(fields: [evidenciaId], references: [id])
+  nombreOriginal   String
+  nombreAlmacenado String              @unique
+  tipoMime         String
+  tamanoBytes      Int
+  activo           Boolean             @default(true)
+  creadoPorId      Int
+  creadoEn         DateTime            @default(now())
+
+  @@index([evidenciaId, activo])
+}
+
+// Actividad de evaluación continua de una competencia en una clase y bimestre. Guarda
+// asignacionId (dueño) y cursoId/seccionId (la clase, que sobrevive a un cambio de
+// docente); las FK compuestas impiden que se contradigan.
+model Evaluacion {
+  id              Int                   @id @default(autoincrement())
+  asignacionId    Int
+  cursoId         Int
+  seccionId       Int
+  bimestreId      Int
+  competenciaId   Int
+  asignacion      CursoSeccionDocente   @relation(fields: [asignacionId, cursoId, seccionId], references: [id, cursoId, seccionId])
+  curso           Curso                 @relation(fields: [cursoId], references: [id])
+  seccion         Seccion               @relation(fields: [seccionId], references: [id])
+  bimestre        BimestreAcademico     @relation(fields: [bimestreId], references: [id])
+  competencia     Competencia           @relation(fields: [competenciaId, cursoId], references: [id, cursoId])
+  titulo          String
+  descripcion     String?
+  fecha           DateTime              @db.Date
+  peso            Int                   @default(1)
+  activo          Boolean               @default(true)
+  creadoPorId     Int
+  modificadoPorId Int
+  creadoEn        DateTime              @default(now())
+  modificadoEn    DateTime              @updatedAt
+  resultados      ResultadoEvaluacion[]
+
+  @@index([cursoId, seccionId, bimestreId, activo])
+}
+
+model ResultadoEvaluacion {
+  id              Int                          @id @default(autoincrement())
+  evaluacionId    Int
+  evaluacion      Evaluacion                   @relation(fields: [evaluacionId], references: [id])
+  matriculaId     Int
+  matricula       Matricula                    @relation(fields: [matriculaId], references: [id])
+  condicion       CondicionResultado
+  nota            Decimal?                     @db.Decimal(4, 2)
+  motivo          String?                      @db.VarChar(300)
+  comentario      String?                      @db.VarChar(500)
+  activo          Boolean                      @default(true)
+  creadoPorId     Int
+  modificadoPorId Int
+  creadoEn        DateTime                     @default(now())
+  modificadoEn    DateTime                     @updatedAt
+  // El examen corregido del alumno: obligatorio con nota, prohibido en las demás condiciones.
+  archivos        ArchivoResultadoEvaluacion[]
+
+  // Un solo resultado activo por alumno y evaluación: índice único parcial en SQL. Los CHECK
+  // atan la nota y el motivo a la condición.
+  @@index([evaluacionId, activo])
+  @@index([matriculaId])
+}
+
+model ArchivoResultadoEvaluacion {
+  id               Int                 @id @default(autoincrement())
+  resultadoId      Int
+  resultado        ResultadoEvaluacion @relation(fields: [resultadoId], references: [id])
+  nombreOriginal   String
+  nombreAlmacenado String              @unique
+  tipoMime         String
+  tamanoBytes      Int
+  activo           Boolean             @default(true)
+  creadoPorId      Int
+  creadoEn         DateTime            @default(now())
+
+  @@index([resultadoId, activo])
+}
+
+// Tabla única nota → letra para todo el colegio. Cada cambio crea una versión y cierra la
+// anterior; una sola vigente (índice único parcial en SQL).
+model EscalaCalificacion {
+  id           Int       @id @default(autoincrement())
+  version      Int       @unique
+  minimoAD     Int
+  minimoA      Int
+  minimoB      Int
+  vigenteDesde DateTime  @default(now())
+  vigenteHasta DateTime?
+  creadoPorId  Int?
+  creadoEn     DateTime  @default(now())
 }
 
 model RegistroAuditoria {

@@ -381,7 +381,7 @@ export default function TeacherAttendanceReport({ docentes }) {
       enlace.remove();
 
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err) {
+    } catch {
       setError('No se pudo descargar el archivo Excel.');
     } finally {
       setExportandoExcel(false);
@@ -539,7 +539,7 @@ export default function TeacherAttendanceReport({ docentes }) {
       pdf.save(
         `asistencia_docente_${filtros.fechaInicio}_${filtros.fechaFin}.pdf`
       );
-    } catch (err) {
+    } catch {
       setError('No se pudo descargar el archivo PDF.');
     } finally {
       setExportandoPDF(false);
