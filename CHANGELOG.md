@@ -1,9 +1,33 @@
 # Registro de cambios
 
+## Plan de trabajo semanal y evidencias pedagógicas — 2026-11-20
+
+- La evidencia pedagógica vuelve como **actividad semanal del plan de trabajo del docente**
+  (exposiciones, ejercicios, videos, avances). No es una nota ni la sustenta, y está separada de
+  la evaluación continua y de la evidencia de calificación (US-019).
+- Docente: nueva entrada «Plan de trabajo». Elige curso, sección y bimestre, crea el plan y
+  registra actividades en una vista de filas por semana; las marca como realizadas y les adjunta
+  hasta 3 archivos y 5 enlaces, todo en una sola petición.
+- Administrador: pestaña «Planes de trabajo» en Gestión académica para validar u observar lo
+  realizado, y tabla de fechas de bimestre en Catálogos académicos (`PATCH /bimestres/:id`).
+- Alumno y apoderado: nueva entrada «Actividades de clase», en solo lectura, con lo realizado.
+- Modelo: `EvidenciaPedagogica` (con `numeroSemana`, tipo, estado y revisión) y
+  `ArchivoEvidenciaPedagogica`. `PlanAcademico` gana curso y sección con FK compuesta y un solo
+  plan activo por clase y bimestre. La migración desactiva los planes duplicados y no borra nada.
+- API: `GET /asignaciones`, una sola ruta `POST /planes-academicos` para los dos roles (se
+  retira `/docente`) y `PATCH` en lugar del `PUT` parcial. El dueño del plan es el docente
+  vigente. Los planes ya no los lee cualquier sesión.
+- La rama vuelve a compilar: errores de sintaxis del frontend y fixtures de pruebas tomados de la
+  corrección de `main` (`26bc6f8`), y tres errores de lint en las pantallas de asistencia.
+- El seed de demo fija las fechas de los bimestres de 2026, vincula a la apoderada con Carlos
+  Mendoza y crea un plan de Matemática con actividades.
+- Nueva suite `evidencias-pedagogicas` (EVP-01 a EVP-19); AUD-10 pasa a la ruta unificada.
+
 ## Evaluación continua: modelo de datos — 2026-11-19
 
-- `EvidenciaPedagogica` se reemplaza por `Evaluacion`, `ResultadoEvaluacion` y `ArchivoEvaluacion`.
-  Era el informe de avance del docente sobre un plan, sin alumno ni nota; la tabla no tenía datos.
+- Nuevos modelos `Evaluacion`, `ResultadoEvaluacion` y `ArchivoEvaluacion`, separados de la
+  evidencia pedagógica. Esa tabla se retiró aquí y volvió el 2026-11-20 como actividad del plan
+  de trabajo del docente (entrada anterior).
 - Una evaluación es una actividad de una competencia en una clase y bimestre, con `peso` y estado
   `BORRADOR`/`REGISTRADA`. Cada resultado guarda una nota de 0 a 20 con dos decimales y un
   comentario opcional, con borrado lógico. Solo cambia el modelo: aún no hay API ni consolidación.

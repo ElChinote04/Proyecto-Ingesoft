@@ -144,29 +144,6 @@ export const updateReglaConsolidacionSchema = z
   .object({ version: z.number().int().positive(), metodo: text('el método de consolidación', 100) })
   .strict();
 
-const dateOnlyPlan = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa una fecha válida YYYY-MM-DD.');
-const competencyIds = z.array(id).refine((values) => new Set(values).size === values.length, 'No repitas competencias.');
-export const createPlanAcademicoSchema = z
-  .object({
-    bimestreId: id,
-    asignacionId: id,
-    titulo: text('el título del plan', 200),
-    objetivo: text('el objetivo del plan', 1000),
-    fechaFin: dateOnlyPlan.optional(),
-    competenciaIds: competencyIds.optional().default([]),
-  })
-  .strict();
-export const updatePlanAcademicoSchema = z
-  .object({
-    titulo: text('el título del plan', 200).optional(),
-    objetivo: text('el objetivo del plan', 1000).optional(),
-    competenciaIds: competencyIds.optional(),
-  })
-  .strict()
-  .refine((value) => value.titulo !== undefined || value.objetivo !== undefined || value.competenciaIds !== undefined, {
-    message: 'Indica al menos un dato para actualizar.',
-  });
-
 export const createCalificacionCompetenciaSchema = z
   .object({ calificacionId: id, competenciaId: id, nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional() })
   .strict();

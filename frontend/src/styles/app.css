@@ -1756,6 +1756,8 @@ a {
   }
   .libreta-cierre {
     padding-top: 10mm;
+  }
+}
 
 /* Cobranza (US-008, US-012), anulación (US-013) y avisos de vencimiento (US-011). */
 .pagos-pestanas {
@@ -1851,5 +1853,148 @@ a {
   }
   .pagos-pestanas {
     overflow-x: auto;
+  }
+}
+
+/* Plan de trabajo semanal del docente: una fila por semana con sus actividades. */
+.plan-filtros {
+  margin-bottom: 20px;
+}
+.plan-encabezado {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 20px;
+  padding: 20px;
+}
+.plan-encabezado h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.plan-vacio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px;
+}
+.plan-semanas {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.plan-semana {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+.plan-semana-etiqueta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.plan-semana-actividades {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 12px;
+}
+.plan-semana-vacia {
+  align-self: center;
+}
+.plan-agregar {
+  align-self: center;
+  margin-left: auto;
+}
+.actividad-tarjeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 240px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.actividad-tarjeta:hover,
+.actividad-tarjeta:focus-visible {
+  border-color: var(--brand);
+}
+.actividad-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.actividad-titulo {
+  overflow-wrap: anywhere;
+}
+.actividad-descripcion {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+.actividad-detalle {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.actividad-form {
+  margin-top: 16px;
+}
+.actividad-form-fila {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.actividad-revision {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.checkbox-field input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  flex: none;
+}
+@media (max-width: 700px) {
+  .plan-semana {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .actividad-tarjeta {
+    width: 100%;
+  }
+  .plan-agregar {
+    margin-left: 0;
+  }
+  .actividad-form-fila {
+    grid-template-columns: 1fr;
   }
 }

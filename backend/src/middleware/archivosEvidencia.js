@@ -4,17 +4,19 @@ import { MAX_ARCHIVOS_EVIDENCIA, MAX_BYTES_ARCHIVO } from '../domain/archivoEvid
 
 const CAMPO_ARCHIVOS = 'archivos';
 
-// En memoria para validar los primeros bytes antes de escribir nada en disco.
-const subida = multer({
-  storage: multer.memoryStorage(),
-  defParamCharset: 'utf8',
-  limits: {
-    fileSize: MAX_BYTES_ARCHIVO,
-    files: MAX_ARCHIVOS_EVIDENCIA,
-    fields: 5,
-    fieldSize: 16 * 1024,
-  },
-}).array(CAMPO_ARCHIVOS, MAX_ARCHIVOS_EVIDENCIA);
+// En memoria para validar los primeros bytes antes de escribir nada en disco. El límite de
+// campos depende del formulario: la evidencia de una nota tiene pocos, una actividad más.
+const crearSubida = (campos) =>
+  multer({
+    storage: multer.memoryStorage(),
+    defParamCharset: 'utf8',
+    limits: {
+      fileSize: MAX_BYTES_ARCHIVO,
+      files: MAX_ARCHIVOS_EVIDENCIA,
+      fields: campos,
+      fieldSize: 16 * 1024,
+    },
+  }).array(CAMPO_ARCHIVOS, MAX_ARCHIVOS_EVIDENCIA);
 
 function traducirError(error) {
   if (error.code === 'LIMIT_FILE_SIZE')
@@ -31,6 +33,9 @@ function traducirError(error) {
   return new AppError(400, 'VALIDATION_ERROR', 'Los datos enviados no son válidos.');
 }
 
-export function recibirArchivos(req, res, next) {
-  subida(req, res, (error) => next(error && traducirError(error)));
+export function crearReceptorArchivos({ campos }) {
+  const subida = crearSubida(campos);
+  return (req, res, next) => subida(req, res, (error) => next(error && traducirError(error)));
 }
+
+export const recibirArchivos = crearReceptorArchivos({ campos: 5 });

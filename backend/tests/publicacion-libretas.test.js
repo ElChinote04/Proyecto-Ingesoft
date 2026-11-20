@@ -19,10 +19,14 @@ let bloques = 0;
 const alta = async (ruta, datos) =>
   (await admin.post(`${base}/${ruta}`).send(datos).expect(201)).body.data;
 
-async function crearCuenta(identificador, roles, agente) {
+// Las reglas de usuarios exigen correo, DNI de 8 dígitos y nombres solo con letras.
+let documentoCuenta = 20000000;
+
+async function crearCuenta(nombre, roles, agente) {
+  const identificador = `${nombre}@sage.test`.toLowerCase();
   const cuenta = await alta('admin/usuarios', {
-    numeroDocumento: identificador,
-    nombres: identificador,
+    numeroDocumento: String(++documentoCuenta),
+    nombres: nombre.replace(/[^\p{L}]+/gu, ' ').trim(),
     apellidos: 'Libreta',
     identificador,
     contrasena: 'InicialTemporal123!',
@@ -55,8 +59,8 @@ async function dictar(cursoId, seccionId) {
 
 async function crearAlumno(codigo, seccionId) {
   const alumno = await alta('admin/estudiantes', {
-    numeroDocumento: codigo,
-    nombres: codigo,
+    numeroDocumento: String(++documentoCuenta),
+    nombres: 'Alumno',
     apellidos: 'Secreto',
   });
   const matricula = await alta('admin/matriculas', { estudianteId: alumno.id, seccionId });
@@ -244,7 +248,7 @@ test('PUB-03 el estado separa pendientes, pagina y no expone alumnos', async () 
   assert.deepEqual(fila.pendientes, [
     {
       curso: 'Matemática',
-      docente: 'docente-lib Libreta',
+      docente: 'docente lib Libreta',
       sinNota: 2,
       sinEvidencia: 2,
       sinRegla: false,
@@ -616,5 +620,5 @@ test('PUB-24 reasignar un curso no exige dos veces la misma competencia', async 
   const despues = await filaDe(seccionB);
   assert.equal(despues.totalEsperado, antes.totalEsperado);
   assert.equal(despues.pendientes.length, 1);
-  assert.equal(despues.pendientes[0].docente, 'docente-lib Libreta, docente-otro-lib Libreta');
+  assert.equal(despues.pendientes[0].docente, 'docente lib Libreta, docente otro lib Libreta');
 });

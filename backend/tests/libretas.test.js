@@ -68,10 +68,14 @@ let bloques = 0;
 const alta = async (ruta, datos) =>
   (await admin.post(`${base}/${ruta}`).send(datos).expect(201)).body.data;
 
-async function crearCuenta(identificador, roles, agente) {
+// Las reglas de usuarios exigen correo, DNI de 8 dígitos y nombres solo con letras.
+let documentoCuenta = 20000000;
+
+async function crearCuenta(nombre, roles, agente) {
+  const identificador = `${nombre}@sage.test`.toLowerCase();
   const cuenta = await alta('admin/usuarios', {
-    numeroDocumento: `DNI-${identificador}`,
-    nombres: identificador,
+    numeroDocumento: String(++documentoCuenta),
+    nombres: nombre.replace(/[^\p{L}]+/gu, ' ').trim(),
     apellidos: 'Libreta',
     identificador,
     contrasena: 'InicialTemporal123!',
@@ -253,7 +257,7 @@ test('LIB-01 el alumno consulta su libreta con logros por competencia y periodo'
   assert.equal(libreta.matricula.anioAcademico, '2041');
   assert.equal(libreta.matricula.grado, 'Tercero');
   assert.equal(libreta.matricula.seccion, 'A');
-  assert.equal(libreta.estudiante.apellidosNombres, 'Libreta, alumno-libreta');
+  assert.equal(libreta.estudiante.apellidosNombres, 'Libreta, alumno libreta');
   assert.equal(libreta.areas.length, 4);
   assert.equal(competenciaDe(libreta, 'MAT-1').logros[1], 'C');
 });
@@ -426,9 +430,12 @@ test('LIB-29 las competencias transversales salen como un área más, al final',
 test('LIB-23 la respuesta no expone docente, regla ni credenciales', async () => {
   const libreta = await consultar(apoderado);
   const texto = JSON.stringify(libreta);
-  assert.doesNotMatch(texto, /docente-libreta|hashContrasena|metodo|regla|DNI-docente/i);
-  assert.equal(libreta.estudiante.dni, 'DNI-ALUMNO-LIBRETA');
-  assert.equal(texto.match(/DNI-/g).length, 1);
+  assert.doesNotMatch(texto, /docente-libreta|hashContrasena|metodo|regla/i);
+  // El único DNI de la respuesta es el del alumno; el del docente no aparece.
+  assert.match(libreta.estudiante.dni, /^\d{8}$/);
+  assert.equal(texto.split(libreta.estudiante.dni).length, 2);
+  const docente = await prisma.persona.findFirst({ where: { usuario: { id: cuentaDocente.id } } });
+  assert.equal(texto.includes(docente.numeroDocumento), false);
 });
 
 test('LIB-24 la institución sale de la configuración y sin valor es null', async () => {

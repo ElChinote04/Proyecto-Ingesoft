@@ -2,7 +2,7 @@ import * as repository from '../repositories/auditoria.repository.js';
 
 export const RESULTADOS_AUDITORIA = ['EXITO', 'DENEGADO', 'FALLO'];
 
-// Transacciones críticas de notas y pagos (US-003).
+// Transacciones críticas de notas y pagos (US-003), y del plan de trabajo del docente.
 export const EVENTOS_CRITICOS = [
   'NOTA_REGISTRADA',
   'NOTA_MODIFICADA',
@@ -16,6 +16,15 @@ export const EVENTOS_CRITICOS = [
   'PAGO_CONFIRMADO',
   'PAGO_NO_COMPLETADO',
   'PAGO_ANULADO',
+  'BIMESTRE_FECHAS_MODIFICADAS',
+  'PLAN_ACADEMICO_CREADO',
+  'PLAN_ACADEMICO_MODIFICADO',
+  'PLAN_ACADEMICO_DESACTIVADO',
+  'EVIDENCIA_PEDAGOGICA_REGISTRADA',
+  'EVIDENCIA_PEDAGOGICA_MODIFICADA',
+  'EVIDENCIA_PEDAGOGICA_REALIZADA',
+  'EVIDENCIA_PEDAGOGICA_REVISADA',
+  'EVIDENCIA_PEDAGOGICA_DADA_DE_BAJA',
 ];
 
 // Cambian un valor que ya existía: deben guardar el valor anterior, el nuevo y el motivo.

@@ -1,39 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, descargar } from '../api/client';
+import CampoArchivos, { CampoError } from './CampoArchivos';
+import { formatearTamano, validarArchivos } from '../utils/archivosAdjuntos';
 import ConfirmarAccion from './ConfirmarAccion';
 import { Feedback, Loading, ResourceError } from './Feedback';
 import { useResource } from '../hooks/useResource';
 import { formatTimestamp } from '../utils/format';
 
-const MAX_ARCHIVOS = 3;
-const MAX_BYTES = 5 * 1024 * 1024;
-const EXTENSIONES = /\.(pdf|jpe?g|png)$/i;
-
-const formatearTamano = (bytes) =>
-  bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
-
 function validarTitulo(titulo) {
   if (!titulo.trim()) return 'Ingresa el título de la evidencia.';
   if (titulo.trim().length > 120) return 'El título admite hasta 120 caracteres.';
   return '';
-}
-
-function validarArchivos(archivos, yaAdjuntos) {
-  if (archivos.length + yaAdjuntos > MAX_ARCHIVOS)
-    return `Puedes adjuntar hasta ${MAX_ARCHIVOS} archivos por evidencia.`;
-  if (archivos.some(({ name }) => !EXTENSIONES.test(name)))
-    return 'Solo se aceptan archivos PDF, JPG o PNG.';
-  if (archivos.some(({ size }) => size > MAX_BYTES)) return 'Cada archivo puede pesar hasta 5 MB.';
-  return '';
-}
-
-function CampoError({ id, children }) {
-  if (!children) return null;
-  return (
-    <span id={id} className="field-error" role="alert">
-      {children}
-    </span>
-  );
 }
 
 function FormularioEvidencia({ evidencia, notaId, onGuardada, onCancelar, onCambio }) {
@@ -145,22 +122,12 @@ function FormularioEvidencia({ evidencia, notaId, onGuardada, onCancelar, onCamb
         />
         <CampoError id="evidencia-descripcion-error">{errores.descripcion}</CampoError>
       </label>
-      <label className="field">
-        <span>Archivos</span>
-        <input
-          ref={selector}
-          type="file"
-          multiple
-          accept=".pdf,.jpg,.jpeg,.png"
-          aria-invalid={Boolean(errores.archivos)}
-          aria-describedby="evidencia-archivos-ayuda"
-          onChange={elegirArchivos}
-        />
-        <span id="evidencia-archivos-ayuda" className="caption">
-          PDF, JPG o PNG, hasta 5 MB cada uno. Máximo {MAX_ARCHIVOS} por evidencia.
-        </span>
-        <CampoError id="evidencia-archivos-error">{errores.archivos}</CampoError>
-      </label>
+      <CampoArchivos
+        id="evidencia-archivos"
+        selector={selector}
+        error={errores.archivos}
+        onChange={elegirArchivos}
+      />
       {guardando && archivos.length > 0 && <progress aria-label="Subiendo archivos" />}
       <div className="actions">
         {evidencia && (

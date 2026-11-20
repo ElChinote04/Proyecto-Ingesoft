@@ -45,6 +45,8 @@ export async function api(path, { body, headers, ...options } = {}) {
 export async function descargar(path, nombre) {
   const response = await solicitar(path);
   if (!response.ok) rechazar(response, path, await leerJson(response));
+  guardarArchivo(await response.blob(), nombre);
+}
 
 /**
  * Descarga un archivo del API (por ejemplo, un PDF) y lo guarda en el equipo.
@@ -71,12 +73,14 @@ export async function descargarArchivo(path, nombrePorDefecto = 'archivo') {
   const nombre =
     /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ??
     nombrePorDefecto;
-  const url = URL.createObjectURL(await response.blob());
+  guardarArchivo(await response.blob(), nombre);
+}
+
+function guardarArchivo(blob, nombre) {
+  const url = URL.createObjectURL(blob);
   const enlace = document.createElement('a');
   enlace.href = url;
   enlace.download = nombre;
-  enlace.click();
-  URL.revokeObjectURL(url);
   document.body.append(enlace);
   enlace.click();
   enlace.remove();

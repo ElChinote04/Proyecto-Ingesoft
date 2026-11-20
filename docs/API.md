@@ -389,7 +389,9 @@ Rutas exclusivas del rol DOCENTE. Un docente solo accede a los salones donde tie
 
 El PUT guarda solo las competencias enviadas, en una transacción: si una falla no se guarda ninguna. Responde 400 `INVALID_COMPETENCY_CONTEXT` si la competencia no pertenece a un curso del docente en ese salón, 404 `RULE_NOT_FOUND` si el curso no tiene regla vigente y 409 `TERM_PUBLISHED` si la libreta de la sección ya fue publicada.
 
-## Evidencia pedagógica de la calificación (US-019)
+## Evidencia de calificación (US-019)
+
+Es el sustento de una nota. No confundir con la evidencia pedagógica del plan de trabajo del docente (sección siguiente).
 
 Cada evidencia sustenta una nota por competencia y bimestre. El alumno, el curso y la competencia se derivan de esa nota. Consulta y modifica quien hoy dicta el curso en la sección; el administrador consulta y da de baja.
 
@@ -406,6 +408,51 @@ Cada evidencia sustenta una nota por competencia y bimestre. El alumno, el curso
 Una evidencia lleva título y, además, descripción o al menos un archivo. Los archivos son PDF, JPG o PNG, verificados por sus primeros bytes, de hasta 5 MB y con un máximo de 3 activos por evidencia. El nivel registrado lo fija el servidor al crear y no cambia si después cambia la nota.
 
 Errores propios: 400 `EVIDENCE_EMPTY`, `FILE_TYPE_NOT_ALLOWED`, `FILE_TOO_LARGE`, `TOO_MANY_FILES` y `CORRECTION_REASON_REQUIRED`; 404 `GRADE_DETAIL_NOT_FOUND`, `EVIDENCE_NOT_FOUND` y `FILE_NOT_FOUND`; 409 `TERM_PUBLISHED` y `EVIDENCE_INACTIVE`.
+
+## Plan de trabajo semanal y evidencias pedagógicas
+
+La evidencia pedagógica es una actividad del plan de trabajo del docente en una semana del bimestre (exposición, ejercicios, video, avance). No es una nota ni la sustenta: nunca lee ni escribe calificaciones. Gestiona el plan el **docente vigente** de la clase (curso + sección), aunque lo haya creado otro; el administrador puede siempre.
+
+### Bimestres
+
+| Ruta                 | Rol           | Cuerpo o respuesta                                                                                                                          |
+| -------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /bimestres       | Cualquiera    | Bimestres del año activo: `[{ id, numero, nombre, fechaInicio, fechaFin, semanas, cerrado }]`; `semanas` es null sin fechas                 |
+| PATCH /bimestres/:id | Administrador | `{ fechaInicio, fechaFin }` en `YYYY-MM-DD`. 409 `TERM_OVERLAP`, `TERM_ORDER` o `TERM_HAS_LATER_WEEKS` (con el detalle de planes y semanas) |
+
+La semana 1 empieza el día de inicio y cada una dura 7 días; la última se recorta en la fecha de fin. Un bimestre está `cerrado` cuando hoy (Lima) ya pasó su fecha de fin.
+
+### Asignaciones
+
+`GET /asignaciones` devuelve las clases que puede ver la sesión: `[{ id, curso: { id, codigo, nombre }, seccion: { id, nombre, grado } }]`. El docente ve sus asignaciones vigentes; el administrador, todas (`?cursoId&seccionId`); el alumno o apoderado, los cursos de la sección de una matrícula suya (`?matriculaId`, obligatorio).
+
+### Planes
+
+| Ruta                                                | Rol                    | Cuerpo o respuesta                                                                                                                                        |
+| --------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /planes-academicos?bimestreId&cursoId&seccionId | Docente, administrador | Resumen de los planes activos; el docente solo ve los de sus clases                                                                                       |
+| GET /planes-academicos/:id                          | Docente, administrador | El plan con `bimestre { semanas, cerrado }`, `puedeEditar` y `semanas: [{ numero, desde, hasta, evidencias }]`, **todas** las semanas, también las vacías |
+| POST /planes-academicos                             | Docente, administrador | `{ asignacionId, bimestreId, titulo, objetivo, fechaInicio?, fechaFin?, competenciaIds? }`; 409 `PLAN_EXISTS`, `TERM_WITHOUT_DATES` o `TERM_CLOSED`       |
+| PATCH /planes-academicos/:id                        | Docente, administrador | `{ titulo?, objetivo?, fechaFin?, competenciaIds? }`                                                                                                      |
+| DELETE /planes-academicos/:id                       | Administrador          | Desactiva el plan y sus actividades en la misma transacción                                                                                               |
+
+Una clase tiene un solo plan activo por bimestre (índice único parcial). Se puede planificar antes del bimestre o durante él, nunca después.
+
+### Actividades (evidencias pedagógicas)
+
+| Ruta                                                       | Rol                            | Cuerpo o respuesta                                                                                                                                        |
+| ---------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /evidencias-pedagogicas?planId&numeroSemana&estado     | Docente, administrador         | Actividades del plan, ordenadas por semana                                                                                                                |
+| GET /evidencias-pedagogicas?matriculaId&cursoId&bimestreId | Alumno, apoderado              | `{ bimestre, curso, semanas }` solo con lo `REALIZADA` y no observado, sin datos de la revisión ni del docente                                            |
+| GET /evidencias-pedagogicas/:id                            | Según el alcance               | Detalle; la familia recibe la salida mínima                                                                                                               |
+| POST /evidencias-pedagogicas                               | Docente vigente, administrador | multipart: `planId`, `numeroSemana`, `tipo`, `titulo`, `descripcion?`, `enlaces?` (JSON, hasta 5 `https://`), `realizada?`, `archivos` (0 a 3), `motivo?` |
+| PATCH /evidencias-pedagogicas/:id                          | Docente vigente, administrador | multipart o JSON: los mismos campos, `estado: "REALIZADA"` y archivos nuevos, **en una sola petición**                                                    |
+| PUT /evidencias-pedagogicas/:id/revision                   | Administrador                  | `{ estadoRevision, observacionesRevision? }` con `VALIDADA` u `OBSERVADA`; solo sobre lo realizado                                                        |
+| DELETE /evidencias-pedagogicas/:id                         | Docente vigente, administrador | Baja lógica; `{ motivo? }`                                                                                                                                |
+| GET /evidencias-pedagogicas/:id/archivos/:archivoId        | Según el alcance               | Descarga con el nombre original                                                                                                                           |
+| DELETE /evidencias-pedagogicas/:id/archivos/:archivoId     | Docente vigente, administrador | Retira el archivo; `{ motivo? }`                                                                                                                          |
+
+`tipo` es `EXPOSICION`, `EJERCICIO`, `VIDEO`, `AVANCE_PLAN` u `OTRO`. Una actividad nace `PLANIFICADA`, o `REALIZADA` con `realizada: true`; pasar a realizada fija `fechaRealizacion` en el servidor y no tiene vuelta atrás. Pasada la fecha de fin del bimestre, el docente recibe 409 `TERM_CLOSED` y el administrador debe enviar `motivo` (400 `REASON_REQUIRED`). Una actividad `VALIDADA` ya no la edita el docente (409 `EVIDENCE_VALIDATED`). Los archivos se escriben en disco antes de la transacción y se borran si esta falla. Otros errores: 400 `INVALID_WEEK`, `FILE_TYPE_NOT_ALLOWED`, `FILE_TOO_LARGE`, `TOO_MANY_FILES`; 409 `EVIDENCE_NOT_DONE`, `EVIDENCE_INACTIVE`.
 
 ## Publicación de libretas
 

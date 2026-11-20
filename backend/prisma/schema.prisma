@@ -14,6 +14,25 @@ enum EstadoEvaluacion {
   REGISTRADA
 }
 
+enum TipoActividadPedagogica {
+  EXPOSICION
+  EJERCICIO
+  VIDEO
+  AVANCE_PLAN
+  OTRO
+}
+
+enum EstadoActividadPedagogica {
+  PLANIFICADA
+  REALIZADA
+}
+
+enum EstadoRevisionEvidencia {
+  PENDIENTE_REVISION
+  OBSERVADA
+  VALIDADA
+}
+
 datasource db {
   provider = "postgresql"
 }
@@ -197,10 +216,11 @@ model Usuario {
   reglasCreadas            ReglaConsolidacion[]   @relation("ReglaCreador")
   reglasModificadas        ReglaConsolidacion[]   @relation("ReglaModificador")
 
-  asistenciasDocentesCreadas     AsistenciaDocente[] @relation("CreadorAsistenciaDocente")
-  asistenciasDocentesModificadas AsistenciaDocente[] @relation("ModificadorAsistenciaDocente")
-  pagosIniciados                 Pago[]              @relation("PagoIniciador")
-  pagosAnulados                  Pago[]              @relation("PagoAnulador")
+  asistenciasDocentesCreadas     AsistenciaDocente[]   @relation("CreadorAsistenciaDocente")
+  asistenciasDocentesModificadas AsistenciaDocente[]   @relation("ModificadorAsistenciaDocente")
+  pagosIniciados                 Pago[]                @relation("PagoIniciador")
+  pagosAnulados                  Pago[]                @relation("PagoAnulador")
+  evidenciasPedagogicasRevisadas EvidenciaPedagogica[] @relation("EvidenciaPedagogicaRevisor")
 }
 
 model Instalacion {
@@ -302,6 +322,7 @@ model Seccion {
   asignaciones    CursoSeccionDocente[]
   publicaciones   PublicacionSeccion[]
   evaluaciones    Evaluacion[]
+  planes          PlanAcademico[]
 
   @@unique([gradoId, anioAcademicoId, nombre])
 }
@@ -338,6 +359,7 @@ model Curso {
   reglas          ReglaConsolidacion[]
   competencias    Competencia[]
   evaluaciones    Evaluacion[]
+  planes          PlanAcademico[]
 }
 
 model CursoSeccionDocente {
@@ -528,24 +550,76 @@ model ReglaConsolidacion {
   @@index([gradoId, cursoId, activo])
 }
 
+// Plan de trabajo del docente para una clase y bimestre. cursoId/seccionId identifican la
+// clase (sobrevive a un cambio de docente) y la FK compuesta impide que contradigan a la
+// asignación. Un solo plan activo por clase y bimestre: índice único parcial en SQL.
 model PlanAcademico {
-  id              Int                 @id @default(autoincrement())
+  id              Int                   @id @default(autoincrement())
   bimestreId      Int
-  bimestre        BimestreAcademico   @relation(fields: [bimestreId], references: [id])
+  bimestre        BimestreAcademico     @relation(fields: [bimestreId], references: [id])
   asignacionId    Int
-  asignacion      CursoSeccionDocente @relation(fields: [asignacionId], references: [id])
+  cursoId         Int
+  seccionId       Int
+  asignacion      CursoSeccionDocente   @relation(fields: [asignacionId, cursoId, seccionId], references: [id, cursoId, seccionId])
+  curso           Curso                 @relation(fields: [cursoId], references: [id])
+  seccion         Seccion               @relation(fields: [seccionId], references: [id])
   titulo          String
   objetivo        String
-  fechaInicio     DateTime            @db.Date
-  fechaFin        DateTime?           @db.Date
-  activo          Boolean             @default(true)
+  fechaInicio     DateTime              @db.Date
+  fechaFin        DateTime?             @db.Date
+  activo          Boolean               @default(true)
   creadoPorId     Int
   modificadoPorId Int
-  creadoEn        DateTime            @default(now())
-  modificadoEn    DateTime            @updatedAt
+  creadoEn        DateTime              @default(now())
+  modificadoEn    DateTime              @updatedAt
   competencias    Competencia[]
+  evidencias      EvidenciaPedagogica[]
 
   @@index([asignacionId, activo])
+}
+
+// Actividad del plan de trabajo en una semana del bimestre (exposición, ejercicios, video…).
+// No es una nota ni la sustenta: no tiene alumno ni competencia. El dueño es el docente
+// vigente de la clase del plan; el autor queda en creadoPorId y en la auditoría.
+model EvidenciaPedagogica {
+  id                    Int                          @id @default(autoincrement())
+  planId                Int
+  plan                  PlanAcademico                @relation(fields: [planId], references: [id])
+  numeroSemana          Int
+  tipo                  TipoActividadPedagogica
+  titulo                String                       @db.VarChar(200)
+  descripcion           String?                      @db.VarChar(2000)
+  estado                EstadoActividadPedagogica    @default(PLANIFICADA)
+  fechaRealizacion      DateTime?                    @db.Date
+  enlaces               String[]
+  estadoRevision        EstadoRevisionEvidencia      @default(PENDIENTE_REVISION)
+  observacionesRevision String?                      @db.VarChar(2000)
+  revisorId             Int?
+  revisor               Usuario?                     @relation("EvidenciaPedagogicaRevisor", fields: [revisorId], references: [id])
+  fechaRevision         DateTime?
+  activo                Boolean                      @default(true)
+  creadoPorId           Int
+  modificadoPorId       Int
+  creadoEn              DateTime                     @default(now())
+  modificadoEn          DateTime                     @updatedAt
+  archivos              ArchivoEvidenciaPedagogica[]
+
+  @@index([planId, numeroSemana, activo])
+}
+
+model ArchivoEvidenciaPedagogica {
+  id               Int                 @id @default(autoincrement())
+  evidenciaId      Int
+  evidencia        EvidenciaPedagogica @relation(fields: [evidenciaId], references: [id])
+  nombreOriginal   String
+  nombreAlmacenado String              @unique
+  tipoMime         String
+  tamanoBytes      Int
+  activo           Boolean             @default(true)
+  creadoPorId      Int
+  creadoEn         DateTime            @default(now())
+
+  @@index([evidenciaId, activo])
 }
 
 // Actividad de evaluación continua de una competencia en una clase y bimestre. Guarda

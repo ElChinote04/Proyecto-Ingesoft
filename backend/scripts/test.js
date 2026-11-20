@@ -30,6 +30,7 @@ try {
     'publicacion-libretas',
     'libretas',
     'evaluaciones-modelo',
+    'evidencias-pedagogicas',
     'errores',
     'cobranza',
   ]) {

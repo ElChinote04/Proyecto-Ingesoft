@@ -5,6 +5,7 @@ import { useResource } from '../hooks/useResource';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
 import PublicacionLibretas from '../components/PublicacionLibretas';
+import PestanasGestion from '../components/PestanasGestion';
 import Calificaciones from './Calificaciones';
 
 const ruleMethods = [
@@ -508,6 +509,7 @@ function AdminRules() {
         </form>
       ) : (
         <>
+          <PestanasGestion actual="#/gestion" />
           <PublicacionLibretas />
           <CompetenciesSection catalog={catalog} />
           <div className="rule-heading page-heading">

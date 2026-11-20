@@ -164,13 +164,24 @@ y fuera de producción.
 
 Implementado: acceso y roles, gestión de usuarios, catálogos, estudiantes,
 matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos, la
-evidencia pedagógica de las notas (US-019), la publicación de libretas por
-sección y la consulta de la libreta por competencias (US-020).
+evidencia de calificación (US-019), la publicación de libretas por sección, la
+consulta de la libreta por competencias (US-020) y el plan de trabajo semanal
+del docente.
 
-Pendiente: evaluación por competencias, justificaciones de inasistencia,
-reportes, y la boleta en PDF (US-009).
-matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos y el
-comprobante de pago en PDF (US-009).
+**Tres conceptos que no se mezclan.** La *evidencia de calificación*
+(`EvidenciaCalificacion`, US-019) sustenta una nota y la publicación la exige.
+La *evaluación continua* (`Evaluacion`) es una nota 0–20 por alumno, aún sin
+API. La *evidencia pedagógica* (`EvidenciaPedagogica`) es una actividad del
+plan de trabajo del docente en una semana del bimestre: no tiene alumno ni nota
+y el plan nunca toca las calificaciones.
+
+**Plan de trabajo.** Un plan activo por clase (curso + sección) y bimestre,
+garantizado por un índice único parcial en SQL. Lo gestiona el docente vigente
+de la clase, no el que lo creó, porque reasignar un curso crea otra asignación.
+Las semanas salen de las fechas del bimestre (`domain/semanasBimestre.js`); sin
+fechas no hay plan. Pasado el fin del bimestre el docente solo lee y el
+administrador corrige con motivo. Datos, estado y archivos de una actividad van
+en una sola petición multipart.
 
 **Comprobante (US-009).** Se emite en la misma transacción que confirma el pago
 (tabla `Comprobante`, una fila por boleta pagada; el id es el correlativo y se

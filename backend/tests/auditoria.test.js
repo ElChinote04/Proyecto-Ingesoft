@@ -345,38 +345,48 @@ test('AUD-10 crear, modificar y desactivar un plan académico queda auditado', a
   assert.ok(creadoAdmin.requestId);
   assert.equal(creadoAdmin.detalle.valorNuevo.titulo, 'Plan del administrador');
 
+  // Una sola ruta para los dos roles, y un solo plan activo por clase y bimestre.
+  const duplicado = await docente
+    .post(`${base}/planes-academicos`)
+    .send({ ...plan, titulo: 'Plan del docente' })
+    .expect(409);
+  assert.equal(duplicado.body.error.code, 'PLAN_EXISTS');
+
+  // El docente vigente gestiona el plan de su clase aunque lo haya creado otro.
+  await docente
+    .patch(`${base}/planes-academicos/${delAdmin.id}`)
+    .send({ titulo: 'Plan corregido' })
+    .expect(200);
+  const [modificado] = await eventos('PLAN_ACADEMICO_MODIFICADO', delAdmin.id);
+  assert.equal(modificado.usuarioId, cuentaDocente.id);
+  assert.equal(modificado.detalle.valorAnterior.titulo, 'Plan del administrador');
+  assert.equal(modificado.detalle.valorNuevo.titulo, 'Plan corregido');
+
+  await admin.delete(`${base}/planes-academicos/${delAdmin.id}`).expect(200);
+  const [desactivado] = await eventos('PLAN_ACADEMICO_DESACTIVADO', delAdmin.id);
+  assert.equal(desactivado.detalle.valorAnterior.activo, true);
+  assert.equal(desactivado.detalle.valorNuevo.activo, false);
+
+  // Con el anterior inactivo, la clase vuelve a admitir un plan.
   const delDocente = (
     await docente
-      .post(`${base}/planes-academicos/docente`)
+      .post(`${base}/planes-academicos`)
       .send({ ...plan, titulo: 'Plan del docente' })
       .expect(201)
   ).body.data;
   const [creadoDocente] = await eventos('PLAN_ACADEMICO_CREADO', delDocente.id);
   assert.equal(creadoDocente.usuarioId, cuentaDocente.id);
 
-  await docente
-    .put(`${base}/planes-academicos/${delDocente.id}`)
-    .send({ titulo: 'Plan corregido' })
-    .expect(200);
-  const [modificado] = await eventos('PLAN_ACADEMICO_MODIFICADO', delDocente.id);
-  assert.equal(modificado.detalle.valorAnterior.titulo, 'Plan del docente');
-  assert.equal(modificado.detalle.valorNuevo.titulo, 'Plan corregido');
-
-  await admin.delete(`${base}/planes-academicos/${delDocente.id}`).expect(200);
-  const [desactivado] = await eventos('PLAN_ACADEMICO_DESACTIVADO', delDocente.id);
-  assert.equal(desactivado.detalle.valorAnterior.activo, true);
-  assert.equal(desactivado.detalle.valorNuevo.activo, false);
-
   // Un plan rechazado no deja rastro: ni plan ni auditoría.
   const antes = await prisma.registroAuditoria.count({ where: { entidad: 'PlanAcademico' } });
-  const fueraDeFecha = await prisma.bimestreAcademico.findFirst({
+  const sinFechas = await prisma.bimestreAcademico.findFirst({
     where: { anioAcademicoId: anio.id, numero: 3 },
   });
   const rechazo = await admin
     .post(`${base}/planes-academicos`)
-    .send({ ...plan, bimestreId: fueraDeFecha.id, titulo: 'Plan imposible' })
-    .expect(400);
-  assert.equal(rechazo.body.error.code, 'INVALID_PLAN_START');
+    .send({ ...plan, bimestreId: sinFechas.id, titulo: 'Plan imposible' })
+    .expect(409);
+  assert.equal(rechazo.body.error.code, 'TERM_WITHOUT_DATES');
   assert.equal(
     await prisma.registroAuditoria.count({ where: { entidad: 'PlanAcademico' } }),
     antes,
