@@ -75,6 +75,17 @@ export const descargarComprobante = async (req, res) => {
     .send(pdf);
 };
 
+/** US-009: reenviar el comprobante en PDF por correo. */
+export const enviarComprobante = async (req, res) =>
+  res.json({
+    data: await service.enviarComprobantePorCorreo(
+      req.validated.params.id,
+      req.validated.body,
+      req.user,
+      req.requestId,
+    ),
+  });
+
 export const anularPago = async (req, res) =>
   res.json({
     data: await service.anularPago(
