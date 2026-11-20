@@ -5,6 +5,7 @@ import { app } from '../src/app.js';
 import { prisma } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
 import { registrarTransaccionCritica } from '../src/services/auditoria.service.js';
+import { crearCalificador } from './support/notas.js';
 
 const base = '/api/v1';
 const clave = 'ClaveSegura123!';
@@ -202,7 +203,8 @@ test('AUD-07 cada operación de un pago queda registrada con usuario, fecha y de
   assert.equal(confirmado.detalle.monto, '350.00');
 });
 
-// De punta a punta: se usan las rutas reales del módulo de Gestión Académica.
+// De punta a punta: se usan las rutas reales del módulo de Gestión Académica. La letra ya no se
+// escribe a mano: lo que cambia es la nota 0–20 de una evaluación y, con ella, la letra.
 test('AUD-08 un cambio de nota queda registrado con usuario, fecha, valor anterior y nuevo', async () => {
   const curso = await alta('admin/catalogos/cursos', { codigo: 'MAT', nombre: 'Matemática' });
   const aula = await alta('admin/catalogos/aulas', { codigo: 'A101' });
@@ -211,13 +213,6 @@ test('AUD-08 un cambio de nota queda registrado con usuario, fecha, valor anteri
     codigo: 'C1',
     nombre: 'Resuelve problemas de cantidad',
     descripcion: 'Competencia de prueba para la auditoría',
-  });
-  const regla = await alta('reglas-consolidacion', {
-    gradoId: grado.id,
-    cursoId: curso.id,
-    nombre: 'Regla de prueba',
-    version: 1,
-    metodo: 'PROMEDIO',
   });
   await alta('admin/bloques', {
     cursoId: curso.id,
@@ -237,42 +232,44 @@ test('AUD-08 un cambio de nota queda registrado con usuario, fecha, valor anteri
     estudianteId: alumno.id,
     seccionId: seccion.id,
   });
-  const asignacion = await prisma.cursoSeccionDocente.findFirst({
-    where: { cursoId: curso.id, seccionId: seccion.id },
-  });
-  const bimestre = await prisma.bimestreAcademico.findFirst({
-    where: { anioAcademicoId: anio.id, numero: 1 },
+  // Solo el primero: AUD-10 necesita otro bimestre sin fechas.
+  const bimestre = await prisma.bimestreAcademico.update({
+    where: { anioAcademicoId_numero: { anioAcademicoId: anio.id, numero: 1 } },
+    data: {
+      fechaInicio: new Date('2026-03-02T00:00:00Z'),
+      fechaFin: new Date('2026-05-08T00:00:00Z'),
+    },
   });
 
-  const nota = (
-    await docente
-      .post(`${base}/calificaciones`)
-      .send({
-        matriculaId: matricula.id,
-        bimestreId: bimestre.id,
-        asignacionId: asignacion.id,
-        reglaId: regla.id,
-        competencias: [{ competenciaId: competencia.id, nivelLogro: 'B' }],
-      })
-      .expect(201)
-  ).body.data;
-  await admin
-    .put(`${base}/calificaciones/${nota.id}`)
-    .send({ competencias: [{ competenciaId: competencia.id, nivelLogro: 'A' }] })
-    .expect(200);
+  const notas = crearCalificador(docente);
+  const evaluacionId = await notas.calificar(matricula.id, {
+    seccionId: seccion.id,
+    cursoId: curso.id,
+    competenciaId: competencia.id,
+    bimestre,
+    nota: 12,
+  });
+  await notas.registrar(evaluacionId, matricula.id, { nota: 15 }).expect(200);
 
-  const [creada] = (await consultar({ tipoEvento: 'CALIFICACION_CREADA' })).registros;
+  const [creada] = (await consultar({ tipoEvento: 'EVALUACION_CREADA' })).registros;
   assert.equal(creada.usuario, 'docente-auditoria@prueba.local');
-  assert.equal(creada.entidadId, nota.id);
-  const [modificada] = (await consultar({ tipoEvento: 'CALIFICACION_MODIFICADA' })).registros;
-  assert.equal(modificada.usuario, 'admin-auditoria@prueba.local');
-  assert.equal(modificada.entidad, 'Calificacion');
-  assert.equal(modificada.entidadId, nota.id);
+  assert.equal(creada.entidadId, evaluacionId);
+  const [registrada] = (await consultar({ tipoEvento: 'RESULTADO_EVALUACION_REGISTRADO' }))
+    .registros;
+  const [modificada] = (await consultar({ tipoEvento: 'RESULTADO_EVALUACION_MODIFICADO' }))
+    .registros;
+  assert.equal(modificada.usuario, 'docente-auditoria@prueba.local');
+  assert.equal(modificada.entidad, 'ResultadoEvaluacion');
+  assert.equal(modificada.entidadId, registrada.entidadId);
   assert.ok(modificada.fechaHora && modificada.requestId);
-  assert.equal(modificada.detalle.valorAnterior.competencias[0].nivelLogro, 'B');
-  assert.equal(modificada.detalle.valorNuevo.competencias[0].nivelLogro, 'A');
-  // El filtro "Éxito" incluye los registros de notas, que se guardan como EXITOSO.
-  const exitosas = await consultar({ resultado: 'EXITO', tipoEvento: 'CALIFICACION_MODIFICADA' });
+  assert.equal(modificada.detalle.valorAnterior.nota, 12);
+  assert.equal(modificada.detalle.valorNuevo.nota, 15);
+  assert.equal(modificada.detalle.contexto.logroAnterior.nivelLogro, 'B');
+  assert.equal(modificada.detalle.contexto.logroNuevo.nivelLogro, 'A');
+  const exitosas = await consultar({
+    resultado: 'EXITO',
+    tipoEvento: 'RESULTADO_EVALUACION_MODIFICADO',
+  });
   assert.equal(exitosas.total, 1);
 });
 

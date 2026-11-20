@@ -111,7 +111,7 @@ export default function RevisionPlanes() {
       <div className="page-heading">
         <h1>Planes de trabajo</h1>
         <p className="muted">
-          Revisa las actividades realizadas por los docentes. Valida u observa cada una.
+          Revisa las actividades que los docentes publicaron. Valida u observa cada una.
         </p>
       </div>
       {cargando && <Loading>Cargando…</Loading>}

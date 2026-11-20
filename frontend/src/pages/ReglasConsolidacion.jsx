@@ -7,10 +7,12 @@ import { api } from '../api/client';
 import PublicacionLibretas from '../components/PublicacionLibretas';
 import PestanasGestion from '../components/PestanasGestion';
 import Calificaciones from './Calificaciones';
+import EscalaCalificacion from '../components/EscalaCalificacion';
 
+// La regla consolida la letra anual a partir de las letras de los bimestres.
 const ruleMethods = [
-  ['frecuencia', 'Nivel más frecuente', 'El nivel que aparece más veces.'],
-  ['reciente', 'Última evidencia', 'El nivel de la evidencia más reciente.'],
+  ['frecuencia', 'Nivel más frecuente', 'La letra que más se repite en los bimestres.'],
+  ['reciente', 'Último bimestre', 'La letra del bimestre más reciente.'],
   ['prioridad', 'Prioridad cualitativa', 'Prioriza AD, A, B y C en ese orden.'],
 ];
 const tieBreakers = [
@@ -25,7 +27,7 @@ const parseMethod = (value) => {
   } catch {
     // Compatibilidad con reglas creadas antes de esta configuración.
   }
-  return { estrategia: value, desempate: 'reciente', minimoEvidencias: 3 };
+  return { estrategia: value, desempate: 'reciente', minimoNotas: 1 };
 };
 
 function CompetenciesSection({ catalog }) {
@@ -274,7 +276,7 @@ function AdminRules() {
     cursoId: '',
     gradoId: '',
     estrategia: 'frecuencia',
-    minimoEvidencias: 3,
+    minimoNotas: 2,
     desempate: 'reciente',
   });
   const [saving, setSaving] = useState(false);
@@ -289,7 +291,7 @@ function AdminRules() {
           cursoId: String(editingRule.cursoId),
           gradoId: String(editingRule.gradoId),
           estrategia: method.estrategia,
-          minimoEvidencias: method.minimoEvidencias ?? 3,
+          minimoNotas: method.minimoNotas ?? 1,
           desempate: method.desempate ?? 'reciente',
         };
       })()
@@ -339,7 +341,7 @@ function AdminRules() {
       const metodo = JSON.stringify({
         estrategia: formValues.estrategia,
         ...(formValues.estrategia === 'frecuencia' && { desempate: formValues.desempate }),
-        minimoEvidencias: Number(formValues.minimoEvidencias),
+        minimoNotas: Number(formValues.minimoNotas),
       });
       if (editingRule) {
         await api(`/reglas-consolidacion/${editingRule.id}/version`, {
@@ -429,7 +431,7 @@ function AdminRules() {
               <fieldset className="rule-options form-wide">
                 <legend>Método de consolidación</legend>
                 <p className="muted">
-                  Selecciona una estrategia y conserva el mínimo de evidencias.
+                  Selecciona la estrategia de la letra anual y el mínimo de notas por bimestre.
                 </p>
                 <div className="rule-choice-grid">
                   {ruleMethods.map(([id, title, description]) => (
@@ -449,15 +451,18 @@ function AdminRules() {
                 </div>
               </fieldset>
               <label className="field">
-                <span>Mínimo de evidencias *</span>
+                <span>Mínimo de notas por competencia *</span>
                 <input
                   type="number"
                   min="1"
                   max="50"
                   required
-                  value={formValues.minimoEvidencias}
-                  onChange={(event) => update('minimoEvidencias', event.target.value)}
+                  value={formValues.minimoNotas}
+                  onChange={(event) => update('minimoNotas', event.target.value)}
                 />
+                <span className="caption">
+                  Notas que deben contar por alumno en cada bimestre para publicar la libreta.
+                </span>
               </label>
               {formValues.estrategia === 'frecuencia' && (
                 <label className="field">
@@ -477,8 +482,9 @@ function AdminRules() {
               <div className="preview-card form-wide">
                 <strong>Vista previa de aplicación</strong>
                 <span className="muted">
-                  Se consolidará cuando existan al menos {formValues.minimoEvidencias || 1}{' '}
-                  evidencias válidas.
+                  La letra anual se consolida desde las letras de los cuatro bimestres. Cada
+                  bimestre se publica con al menos {formValues.minimoNotas || 1} notas por
+                  competencia.
                 </span>
                 <div className="preview-evidence">
                   <span className="achievement achievement-a">A</span>
@@ -512,10 +518,14 @@ function AdminRules() {
           <PestanasGestion actual="#/gestion" />
           <PublicacionLibretas />
           <CompetenciesSection catalog={catalog} />
+          <EscalaCalificacion />
           <div className="rule-heading page-heading">
             <div>
               <h1>Reglas de consolidación por competencia</h1>
-              <p className="muted">Define cómo se consolidan las calificaciones de un periodo.</p>
+              <p className="muted">
+                Define cómo se consolida la letra anual de cada curso y cuántas notas pide para
+                publicar un bimestre. La letra del bimestre la calcula la escala.
+              </p>
             </div>
             <button
               onClick={() => {
@@ -586,7 +596,7 @@ function AdminRules() {
                   <th>Regla</th>
                   <th>Aplicación</th>
                   <th>Método</th>
-                  <th>Evidencias</th>
+                  <th>Mínimo de notas</th>
                   <th>Estado</th>
                   <th>Acciones</th>
                 </tr>
@@ -606,7 +616,7 @@ function AdminRules() {
                       <td>
                         {ruleMethods.find(([id]) => id === method.estrategia)?.[1] || rule.metodo}
                       </td>
-                      <td>{method.minimoEvidencias || 3}</td>
+                      <td>{method.minimoNotas || 1}</td>
                       <td>
                         <span className={rule.activo ? 'status-active' : 'status-inactive'}>
                           {rule.activo ? 'Activa' : 'Inactiva'}

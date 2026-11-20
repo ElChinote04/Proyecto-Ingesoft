@@ -28,8 +28,8 @@ function ActividadesDelCurso({ matriculaId, cursoId, bimestre }) {
   return (
     <>
       {!total && (
-        <Feedback intent="info" title="Sin actividades realizadas">
-          Todavía no hay actividades realizadas de este curso en el bimestre.
+        <Feedback intent="info" title="Sin actividades publicadas">
+          El docente todavía no publicó actividades de este curso en el bimestre.
         </Feedback>
       )}
       <PlanSemanal semanas={semanas} onAbrir={(actividad) => setAbierta(actividad.id)} />

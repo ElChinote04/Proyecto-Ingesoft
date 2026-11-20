@@ -1,5 +1,12 @@
 import { etiquetaTipo, fechaCorta } from '../utils/planTrabajo';
 
+// La familia recibe solo lo publicado y sin este dato: sus tarjetas no llevan etiqueta.
+const PUBLICACION = {
+  SUBIDA: () => ['Oculta', 'neutral'],
+  PROGRAMADA: (actividad) => [`Programada · ${fechaCorta(actividad.publicadaDesde)}`, 'info'],
+  PUBLICADA: () => ['Publicada', 'success'],
+};
+
 const REVISION = {
   OBSERVADA: ['Observada', 'warning'],
   VALIDADA: ['Validada', 'success'],
@@ -7,6 +14,7 @@ const REVISION = {
 
 function TarjetaActividad({ actividad, onAbrir }) {
   const revision = REVISION[actividad.estadoRevision];
+  const publicacion = PUBLICACION[actividad.estadoPublicacion]?.(actividad);
   return (
     <button
       type="button"
@@ -16,11 +24,7 @@ function TarjetaActividad({ actividad, onAbrir }) {
     >
       <span className="actividad-etiquetas">
         <span className="badge neutral">{etiquetaTipo(actividad.tipo)}</span>
-        {actividad.estado === 'REALIZADA' ? (
-          <span className="badge info">Realizada</span>
-        ) : actividad.estado === 'PLANIFICADA' ? (
-          <span className="badge neutral">Planificada</span>
-        ) : null}
+        {publicacion && <span className={`badge ${publicacion[1]}`}>{publicacion[0]}</span>}
         {revision && <span className={`badge ${revision[1]}`}>{revision[0]}</span>}
       </span>
       <strong className="actividad-titulo">{actividad.titulo}</strong>

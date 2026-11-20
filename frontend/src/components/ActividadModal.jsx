@@ -5,7 +5,7 @@ import { formatearTamano, validarArchivos } from '../utils/archivosAdjuntos';
 import ConfirmarAccion from './ConfirmarAccion';
 import { Feedback, Loading, ResourceError } from './Feedback';
 import { useResource } from '../hooks/useResource';
-import { MAX_ENLACES, TIPOS_ACTIVIDAD, etiquetaTipo } from '../utils/planTrabajo';
+import { MAX_ENLACES, TIPOS_ACTIVIDAD, etiquetaTipo, hoyEnLima } from '../utils/planTrabajo';
 import { formatDate } from '../utils/format';
 
 const ruta = (id) => `/evidencias-pedagogicas/${id}`;
@@ -46,6 +46,19 @@ function ErrorServidor({ fallo }) {
   );
 }
 
+// Cómo quedó la actividad para los alumnos, traducido a la opción del formulario.
+const OPCION_DE_ESTADO = { SUBIDA: 'OCULTA', PROGRAMADA: 'PROGRAMADA', PUBLICADA: 'AHORA' };
+
+function EtiquetaPublicacion({ actividad }) {
+  if (actividad.estadoPublicacion === 'PROGRAMADA')
+    return <span className="badge info">Se publica el {formatDate(actividad.publicadaDesde)}</span>;
+  if (actividad.publicadaDesde)
+    return (
+      <span className="badge success">Publicada el {formatDate(actividad.publicadaDesde)}</span>
+    );
+  return <span className="badge neutral">Oculta para los alumnos</span>;
+}
+
 function FormularioActividad({ actividad, plan, semanaInicial, onGuardada, onCambio }) {
   const [numeroSemana, setNumeroSemana] = useState(actividad?.numeroSemana ?? semanaInicial ?? 1);
   const [tipo, setTipo] = useState(actividad?.tipo ?? 'EXPOSICION');
@@ -53,13 +66,25 @@ function FormularioActividad({ actividad, plan, semanaInicial, onGuardada, onCam
   const [descripcion, setDescripcion] = useState(actividad?.descripcion ?? '');
   const [enlaces, setEnlaces] = useState((actividad?.enlaces ?? []).join('\n'));
   const [archivos, setArchivos] = useState([]);
-  const [realizada, setRealizada] = useState(false);
+  const opcionInicial = OPCION_DE_ESTADO[actividad?.estadoPublicacion] ?? 'OCULTA';
+  const [publicacion, setPublicacion] = useState(opcionInicial);
+  const [fechaPublicacion, setFechaPublicacion] = useState(
+    actividad?.estadoPublicacion === 'PROGRAMADA' ? actividad.publicadaDesde : '',
+  );
   const [errores, setErrores] = useState({});
   const [fallo, setFallo] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const selector = useRef(null);
   const yaAdjuntos = actividad?.archivos.length ?? 0;
-  const yaRealizada = actividad?.estado === 'REALIZADA';
+  const hoy = hoyEnLima();
+  // Al programar se propone el inicio de la semana elegida (o hoy, si ya empezó).
+  const fechaSugerida = () => {
+    const desde = plan.semanas?.[numeroSemana - 1]?.desde;
+    return desde && desde > hoy ? desde : hoy;
+  };
+  const cambiaPublicacion =
+    publicacion !== opcionInicial ||
+    (publicacion === 'PROGRAMADA' && fechaPublicacion !== actividad?.publicadaDesde);
   const cambiar = (setter) => (evento) => {
     setter(evento.target.value);
     onCambio();
@@ -70,6 +95,10 @@ function FormularioActividad({ actividad, plan, semanaInicial, onGuardada, onCam
       titulo: validarTitulo(titulo),
       enlaces: validarEnlaces(leerEnlaces(enlaces)),
       archivos: validarArchivos(archivos, yaAdjuntos, 'actividad'),
+      publicacion:
+        publicacion === 'PROGRAMADA' && (!fechaPublicacion || fechaPublicacion < hoy)
+          ? 'Elige una fecha de publicación desde hoy.'
+          : '',
     };
     setErrores(encontrados);
     return !Object.values(encontrados).some(Boolean);
@@ -86,9 +115,10 @@ function FormularioActividad({ actividad, plan, semanaInicial, onGuardada, onCam
     datos.set('titulo', titulo.trim());
     datos.set('descripcion', descripcion.trim());
     datos.set('enlaces', JSON.stringify(leerEnlaces(enlaces)));
-    if (realizada) {
-      if (actividad) datos.set('estado', 'REALIZADA');
-      else datos.set('realizada', 'true');
+    // Al editar, la publicación solo se envía si cambió: así no se reinicia su fecha.
+    if (!actividad || cambiaPublicacion) {
+      datos.set('publicacion', publicacion);
+      if (publicacion === 'PROGRAMADA') datos.set('publicadaDesde', fechaPublicacion);
     }
     for (const archivo of archivos) datos.append('archivos', archivo);
     setGuardando(true);
@@ -191,19 +221,58 @@ function FormularioActividad({ actividad, plan, semanaInicial, onGuardada, onCam
           onCambio();
         }}
       />
-      {!yaRealizada && (
-        <label className="checkbox-field">
-          <input
-            type="checkbox"
-            checked={realizada}
-            onChange={(evento) => {
-              setRealizada(evento.target.checked);
-              onCambio();
-            }}
-          />
-          {actividad ? 'Marcar como realizada (hoy)' : 'Ya se realizó (hoy)'}
-        </label>
-      )}
+      <fieldset className="actividad-publicacion">
+        <legend>Visibilidad para los alumnos</legend>
+        <span className="caption">
+          Los alumnos solo ven las actividades publicadas. Puedes subirla con anticipación y
+          publicarla después, o programarla para que aparezca sola.
+        </span>
+        {[
+          ['OCULTA', 'Oculta: solo tú la ves'],
+          [
+            'AHORA',
+            opcionInicial === 'AHORA'
+              ? `Publicada desde el ${formatDate(actividad.publicadaDesde)}`
+              : 'Publicar ahora',
+          ],
+          ['PROGRAMADA', 'Programar la publicación'],
+        ].map(([valor, etiqueta]) => (
+          <label key={valor} className="checkbox-field">
+            <input
+              type="radio"
+              name="publicacion"
+              value={valor}
+              checked={publicacion === valor}
+              onChange={() => {
+                setPublicacion(valor);
+                if (valor === 'PROGRAMADA' && !fechaPublicacion)
+                  setFechaPublicacion(fechaSugerida());
+                setErrores((actual) => ({ ...actual, publicacion: '' }));
+                onCambio();
+              }}
+            />
+            {etiqueta}
+          </label>
+        ))}
+        {publicacion === 'PROGRAMADA' && (
+          <label className="field">
+            <span>Se publica el</span>
+            <input
+              type="date"
+              value={fechaPublicacion}
+              min={hoy}
+              max={plan.bimestre.fechaFin}
+              aria-invalid={Boolean(errores.publicacion)}
+              onChange={(evento) => {
+                setFechaPublicacion(evento.target.value);
+                setErrores((actual) => ({ ...actual, publicacion: '' }));
+                onCambio();
+              }}
+            />
+          </label>
+        )}
+        <CampoError id="actividad-publicacion-error">{errores.publicacion}</CampoError>
+      </fieldset>
       {guardando && archivos.length > 0 && <progress aria-label="Subiendo archivos" />}
       <div className="actions">
         <button type="submit" disabled={guardando}>
@@ -220,10 +289,10 @@ function DetalleActividad({ actividad, modo, editable, onQuitar, onError }) {
       <p className="actividad-etiquetas">
         <span className="badge neutral">{etiquetaTipo(actividad.tipo)}</span>
         <span className="badge neutral">Semana {actividad.numeroSemana}</span>
-        {actividad.fechaRealizacion ? (
-          <span className="badge info">Realizada el {formatDate(actividad.fechaRealizacion)}</span>
+        {modo === 'familia' ? (
+          <span className="badge neutral">Publicada el {formatDate(actividad.publicadaDesde)}</span>
         ) : (
-          <span className="badge neutral">Planificada</span>
+          <EtiquetaPublicacion actividad={actividad} />
         )}
       </p>
       {modo !== 'familia' && actividad.estadoRevision === 'OBSERVADA' && (
@@ -450,7 +519,7 @@ export default function ActividadModal({
           onGuardada={(mensaje) => onCambio({ cerrar: true, aviso: mensaje })}
         />
       )}
-      {modo === 'admin' && actividad?.estado === 'REALIZADA' && (
+      {modo === 'admin' && actividad?.estadoPublicacion === 'PUBLICADA' && (
         <FormularioRevision
           actividad={actividad}
           onRevisada={(mensaje) => onCambio({ cerrar: true, aviso: mensaje })}

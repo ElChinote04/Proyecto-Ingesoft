@@ -5,6 +5,7 @@ import request from 'supertest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
+import { crearCalificador, fecharBimestres } from './support/notas.js';
 
 const base = '/api/v1';
 const clave = 'ClaveSegura123!';
@@ -64,6 +65,7 @@ async function crearAlumno(codigo, seccionId) {
     apellidos: 'Secreto',
   });
   const matricula = await alta('admin/matriculas', { estudianteId: alumno.id, seccionId });
+  seccionDe.set(matricula.id, seccionId);
   return { ...alumno, matricula };
 }
 
@@ -91,10 +93,18 @@ const publicar = (seccion, agente = admin) =>
 const publicarVarias = (seccionIds, agente = admin) =>
   agente.post(`${base}/calificaciones/bimestres/${bimestre.id}/publicacion`).send({ seccionIds });
 
-const calificar = (matriculaId, calificaciones) =>
-  docente
-    .put(`${base}/matriculas/${matriculaId}/calificaciones`)
-    .send({ bimestreId: bimestre.id, calificaciones });
+// Las notas se registran como el docente: una evaluación por competencia y el examen de cada
+// alumno. La letra la calcula el servidor (15 → A, 12 → B con la escala por defecto).
+const notas = crearCalificador(docente);
+const seccionDe = new Map();
+const calificar = (matriculaId, competenciaId, nota, periodo = bimestre) =>
+  notas.calificar(matriculaId, {
+    seccionId: seccionDe.get(matriculaId),
+    cursoId: matematica.id,
+    competenciaId,
+    bimestre: periodo,
+    nota,
+  });
 const notasDe = async (matriculaId) =>
   (
     await docente
@@ -108,25 +118,11 @@ const logrosPublicados = async (agente, alumno) => {
     .flatMap(({ logros }) => Object.values(logros))
     .filter(Boolean);
 };
-const registrarEvidencia = async (notaId) =>
-  (
-    await docente
-      .post(`${base}/calificaciones-competencias/${notaId}/evidencias`)
-      .field('titulo', 'Evidencia')
-      .field('descripcion', 'Sustento de la nota')
-      .expect(201)
-  ).body.data;
 
-async function completar(matriculaId) {
-  await calificar(matriculaId, [
-    { competenciaId: competencia.id, nivelLogro: 'A' },
-    { competenciaId: competencia2.id, nivelLogro: 'B' },
-  ]).expect(200);
-  const evidencias = [];
-  for (const { calificacionCompetenciaId } of await notasDe(matriculaId))
-    evidencias.push(await registrarEvidencia(calificacionCompetenciaId));
-  return evidencias;
-}
+const completar = async (matriculaId) => [
+  await calificar(matriculaId, competencia.id, 15),
+  await calificar(matriculaId, competencia2.id, 12),
+];
 
 let seccionA, seccionB, seccionC, seccionD, seccionE, seccionF, seccionG, seccionVacia;
 let seccionOtroAnio, seccionSinRegla, alumnoA, alumnoA2, alumnoB, alumnoC, alumnoD;
@@ -211,12 +207,7 @@ before(async () => {
   await vincular(cuentaApoderado.apoderadoId, alumnoA.id);
   await vincular(cuentaApoderadoOtro.apoderadoId, alumnoB.id);
 
-  bimestre = await prisma.bimestreAcademico.findFirst({
-    where: { anioAcademicoId: anio.id, numero: 1 },
-  });
-  bimestre2 = await prisma.bimestreAcademico.findFirst({
-    where: { anioAcademicoId: anio.id, numero: 2 },
-  });
+  [bimestre, bimestre2] = await fecharBimestres(anio.id);
 });
 after(() => prisma.$disconnect());
 
@@ -238,19 +229,20 @@ test('PUB-02 con pendientes no publica ni deja rastro', async () => {
 });
 
 test('PUB-03 el estado separa pendientes, pagina y no expone alumnos', async () => {
-  await calificar(alumnoA.matricula.id, [
-    { competenciaId: competencia.id, nivelLogro: 'A' },
-    { competenciaId: competencia2.id, nivelLogro: 'B' },
-  ]).expect(200);
+  await completar(alumnoA.matricula.id);
   const fila = await filaDe(seccionA);
   assert.equal(fila.estado, 'CON_PENDIENTES');
   assert.equal(fila.nombre, 'Quinto A');
+  // El segundo alumno no tiene resultado en ninguna de las dos evaluaciones.
   assert.deepEqual(fila.pendientes, [
     {
       curso: 'Matemática',
       docente: 'docente lib Libreta',
-      sinNota: 2,
-      sinEvidencia: 2,
+      sinEvaluaciones: 0,
+      resultadosPendientes: 2,
+      sinLetra: 0,
+      bajoMinimo: 0,
+      minimoNotas: 1,
       sinRegla: false,
     },
   ]);
@@ -272,12 +264,14 @@ test('PUB-03 el estado separa pendientes, pagina y no expone alumnos', async () 
   assert.equal(vacia.body.error.code, 'GRADES_NOT_FOUND');
 });
 
-test('PUB-04 una evidencia inactiva no cuenta como completa', async () => {
-  const [primera] = await notasDe(alumnoA.matricula.id);
-  const evidencia = await registrarEvidencia(primera.calificacionCompetenciaId);
-  assert.equal((await filaDe(seccionA)).totalCompleto, 1);
-  await docente.delete(`${base}/evidencias-calificaciones/${evidencia.id}`).expect(200);
-  assert.equal((await filaDe(seccionA)).totalCompleto, 0);
+test('PUB-04 un resultado dado de baja vuelve a quedar pendiente', async () => {
+  const evaluacionId = await calificar(alumnoA2.matricula.id, competencia.id, 14);
+  assert.equal((await filaDe(seccionA)).pendientes[0].resultadosPendientes, 1);
+  await docente
+    .delete(`${base}/evaluaciones/${evaluacionId}/resultados/${alumnoA2.matricula.id}`)
+    .expect(204);
+  assert.equal((await filaDe(seccionA)).pendientes[0].resultadosPendientes, 2);
+  assert.equal((await filaDe(seccionA)).totalCompleto, 2);
 });
 
 test('PUB-05 no se exige una matrícula ni una competencia inactiva', async () => {
@@ -294,8 +288,7 @@ test('PUB-05 no se exige una matrícula ni una competencia inactiva', async () =
 
 test('PUB-06 una sección completa se publica una sola vez y su libreta se ve', async () => {
   assert.equal((await logrosPublicados(apoderado, alumnoA)).length, 0);
-  for (const { calificacionCompetenciaId } of await notasDe(alumnoA.matricula.id))
-    await registrarEvidencia(calificacionCompetenciaId);
+  // Con el segundo alumno dado de baja (PUB-05), al primero no le falta nada.
   assert.equal((await filaDe(seccionA)).estado, 'LISTA');
 
   const { body } = await publicar(seccionA).expect(201);
@@ -304,7 +297,13 @@ test('PUB-06 una sección completa se publica una sola vez y su libreta se ve', 
   assert.equal(fila.estado, 'PUBLICADA');
   assert.ok(fila.publicadoEn);
 
-  assert.equal((await logrosPublicados(apoderado, alumnoA)).length, 2);
+  assert.deepEqual((await logrosPublicados(apoderado, alumnoA)).sort(), ['A', 'B']);
+  // La regla vigente queda fija en las notas publicadas.
+  const regla = await prisma.reglaConsolidacion.findFirst({ where: { gradoId: grado.id } });
+  const fijadas = await prisma.calificacion.findMany({
+    where: { matriculaId: alumnoA.matricula.id, bimestreId: bimestre.id },
+  });
+  assert.ok(fijadas.length && fijadas.every(({ reglaId }) => reglaId === regla.id));
 
   const repetida = await publicar(seccionA).expect(200);
   assert.equal(repetida.body.data.yaPublicado, true);
@@ -325,9 +324,7 @@ test('PUB-07 una sección con pendientes no impide publicar otra', async () => {
 });
 
 test('PUB-08 otra sección no ve notas hasta publicarse la suya', async () => {
-  await calificar(alumnoB.matricula.id, [
-    { competenciaId: competencia.id, nivelLogro: 'C' },
-  ]).expect(200);
+  await calificar(alumnoB.matricula.id, competencia.id, 8);
   assert.equal((await logrosPublicados(apoderadoOtro, alumnoB)).length, 0);
 });
 
@@ -337,51 +334,30 @@ test('PUB-09 una sección de otro año no se publica', async () => {
   await publicar({ id: 999999 }).expect(404);
 });
 
-test('PUB-10 antes de publicar el docente cambia nota y evidencia cuantas veces quiera', async () => {
+test('PUB-10 antes de publicar el docente cambia la nota cuantas veces quiera', async () => {
   const matriculaId = alumnoB.matricula.id;
-  for (const nivelLogro of ['A', 'B', 'AD'])
-    await calificar(matriculaId, [{ competenciaId: competencia.id, nivelLogro }]).expect(200);
+  for (const nota of [15, 12, 19]) await calificar(matriculaId, competencia.id, nota);
   const [nota] = await notasDe(matriculaId);
   assert.equal(nota.nivelLogro, 'AD');
-  const evidencia = await registrarEvidencia(nota.calificacionCompetenciaId);
-  for (const titulo of ['Uno', 'Dos'])
-    await docente
-      .patch(`${base}/evidencias-calificaciones/${evidencia.id}`)
-      .send({ titulo })
-      .expect(200);
+  assert.equal(nota.promedio, 19);
 });
 
-test('PUB-11 con la sección publicada las rutas de docente no cambian notas', async () => {
+test('PUB-11 con la sección publicada no se cambia ninguna nota', async () => {
   const matriculaId = alumnoA.matricula.id;
-  const [nota] = await notasDe(matriculaId);
-  const detalle = await prisma.calificacionCompetencia.findUnique({
-    where: { id: nota.calificacionCompetenciaId },
-    include: { calificacion: true },
-  });
-  const { calificacion } = detalle;
+  const [antes] = await notasDe(matriculaId);
+  const [evaluacion] = antes.evaluaciones;
   const intentos = [
-    () => calificar(matriculaId, [{ competenciaId: competencia.id, nivelLogro: 'C' }]),
-    () =>
-      docente.post(`${base}/calificaciones`).send({
-        matriculaId,
-        bimestreId: bimestre.id,
-        asignacionId: calificacion.asignacionId,
-        reglaId: calificacion.reglaId,
-        competencias: [{ competenciaId: competencia.id, nivelLogro: 'C' }],
-      }),
-    () =>
-      docente.post(`${base}/calificaciones-competencias`).send({
-        calificacionId: calificacion.id,
-        competenciaId: competencia.id,
-        nivelLogro: 'C',
-      }),
+    () => notas.registrar(evaluacion.id, matriculaId, { nota: 8 }),
+    () => docente.delete(`${base}/evaluaciones/${evaluacion.id}/resultados/${matriculaId}`),
+    () => docente.patch(`${base}/evaluaciones/${evaluacion.id}`).send({ peso: 3 }),
+    () => docente.delete(`${base}/evaluaciones/${evaluacion.id}`),
   ];
   for (const intento of intentos) {
     const { body } = await intento().expect(409);
     assert.equal(body.error.code, 'TERM_PUBLISHED');
   }
   const [despues] = await notasDe(matriculaId);
-  assert.equal(despues.nivelLogro, nota.nivelLogro);
+  assert.equal(despues.nivelLogro, antes.nivelLogro);
   const ficha = await docente
     .get(`${base}/matriculas/${matriculaId}/calificaciones?bimestreId=${bimestre.id}`)
     .expect(200);
@@ -389,103 +365,72 @@ test('PUB-11 con la sección publicada las rutas de docente no cambian notas', a
 });
 
 test('PUB-12 el bloqueo es por bimestre y sección', async () => {
-  await calificar(alumnoB.matricula.id, [
-    { competenciaId: competencia.id, nivelLogro: 'B' },
-  ]).expect(200);
-  await docente
-    .put(`${base}/matriculas/${alumnoA.matricula.id}/calificaciones`)
-    .send({
-      bimestreId: bimestre2.id,
-      calificaciones: [{ competenciaId: competencia.id, nivelLogro: 'B' }],
-    })
-    .expect(200);
+  await calificar(alumnoB.matricula.id, competencia.id, 12);
+  await calificar(alumnoA.matricula.id, competencia.id, 12, bimestre2);
 });
 
-test('PUB-13 tras publicar el administrador necesita motivo', async () => {
-  const [nota] = await notasDe(alumnoA.matricula.id);
-  const detalle = `${base}/calificaciones-competencias/${nota.calificacionCompetenciaId}`;
-  const { calificacionId } = await prisma.calificacionCompetencia.findUnique({
-    where: { id: nota.calificacionCompetenciaId },
+const notaGuardada = (matriculaId, competenciaId) =>
+  prisma.calificacionCompetencia.findFirst({
+    where: { competenciaId, calificacion: { matriculaId, bimestreId: bimestre.id } },
   });
-  const calificacion = `${base}/calificaciones/${calificacionId}`;
-  const cambio = { competencias: [{ competenciaId: competencia.id, nivelLogro: 'C' }] };
-  const intentos = [
-    () => admin.put(detalle).send({ nivelLogro: 'C' }),
-    () => admin.delete(detalle),
-    () => admin.put(calificacion).send(cambio),
-    () => admin.delete(calificacion),
-  ];
-  for (const intento of intentos) {
-    const { body } = await intento().expect(400);
+
+test('PUB-13 tras publicar, dar de baja una nota exige motivo', async () => {
+  const nota = await notaGuardada(alumnoA.matricula.id, competencia.id);
+  for (const ruta of [
+    `${base}/calificaciones-competencias/${nota.id}`,
+    `${base}/calificaciones/${nota.calificacionId}`,
+  ]) {
+    const { body } = await admin.delete(ruta).expect(400);
     assert.equal(body.error.code, 'CORRECTION_REASON_REQUIRED');
   }
-  await admin.put(detalle).send({ nivelLogro: 'C', motivo: 'no' }).expect(400);
+  await admin
+    .delete(`${base}/calificaciones-competencias/${nota.id}`)
+    .send({ motivo: 'no' })
+    .expect(400);
 });
 
-test('PUB-14 con motivo la corrección se aplica y queda en la auditoría', async () => {
-  const [nota, nota2] = await notasDe(alumnoA.matricula.id);
-  const id = nota.calificacionCompetenciaId;
+test('PUB-14 con motivo la baja se aplica y queda en la auditoría', async () => {
+  const nota = await notaGuardada(alumnoA.matricula.id, competencia2.id);
   const motivo = 'Error de digitación';
-  await admin
-    .put(`${base}/calificaciones-competencias/${id}`)
-    .send({ nivelLogro: 'AD', motivo })
-    .expect(200);
-  const corregida = await prisma.calificacionCompetencia.findUnique({ where: { id } });
-  assert.equal(corregida.nivelLogro, 'AD');
-  const [evento] = await prisma.registroAuditoria.findMany({
-    where: { tipoEvento: 'CALIFICACION_COMPETENCIA_MODIFICADA', entidadId: id },
-  });
-  assert.equal(evento.detalle.motivo, motivo);
-
-  await admin
-    .put(`${base}/calificaciones/${corregida.calificacionId}`)
-    .send({ competencias: [{ competenciaId: competencia.id, nivelLogro: 'A' }], motivo })
-    .expect(200);
-  await admin
-    .delete(`${base}/calificaciones-competencias/${nota2.calificacionCompetenciaId}`)
-    .send({ motivo })
-    .expect(200);
+  await admin.delete(`${base}/calificaciones-competencias/${nota.id}`).send({ motivo }).expect(200);
   const [baja] = await prisma.registroAuditoria.findMany({
-    where: {
-      tipoEvento: 'CALIFICACION_COMPETENCIA_DESACTIVADA',
-      entidadId: nota2.calificacionCompetenciaId,
-    },
+    where: { tipoEvento: 'CALIFICACION_COMPETENCIA_DESACTIVADA', entidadId: nota.id },
   });
   assert.equal(baja.detalle.motivo, motivo);
 });
 
-test('PUB-15 antes de publicar el administrador corrige sin motivo', async () => {
-  const [nota] = await notasDe(alumnoB.matricula.id);
+test('PUB-15 la letra ya no se corrige a mano, ni antes ni después de publicar', async () => {
+  const nota = await notaGuardada(alumnoB.matricula.id, competencia.id);
   await admin
-    .put(`${base}/calificaciones-competencias/${nota.calificacionCompetenciaId}`)
+    .put(`${base}/calificaciones-competencias/${nota.id}`)
     .send({ nivelLogro: 'A' })
-    .expect(200);
+    .expect(404);
+  await admin.put(`${base}/calificaciones/${nota.calificacionId}`).send({}).expect(404);
 });
 
-test('PUB-16 publicar y dar de baja a la vez nunca deja una sección incompleta', async () => {
-  let evidencias = await completar(alumnoC.matricula.id);
+test('PUB-16 publicar y quitar una nota a la vez nunca deja una sección incompleta', async () => {
+  const matriculaId = alumnoC.matricula.id;
+  const [evaluacionId] = await completar(matriculaId);
+  const resultado = () =>
+    prisma.resultadoEvaluacion.findFirst({ where: { evaluacionId, matriculaId, activo: true } });
   for (let intento = 0; intento < 8; intento += 1) {
     const [publicacion, baja] = await Promise.all([
       publicar(seccionC),
-      docente.delete(`${base}/evidencias-calificaciones/${evidencias[0].id}`),
+      docente.delete(`${base}/evaluaciones/${evaluacionId}/resultados/${matriculaId}`),
     ]);
     const publicada = await prisma.publicacionSeccion.count({
       where: { bimestreId: bimestre.id, seccionId: seccionC.id },
     });
-    const activa = await prisma.evidenciaCalificacion.findUnique({
-      where: { id: evidencias[0].id },
-    });
     if (publicada) {
       assert.equal(publicacion.status, 201);
       assert.equal(baja.status, 409);
-      assert.equal(activa.activo, true);
+      assert.ok(await resultado());
       return;
     }
     assert.equal(publicacion.status, 409);
-    assert.equal(baja.status, 200);
-    assert.equal(activa.activo, false);
-    const [nota] = await notasDe(alumnoC.matricula.id);
-    evidencias = [await registrarEvidencia(nota.calificacionCompetenciaId)];
+    assert.equal(baja.status, 204);
+    assert.equal(await resultado(), null);
+    await calificar(matriculaId, competencia.id, 15);
   }
 });
 

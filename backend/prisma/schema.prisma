@@ -9,9 +9,11 @@ enum NivelLogro {
   C
 }
 
-enum EstadoEvaluacion {
-  BORRADOR
-  REGISTRADA
+// Cómo queda un alumno en una evaluación. Sin resultado, la evaluación está pendiente para él.
+enum CondicionResultado {
+  CALIFICADA
+  NO_RINDIO
+  JUSTIFICADA
 }
 
 enum TipoActividadPedagogica {
@@ -20,11 +22,6 @@ enum TipoActividadPedagogica {
   VIDEO
   AVANCE_PLAN
   OTRO
-}
-
-enum EstadoActividadPedagogica {
-  PLANIFICADA
-  REALIZADA
 }
 
 enum EstadoRevisionEvidencia {
@@ -78,8 +75,9 @@ model Calificacion {
   bimestre        BimestreAcademico         @relation(fields: [bimestreId], references: [id])
   asignacionId    Int
   asignacion      CursoSeccionDocente       @relation(fields: [asignacionId], references: [id])
-  reglaId         Int
-  regla           ReglaConsolidacion        @relation(fields: [reglaId], references: [id])
+  // Se fija al publicar: la regla solo consolida la letra anual y no se exige para calificar.
+  reglaId         Int?
+  regla           ReglaConsolidacion?       @relation(fields: [reglaId], references: [id], onDelete: Restrict)
   activo          Boolean                   @default(true)
   creadoPorId     Int
   modificadoPorId Int
@@ -91,53 +89,23 @@ model Calificacion {
 }
 
 model CalificacionCompetencia {
-  id                    Int                     @id @default(autoincrement())
+  id                    Int          @id @default(autoincrement())
   calificacionId        Int
-  calificacion          Calificacion            @relation(fields: [calificacionId], references: [id])
+  calificacion          Calificacion @relation(fields: [calificacionId], references: [id])
   competenciaId         Int
-  competencia           Competencia             @relation(fields: [competenciaId], references: [id])
-  nivelLogro            NivelLogro
+  competencia           Competencia  @relation(fields: [competenciaId], references: [id])
+  // Calculados desde las evaluaciones del bimestre en la misma transacción que las cambia. Se
+  // guardan, no se derivan, para que una libreta publicada no cambie si cambia la escala.
+  nivelLogro            NivelLogro?
+  promedio              Decimal?     @db.Decimal(4, 2)
   conclusionDescriptiva String?
-  activo                Boolean                 @default(true)
+  activo                Boolean      @default(true)
   creadoPorId           Int
   modificadoPorId       Int
-  creadoEn              DateTime                @default(now())
-  modificadoEn          DateTime                @updatedAt
-  evidencias            EvidenciaCalificacion[]
+  creadoEn              DateTime     @default(now())
+  modificadoEn          DateTime     @updatedAt
 
   @@unique([calificacionId, competenciaId])
-}
-
-model EvidenciaCalificacion {
-  id                        Int                            @id @default(autoincrement())
-  calificacionCompetenciaId Int
-  calificacionCompetencia   CalificacionCompetencia        @relation(fields: [calificacionCompetenciaId], references: [id])
-  titulo                    String
-  descripcion               String?
-  nivelLogroRegistrado      NivelLogro
-  activo                    Boolean                        @default(true)
-  creadoPorId               Int
-  modificadoPorId           Int
-  creadoEn                  DateTime                       @default(now())
-  modificadoEn              DateTime                       @updatedAt
-  archivos                  ArchivoEvidenciaCalificacion[]
-
-  @@index([calificacionCompetenciaId, activo])
-}
-
-model ArchivoEvidenciaCalificacion {
-  id               Int                   @id @default(autoincrement())
-  evidenciaId      Int
-  evidencia        EvidenciaCalificacion @relation(fields: [evidenciaId], references: [id])
-  nombreOriginal   String
-  nombreAlmacenado String                @unique
-  tipoMime         String
-  tamanoBytes      Int
-  activo           Boolean               @default(true)
-  creadoPorId      Int
-  creadoEn         DateTime              @default(now())
-
-  @@index([evidenciaId, activo])
 }
 
 model PublicacionSeccion {
@@ -581,6 +549,9 @@ model PlanAcademico {
 // Actividad del plan de trabajo en una semana del bimestre (exposición, ejercicios, video…).
 // No es una nota ni la sustenta: no tiene alumno ni competencia. El dueño es el docente
 // vigente de la clase del plan; el autor queda en creadoPorId y en la auditoría.
+// La visibilidad para alumnos no se almacena como estado: se deriva de publicadaDesde al
+// consultar (null = subida, futura = programada, hoy o antes = publicada), así una actividad
+// programada se publica sola sin ningún proceso programado.
 model EvidenciaPedagogica {
   id                    Int                          @id @default(autoincrement())
   planId                Int
@@ -589,8 +560,7 @@ model EvidenciaPedagogica {
   tipo                  TipoActividadPedagogica
   titulo                String                       @db.VarChar(200)
   descripcion           String?                      @db.VarChar(2000)
-  estado                EstadoActividadPedagogica    @default(PLANIFICADA)
-  fechaRealizacion      DateTime?                    @db.Date
+  publicadaDesde        DateTime?                    @db.Date
   enlaces               String[]
   estadoRevision        EstadoRevisionEvidencia      @default(PENDIENTE_REVISION)
   observacionesRevision String?                      @db.VarChar(2000)
@@ -640,51 +610,68 @@ model Evaluacion {
   titulo          String
   descripcion     String?
   fecha           DateTime              @db.Date
-  peso            Decimal               @default(1) @db.Decimal(5, 2)
-  estado          EstadoEvaluacion      @default(BORRADOR)
+  peso            Int                   @default(1)
   activo          Boolean               @default(true)
   creadoPorId     Int
   modificadoPorId Int
   creadoEn        DateTime              @default(now())
   modificadoEn    DateTime              @updatedAt
   resultados      ResultadoEvaluacion[]
-  archivos        ArchivoEvaluacion[]
 
   @@index([cursoId, seccionId, bimestreId, activo])
 }
 
 model ResultadoEvaluacion {
-  id              Int        @id @default(autoincrement())
+  id              Int                          @id @default(autoincrement())
   evaluacionId    Int
-  evaluacion      Evaluacion @relation(fields: [evaluacionId], references: [id])
+  evaluacion      Evaluacion                   @relation(fields: [evaluacionId], references: [id])
   matriculaId     Int
-  matricula       Matricula  @relation(fields: [matriculaId], references: [id])
-  nota            Decimal    @db.Decimal(4, 2)
-  comentario      String?    @db.VarChar(500)
-  activo          Boolean    @default(true)
+  matricula       Matricula                    @relation(fields: [matriculaId], references: [id])
+  condicion       CondicionResultado
+  nota            Decimal?                     @db.Decimal(4, 2)
+  motivo          String?                      @db.VarChar(300)
+  comentario      String?                      @db.VarChar(500)
+  activo          Boolean                      @default(true)
   creadoPorId     Int
   modificadoPorId Int
-  creadoEn        DateTime   @default(now())
-  modificadoEn    DateTime   @updatedAt
+  creadoEn        DateTime                     @default(now())
+  modificadoEn    DateTime                     @updatedAt
+  // El examen corregido del alumno: obligatorio con nota, prohibido en las demás condiciones.
+  archivos        ArchivoResultadoEvaluacion[]
 
-  // Un solo resultado activo por alumno y evaluación: índice único parcial en SQL.
+  // Un solo resultado activo por alumno y evaluación: índice único parcial en SQL. Los CHECK
+  // atan la nota y el motivo a la condición.
   @@index([evaluacionId, activo])
   @@index([matriculaId])
 }
 
-model ArchivoEvaluacion {
-  id               Int        @id @default(autoincrement())
-  evaluacionId     Int
-  evaluacion       Evaluacion @relation(fields: [evaluacionId], references: [id])
+model ArchivoResultadoEvaluacion {
+  id               Int                 @id @default(autoincrement())
+  resultadoId      Int
+  resultado        ResultadoEvaluacion @relation(fields: [resultadoId], references: [id])
   nombreOriginal   String
-  nombreAlmacenado String     @unique
+  nombreAlmacenado String              @unique
   tipoMime         String
   tamanoBytes      Int
-  activo           Boolean    @default(true)
+  activo           Boolean             @default(true)
   creadoPorId      Int
-  creadoEn         DateTime   @default(now())
+  creadoEn         DateTime            @default(now())
 
-  @@index([evaluacionId, activo])
+  @@index([resultadoId, activo])
+}
+
+// Tabla única nota → letra para todo el colegio. Cada cambio crea una versión y cierra la
+// anterior; una sola vigente (índice único parcial en SQL).
+model EscalaCalificacion {
+  id           Int       @id @default(autoincrement())
+  version      Int       @unique
+  minimoAD     Int
+  minimoA      Int
+  minimoB      Int
+  vigenteDesde DateTime  @default(now())
+  vigenteHasta DateTime?
+  creadoPorId  Int?
+  creadoEn     DateTime  @default(now())
 }
 
 model RegistroAuditoria {

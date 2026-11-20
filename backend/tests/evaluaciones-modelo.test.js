@@ -5,8 +5,8 @@ import { app } from '../src/app.js';
 import { prisma } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
 
-// Prueba del modelo, no de la API: todavía no existe el servicio de evaluaciones. Comprueba
-// que las reglas que no pueden perder una carrera las garantiza la base de datos.
+// Prueba del modelo, no de la API (esa está en evaluaciones.test.js). Comprueba que las reglas
+// que no pueden perder una carrera las garantiza la base de datos.
 const base = '/api/v1';
 const clave = 'ClaveSegura123!';
 const admin = request.agent(app);
@@ -69,6 +69,7 @@ const crearResultado = (evaluacionId, cambios = {}) =>
     data: {
       evaluacionId,
       matriculaId: matricula.id,
+      condicion: 'CALIFICADA',
       nota: '15.50',
       creadoPorId: actorId,
       modificadoPorId: actorId,
@@ -141,10 +142,9 @@ before(async () => {
 });
 after(() => prisma.$disconnect());
 
-test('EVM-01 una evaluación válida nace en BORRADOR, con peso 1, y acepta notas de 0 a 20', async () => {
+test('EVM-01 una evaluación válida nace con peso 1 y acepta notas de 0 a 20', async () => {
   const evaluacion = await crearEvaluacion(matematica);
-  assert.equal(evaluacion.estado, 'BORRADOR');
-  assert.equal(evaluacion.peso.toString(), '1');
+  assert.equal(evaluacion.peso, 1);
   assert.equal(evaluacion.activo, true);
   const minima = await crearResultado(evaluacion.id, { nota: '0' });
   const maxima = await crearResultado(evaluacion.id, {
@@ -156,8 +156,8 @@ test('EVM-01 una evaluación válida nace en BORRADOR, con peso 1, y acepta nota
   assert.equal(minima.comentario, null);
   assert.equal(maxima.nota.toString(), '20');
   assert.equal(maxima.comentario, 'Excelente trabajo');
-  const ponderada = await crearEvaluacion(matematica, { peso: '0.5', estado: 'REGISTRADA' });
-  assert.equal(ponderada.peso.toString(), '0.5');
+  const ponderada = await crearEvaluacion(matematica, { peso: 5 });
+  assert.equal(ponderada.peso, 5);
   // Los decimales se guardan con dos cifras: 13.456 se redondea, no se trunca a entero.
   const decimal = await crearResultado(ponderada.id, { nota: '13.456' });
   assert.equal(decimal.nota.toString(), '13.46');
@@ -179,9 +179,9 @@ test('EVM-02 la base rechaza notas fuera de 0 a 20', async () => {
   );
 });
 
-test('EVM-03 la base rechaza un peso cero o negativo', async () => {
-  await violaCheck(crearEvaluacion(matematica, { peso: '0' }), 'Evaluacion_peso_positivo');
-  await violaCheck(crearEvaluacion(matematica, { peso: '-1' }), 'Evaluacion_peso_positivo');
+test('EVM-03 la base rechaza un peso fuera de 1 a 5', async () => {
+  await violaCheck(crearEvaluacion(matematica, { peso: 0 }), 'Evaluacion_peso_rango');
+  await violaCheck(crearEvaluacion(matematica, { peso: 6 }), 'Evaluacion_peso_rango');
 });
 
 test('EVM-04 un alumno tiene un solo resultado activo por evaluación', async () => {
@@ -241,4 +241,94 @@ test('EVM-07 el comentario no supera 500 caracteres', async () => {
   await rechaza(crearResultado(evaluacion.id, { comentario: 'x'.repeat(501) }), 'P2000');
   const limite = await crearResultado(evaluacion.id, { comentario: 'x'.repeat(500) });
   assert.equal(limite.comentario.length, 500);
+});
+
+test('EVM-08 la nota y el motivo van atados a la condición del resultado', async () => {
+  const evaluacion = await crearEvaluacion(comunicacion);
+  await violaCheck(
+    crearResultado(evaluacion.id, { condicion: 'CALIFICADA', nota: null }),
+    'ResultadoEvaluacion_condicion_nota',
+  );
+  await violaCheck(
+    crearResultado(evaluacion.id, { condicion: 'NO_RINDIO' }),
+    'ResultadoEvaluacion_condicion_nota',
+  );
+  await violaCheck(
+    crearResultado(evaluacion.id, { condicion: 'JUSTIFICADA', nota: null }),
+    'ResultadoEvaluacion_condicion_motivo',
+  );
+  await violaCheck(
+    crearResultado(evaluacion.id, { condicion: 'JUSTIFICADA', nota: null, motivo: '   ' }),
+    'ResultadoEvaluacion_condicion_motivo',
+  );
+  await violaCheck(
+    crearResultado(evaluacion.id, { motivo: 'No corresponde' }),
+    'ResultadoEvaluacion_condicion_motivo',
+  );
+  const justificada = await crearResultado(evaluacion.id, {
+    condicion: 'JUSTIFICADA',
+    nota: null,
+    motivo: 'Certificado médico',
+  });
+  assert.equal(justificada.nota, null);
+  const noRindio = await crearResultado(evaluacion.id, {
+    matriculaId: otraMatricula.id,
+    condicion: 'NO_RINDIO',
+    nota: null,
+  });
+  assert.equal(noRindio.condicion, 'NO_RINDIO');
+});
+
+test('EVM-09 la escala respeta el orden de las letras y hay una sola vigente', async () => {
+  const vigente = await prisma.escalaCalificacion.findFirst({ where: { vigenteHasta: null } });
+  assert.deepEqual(
+    [vigente.version, vigente.minimoAD, vigente.minimoA, vigente.minimoB],
+    [1, 18, 14, 11],
+  );
+  const escala = (datos) =>
+    prisma.escalaCalificacion.create({
+      data: {
+        version: 99,
+        minimoAD: 18,
+        minimoA: 14,
+        minimoB: 11,
+        vigenteHasta: new Date(),
+        ...datos,
+      },
+    });
+  await violaCheck(escala({ minimoAD: 21 }), 'EscalaCalificacion_orden');
+  await violaCheck(escala({ minimoA: 18 }), 'EscalaCalificacion_orden');
+  await violaCheck(escala({ minimoB: 0 }), 'EscalaCalificacion_orden');
+  await rechaza(escala({ vigenteHasta: null }), 'P2002');
+});
+
+test('EVM-10 con promedio siempre hay letra, y el promedio va de 0 a 20', async () => {
+  const calificacion = await prisma.calificacion.create({
+    data: {
+      matriculaId: matricula.id,
+      bimestreId: bimestre.id,
+      asignacionId: matematica.asignacion.id,
+      creadoPorId: actorId,
+      modificadoPorId: actorId,
+    },
+  });
+  const logro = (datos) =>
+    prisma.calificacionCompetencia.create({
+      data: {
+        calificacionId: calificacion.id,
+        competenciaId: matematica.competencia.id,
+        creadoPorId: actorId,
+        modificadoPorId: actorId,
+        ...datos,
+      },
+    });
+  await violaCheck(logro({ promedio: '15.00' }), 'CalificacionCompetencia_promedio_letra');
+  await violaCheck(
+    logro({ promedio: '20.50', nivelLogro: 'AD' }),
+    'CalificacionCompetencia_promedio_rango',
+  );
+  // Una letra sin promedio es lo publicado antes de las evaluaciones.
+  const heredada = await logro({ nivelLogro: 'A' });
+  assert.equal(heredada.promedio, null);
+  assert.equal(calificacion.reglaId, null);
 });

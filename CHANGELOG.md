@@ -1,17 +1,46 @@
 # Registro de cambios
 
+## Evaluaciones con nota 0–20 y letra calculada — 2026-11-22
+
+- El docente ya no elige la letra: crea las **evaluaciones del bimestre** del salón (competencia,
+  fecha, peso de 1 a 5) y en el modal de cada alumno registra su nota de 0 a 20 con el examen
+  corregido (1 a 3 archivos), «No rindió» (cuenta 0) o «Justificada» con motivo (no cuenta). El
+  modal muestra «Promedio 16,33 → A» por competencia.
+- La letra del bimestre es el promedio ponderado, redondeado al entero (17,5 → 18) y convertido
+  con una **escala única** que el administrador configura en Competencias y reglas (por defecto
+  AD ≥ 18, A ≥ 14, B ≥ 11). Cambiarla recalcula lo no publicado.
+- La **evidencia de calificación** (US-019) se elimina: el examen corregido de cada alumno es el
+  sustento de su nota. Se retiran su API, su pantalla y la suite `evidencias-calificacion`.
+- Las reglas de consolidación solo calculan la letra anual; `minimoEvidencias` pasa a
+  `minimoNotas`, el mínimo de notas por alumno y competencia para publicar. Calificar ya no exige
+  regla; publicar sí, y la fija en las notas.
+- Publicar exige que cada alumno tenga registradas todas las evaluaciones, una letra y el mínimo
+  de notas; los pendientes se informan por curso.
+- Se retiran las rutas que escribían la letra a mano: `PUT /matriculas/:id/calificaciones` y
+  `POST`/`PUT` de `/calificaciones` y `/calificaciones-competencias`.
+- Migración `20261122120000_evaluaciones_nota_vigesimal`: conserva las letras de libretas
+  publicadas y borra lo no publicado. **Los archivos de las evidencias de calificación quedan en
+  `EVIDENCIAS_DIR` sin fila que los referencie**; se pueden borrar a mano si no hacen falta.
+- Nueva suite `evaluaciones` (EVA-01 a EVA-14); `evaluaciones-modelo` cubre las restricciones
+  nuevas; `publicacion-libretas`, `libretas`, `calificaciones-alumno`, `calificaciones-permisos` y
+  AUD-08 pasan al flujo de evaluaciones.
+- Seed: competencias, regla y evaluaciones de demo de Matemática en 3.° B (IV bimestre).
+
 ## Plan de trabajo semanal y evidencias pedagógicas — 2026-11-20
 
 - La evidencia pedagógica vuelve como **actividad semanal del plan de trabajo del docente**
   (exposiciones, ejercicios, videos, avances). No es una nota ni la sustenta, y está separada de
   la evaluación continua y de la evidencia de calificación (US-019).
 - Docente: nueva entrada «Plan de trabajo». Elige curso, sección y bimestre, crea el plan y
-  registra actividades en una vista de filas por semana; las marca como realizadas y les adjunta
-  hasta 3 archivos y 5 enlaces, todo en una sola petición.
+  registra actividades en una vista de filas por semana, con hasta 3 archivos y 5 enlaces, todo en
+  una sola petición. Puede subirlas con anticipación (ocultas), publicarlas a mano, programarlas
+  para una fecha u ocultarlas de nuevo.
+- Los alumnos solo ven lo publicado. La visibilidad se deriva de `publicadaDesde` al consultar,
+  sin ningún proceso programado: una actividad programada aparece sola el día indicado.
 - Administrador: pestaña «Planes de trabajo» en Gestión académica para validar u observar lo
-  realizado, y tabla de fechas de bimestre en Catálogos académicos (`PATCH /bimestres/:id`).
-- Alumno y apoderado: nueva entrada «Actividades de clase», en solo lectura, con lo realizado.
-- Modelo: `EvidenciaPedagogica` (con `numeroSemana`, tipo, estado y revisión) y
+  publicado, y tabla de fechas de bimestre en Catálogos académicos (`PATCH /bimestres/:id`).
+- Alumno y apoderado: nueva entrada «Actividades de clase», en solo lectura, con lo publicado.
+- Modelo: `EvidenciaPedagogica` (con `numeroSemana`, tipo, `publicadaDesde` y revisión) y
   `ArchivoEvidenciaPedagogica`. `PlanAcademico` gana curso y sección con FK compuesta y un solo
   plan activo por clase y bimestre. La migración desactiva los planes duplicados y no borra nada.
 - API: `GET /asignaciones`, una sola ruta `POST /planes-academicos` para los dos roles (se

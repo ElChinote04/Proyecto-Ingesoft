@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { motivoCorreccion } from './calificacion.schemas.js';
+import { fechaCalendario } from './bimestres.schemas.js';
 
 // Los formularios llegan como multipart: todos los campos son texto y se convierten aquí.
 const id = z.coerce.number().int().positive().max(2147483647);
@@ -43,10 +44,15 @@ const enlaces = z.preprocess(
     .max(5, 'Puedes registrar hasta 5 enlaces.')
     .refine((valores) => new Set(valores).size === valores.length, 'No repitas enlaces.'),
 );
-const booleano = z.preprocess(
-  (valor) => (valor === 'true' ? true : valor === 'false' ? false : valor),
-  z.boolean(),
-);
+// OCULTA: solo la ve el docente. AHORA: la ven los alumnos desde hoy. PROGRAMADA: desde
+// publicadaDesde, que solo se admite en ese caso.
+const publicacion = z.enum(['OCULTA', 'AHORA', 'PROGRAMADA']);
+const fechaSoloSiProgramada = (valor) =>
+  (valor.publicacion === 'PROGRAMADA') === (valor.publicadaDesde !== undefined);
+const avisoFecha = {
+  message: 'Indica la fecha de publicación solo al programarla.',
+  path: ['publicadaDesde'],
+};
 
 export const crearEvidenciaPedagogicaSchema = z
   .object({
@@ -56,10 +62,12 @@ export const crearEvidenciaPedagogicaSchema = z
     titulo,
     descripcion: descripcion.optional(),
     enlaces: enlaces.optional().default([]),
-    realizada: booleano.optional().default(false),
+    publicacion: publicacion.optional().default('OCULTA'),
+    publicadaDesde: fechaCalendario.optional(),
     motivo: motivoCorreccion.optional(),
   })
-  .strict();
+  .strict()
+  .refine(fechaSoloSiProgramada, avisoFecha);
 
 // Sin refine de "al menos un dato": los archivos nuevos llegan aparte, en req.files.
 export const modificarEvidenciaPedagogicaSchema = z
@@ -69,10 +77,18 @@ export const modificarEvidenciaPedagogicaSchema = z
     titulo: titulo.optional(),
     descripcion: descripcion.optional(),
     enlaces: enlaces.optional(),
-    estado: z.literal('REALIZADA').optional(),
+    publicacion: publicacion.optional(),
+    publicadaDesde: fechaCalendario.optional(),
     motivo: motivoCorreccion.optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (valor) =>
+      valor.publicacion === undefined
+        ? valor.publicadaDesde === undefined
+        : fechaSoloSiProgramada(valor),
+    avisoFecha,
+  );
 
 export const revisarEvidenciaPedagogicaSchema = z
   .object({
@@ -94,7 +110,6 @@ export const evidenciasPedagogicasQuerySchema = z
   .object({
     planId: id.optional(),
     numeroSemana: semana.optional(),
-    estado: z.enum(['PLANIFICADA', 'REALIZADA']).optional(),
     matriculaId: id.optional(),
     cursoId: id.optional(),
     bimestreId: id.optional(),

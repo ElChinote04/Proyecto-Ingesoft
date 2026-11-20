@@ -7,6 +7,7 @@ import {
   tieneFechas,
   totalSemanas,
 } from '../domain/semanasBimestre.js';
+import { estadoPublicacion } from '../domain/publicacionActividad.js';
 import { AppError } from '../errors/AppError.js';
 
 const fail = (status, code, message) => {
@@ -93,8 +94,8 @@ export function presentarEvidenciaResumida(evidencia) {
     tipo: evidencia.tipo,
     titulo: evidencia.titulo,
     descripcion: evidencia.descripcion,
-    estado: evidencia.estado,
-    fechaRealizacion: texto(evidencia.fechaRealizacion),
+    publicadaDesde: texto(evidencia.publicadaDesde),
+    estadoPublicacion: estadoPublicacion(evidencia.publicadaDesde),
     estadoRevision: evidencia.estadoRevision,
     observacionesRevision: evidencia.observacionesRevision,
     totalArchivos: evidencia._count.archivos,

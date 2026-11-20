@@ -310,8 +310,9 @@ test('EVP-06 registra datos, enlaces y archivos en una sola petición, y se desc
     ],
   ).expect(201);
   const actividad = body.data;
-  assert.equal(actividad.estado, 'PLANIFICADA');
-  assert.equal(actividad.fechaRealizacion, null);
+  // Sin indicar nada, se sube oculta: solo la ve el docente.
+  assert.equal(actividad.estadoPublicacion, 'SUBIDA');
+  assert.equal(actividad.publicadaDesde, null);
   assert.deepEqual(actividad.enlaces, ['https://example.org/guia']);
   assert.deepEqual(
     actividad.archivos.map(({ nombre }) => nombre),
@@ -347,14 +348,42 @@ test('EVP-06 registra datos, enlaces y archivos en una sola petición, y se desc
   );
 });
 
-test('EVP-07 «ya se realizó» crea la actividad realizada con la fecha de hoy', async () => {
-  const { body } = await registrar(
+test('EVP-07 se publica a mano o se programa; las fechas inválidas se rechazan', async () => {
+  const ahora = await registrar(
     docente,
-    { numeroSemana: 2, tipo: 'EJERCICIO', realizada: 'true' },
+    { numeroSemana: 2, tipo: 'EJERCICIO', publicacion: 'AHORA' },
     [[PDF, 'ficha.pdf']],
   ).expect(201);
-  assert.equal(body.data.estado, 'REALIZADA');
-  assert.equal(body.data.fechaRealizacion, hoyEnLima());
+  assert.equal(ahora.body.data.estadoPublicacion, 'PUBLICADA');
+  assert.equal(ahora.body.data.publicadaDesde, hoyEnLima());
+  const [publicada] = await eventos('EVIDENCIA_PEDAGOGICA_REGISTRADA', ahora.body.data.id);
+  assert.ok(publicada.detalle.valorNuevo.publicadaDesde.startsWith(hoyEnLima()));
+
+  const programada = await registrar(docente, {
+    numeroSemana: 4,
+    publicacion: 'PROGRAMADA',
+    publicadaDesde: diaRelativo(10),
+  }).expect(201);
+  assert.equal(programada.body.data.estadoPublicacion, 'PROGRAMADA');
+  assert.equal(programada.body.data.publicadaDesde, diaRelativo(10));
+
+  const rechazo = async (campos, codigo) => {
+    const { body } = await registrar(docente, campos).expect(400);
+    if (codigo) assert.equal(body.error.code, codigo);
+  };
+  await rechazo(
+    { publicacion: 'PROGRAMADA', publicadaDesde: diaRelativo(-1) },
+    'INVALID_PUBLICATION_DATE',
+  );
+  // El bimestre termina en 55 días: no se programa fuera de él.
+  await rechazo(
+    { publicacion: 'PROGRAMADA', publicadaDesde: diaRelativo(60) },
+    'INVALID_PUBLICATION_DATE',
+  );
+  await rechazo({ publicacion: 'PROGRAMADA' });
+  await rechazo({ publicacion: 'AHORA', publicadaDesde: diaRelativo(3) });
+  await rechazo({ publicacion: 'PUBLICADA' });
+  await rechazo({ realizada: 'true' });
 });
 
 test('EVP-08 si falla la transacción del alta no queda fila ni archivo', async () => {
@@ -367,36 +396,51 @@ test('EVP-08 si falla la transacción del alta no queda fila ni archivo', async 
   assert.equal(await archivosEnDisco(), enDisco);
 });
 
-test('EVP-09 marcar como realizada y adjuntar va en un PATCH; un fallo no aplica nada', async () => {
+test('EVP-09 publicar y adjuntar va en un PATCH; un fallo no aplica nada; se puede ocultar', async () => {
   const { id } = (await registrar(docente, { numeroSemana: 4 }).expect(201)).body.data;
   const enDisco = await archivosEnDisco();
   await conTriggerQueFalla('ArchivoEvidenciaPedagogica', () =>
     docente
       .patch(rutaActividad(id))
-      .field('estado', 'REALIZADA')
+      .field('publicacion', 'AHORA')
       .field('titulo', 'No debe quedar')
       .attach('archivos', PDF, 'fallo.pdf')
       .expect(500),
   );
   const intacta = await prisma.evidenciaPedagogica.findUnique({ where: { id } });
-  assert.equal(intacta.estado, 'PLANIFICADA');
+  assert.equal(intacta.publicadaDesde, null);
   assert.equal(intacta.titulo, 'Exposición de fracciones');
   assert.equal(await archivosEnDisco(), enDisco);
 
   const { body } = await docente
     .patch(rutaActividad(id))
-    .field('estado', 'REALIZADA')
-    .field('descripcion', 'Se hizo en grupos')
-    .attach('archivos', PNG, 'evidencia.png')
+    .field('publicacion', 'AHORA')
+    .field('descripcion', 'Material listo')
+    .attach('archivos', PNG, 'material.png')
     .expect(200);
-  assert.equal(body.data.estado, 'REALIZADA');
-  assert.equal(body.data.descripcion, 'Se hizo en grupos');
+  assert.equal(body.data.estadoPublicacion, 'PUBLICADA');
+  assert.equal(body.data.descripcion, 'Material listo');
   assert.equal(body.data.archivos.length, 1);
-  assert.equal((await eventos('EVIDENCIA_PEDAGOGICA_REALIZADA', id)).length, 1);
-  // Ya realizada, volver a marcarla no cambia la fecha ni vuelve a contarla como realizada.
-  await docente.patch(rutaActividad(id)).send({ estado: 'REALIZADA' }).expect(200);
-  assert.equal((await eventos('EVIDENCIA_PEDAGOGICA_REALIZADA', id)).length, 1);
-  await docente.patch(rutaActividad(id)).send({ estado: 'PLANIFICADA' }).expect(400);
+  assert.equal((await eventos('EVIDENCIA_PEDAGOGICA_PUBLICADA', id)).length, 1);
+  // Volver a publicarla el mismo día no cambia nada ni cuenta como otra publicación.
+  await docente.patch(rutaActividad(id)).send({ publicacion: 'AHORA' }).expect(200);
+  assert.equal((await eventos('EVIDENCIA_PEDAGOGICA_PUBLICADA', id)).length, 1);
+
+  // Ocultarla la saca de la vista de los alumnos y queda auditado.
+  const oculta = await docente.patch(rutaActividad(id)).send({ publicacion: 'OCULTA' }).expect(200);
+  assert.equal(oculta.body.data.estadoPublicacion, 'SUBIDA');
+  assert.equal((await eventos('EVIDENCIA_PEDAGOGICA_OCULTADA', id)).length, 1);
+  // Reprogramarla también es publicarla.
+  await docente
+    .patch(rutaActividad(id))
+    .send({ publicacion: 'PROGRAMADA', publicadaDesde: diaRelativo(5) })
+    .expect(200);
+  assert.equal((await eventos('EVIDENCIA_PEDAGOGICA_PUBLICADA', id)).length, 2);
+  await docente
+    .patch(rutaActividad(id))
+    .send({ publicadaDesde: diaRelativo(6) })
+    .expect(400);
+  await docente.patch(rutaActividad(id)).send({ estado: 'REALIZADA' }).expect(400);
 });
 
 test('EVP-10 datos inválidos se rechazan sin dejar nada', async () => {
@@ -464,35 +508,46 @@ test('EVP-12 dos subidas simultáneas no superan tres archivos activos', async (
   assert.equal(await archivosEnDisco(), enDisco + 2);
 });
 
-test('EVP-13 la coordinación revisa solo lo realizado; lo validado queda fijo para el docente', async () => {
-  const planificada = (await registrar(docente, { numeroSemana: 6 }).expect(201)).body.data;
-  const realizada = (await registrar(docente, { numeroSemana: 6, realizada: 'true' }).expect(201))
-    .body.data;
-  const observar = (await registrar(docente, { numeroSemana: 7, realizada: 'true' }).expect(201))
+test('EVP-13 la coordinación revisa solo lo publicado; lo validado queda fijo para el docente', async () => {
+  const subida = (await registrar(docente, { numeroSemana: 6 }).expect(201)).body.data;
+  const programada = (
+    await registrar(docente, {
+      numeroSemana: 6,
+      publicacion: 'PROGRAMADA',
+      publicadaDesde: diaRelativo(2),
+    }).expect(201)
+  ).body.data;
+  const publicada = (
+    await registrar(docente, { numeroSemana: 6, publicacion: 'AHORA' }).expect(201)
+  ).body.data;
+  const observar = (await registrar(docente, { numeroSemana: 7, publicacion: 'AHORA' }).expect(201))
     .body.data;
   const revision = (id) => `${rutaActividad(id)}/revision`;
 
-  const noRealizada = await admin
-    .put(revision(planificada.id))
-    .send({ estadoRevision: 'VALIDADA' })
-    .expect(409);
-  assert.equal(noRealizada.body.error.code, 'EVIDENCE_NOT_DONE');
-  await admin.put(revision(realizada.id)).send({ estadoRevision: 'OBSERVADA' }).expect(400);
-  await docente.put(revision(realizada.id)).send({ estadoRevision: 'VALIDADA' }).expect(403);
+  for (const pendiente of [subida, programada]) {
+    const { body } = await admin
+      .put(revision(pendiente.id))
+      .send({ estadoRevision: 'VALIDADA' })
+      .expect(409);
+    assert.equal(body.error.code, 'EVIDENCE_NOT_PUBLISHED');
+  }
+  await admin.put(revision(publicada.id)).send({ estadoRevision: 'OBSERVADA' }).expect(400);
+  await docente.put(revision(publicada.id)).send({ estadoRevision: 'VALIDADA' }).expect(403);
 
   const validada = await admin
-    .put(revision(realizada.id))
+    .put(revision(publicada.id))
     .send({ estadoRevision: 'VALIDADA' })
     .expect(200);
   assert.equal(validada.body.data.estadoRevision, 'VALIDADA');
   const fija = await docente
-    .patch(rutaActividad(realizada.id))
+    .patch(rutaActividad(publicada.id))
     .send({ titulo: 'Cambio' })
     .expect(409);
   assert.equal(fija.body.error.code, 'EVIDENCE_VALIDATED');
-  await docente.delete(rutaActividad(realizada.id)).expect(409);
+  await docente.patch(rutaActividad(publicada.id)).send({ publicacion: 'OCULTA' }).expect(409);
+  await docente.delete(rutaActividad(publicada.id)).expect(409);
   await admin
-    .patch(rutaActividad(realizada.id))
+    .patch(rutaActividad(publicada.id))
     .send({ titulo: 'Corregido por admin' })
     .expect(200);
 
@@ -505,13 +560,17 @@ test('EVP-13 la coordinación revisa solo lo realizado; lo validado queda fijo p
   assert.equal(vista.observacionesRevision, 'Falta adjuntar la ficha.');
   const [revisado] = await eventos('EVIDENCIA_PEDAGOGICA_REVISADA', observar.id);
   assert.equal(revisado.detalle.valorNuevo.estadoRevision, 'OBSERVADA');
-  // Editar una observada no la devuelve a pendiente: la vuelve a revisar la coordinación.
+  // Editarla u ocultarla para corregirla no borra la observación: la vuelve a revisar la
+  // coordinación.
   await docente.patch(rutaActividad(observar.id)).send({ titulo: 'Con ficha' }).expect(200);
+  await docente.patch(rutaActividad(observar.id)).send({ publicacion: 'OCULTA' }).expect(200);
   const tras = await prisma.evidenciaPedagogica.findUnique({ where: { id: observar.id } });
   assert.equal(tras.estadoRevision, 'OBSERVADA');
+  assert.equal(tras.publicadaDesde, null);
+  await docente.patch(rutaActividad(observar.id)).send({ publicacion: 'AHORA' }).expect(200);
 });
 
-test('EVP-14 la familia ve solo lo realizado y no observado, sin datos de revisión', async () => {
+test('EVP-14 la familia ve solo lo publicado hasta hoy y no observado, sin datos de revisión', async () => {
   const consulta = `${base}/evidencias-pedagogicas?matriculaId=${matricula.id}&cursoId=${curso.id}&bimestreId=${bimestre.id}`;
   const { body } = await apoderado.get(consulta).expect(200);
   assert.equal(body.data.semanas.length, 10);
@@ -521,22 +580,44 @@ test('EVP-14 la familia ve solo lo realizado y no observado, sin datos de revisi
   const enBase = await prisma.evidenciaPedagogica.findMany({
     where: { id: { in: visibles.map(({ id }) => id) } },
   });
+  const hoyTexto = hoyEnLima();
   assert.ok(
-    enBase.every((item) => item.estado === 'REALIZADA' && item.estadoRevision !== 'OBSERVADA'),
+    enBase.every(
+      (item) =>
+        item.publicadaDesde &&
+        item.publicadaDesde.toISOString().slice(0, 10) <= hoyTexto &&
+        item.estadoRevision !== 'OBSERVADA',
+    ),
   );
   assert.doesNotMatch(JSON.stringify(body), /estadoRevision|observaciones|revisor|docente/i);
-  const oculta = await prisma.evidenciaPedagogica.findFirst({
-    where: { planId: plan.id, estado: 'PLANIFICADA', activo: true },
+  // Ni lo subido ni lo programado para otro día se ve todavía.
+  const subida = await prisma.evidenciaPedagogica.findFirst({
+    where: { planId: plan.id, publicadaDesde: null, activo: true },
   });
-  await apoderado.get(rutaActividad(oculta.id)).expect(403);
+  const programada = await prisma.evidenciaPedagogica.findFirst({
+    where: { planId: plan.id, publicadaDesde: { gt: hoy() }, activo: true },
+  });
+  for (const invisible of [subida, programada]) {
+    assert.ok(!visibles.some(({ id }) => id === invisible.id));
+    await apoderado.get(rutaActividad(invisible.id)).expect(403);
+  }
+  // Llegado su día, la programada aparece sola: no hay ningún proceso que la publique.
+  await prisma.evidenciaPedagogica.update({
+    where: { id: programada.id },
+    data: { publicadaDesde: hoy() },
+  });
+  const despues = (await apoderado.get(consulta).expect(200)).body.data.semanas.flatMap(
+    ({ evidencias }) => evidencias,
+  );
+  assert.ok(despues.some(({ id }) => id === programada.id));
   const detalle = (await apoderado.get(rutaActividad(visibles[0].id)).expect(200)).body.data;
   assert.deepEqual(Object.keys(detalle).sort(), [
     'archivos',
     'descripcion',
     'enlaces',
-    'fechaRealizacion',
     'id',
     'numeroSemana',
+    'publicadaDesde',
     'tipo',
     'titulo',
   ]);
@@ -622,14 +703,8 @@ test('EVP-17 la base de datos rechaza estados incoherentes aunque se salte el se
     });
   const crear = (cambios) => prisma.evidenciaPedagogica.create({ data: { ...datos, ...cambios } });
   await violaCheck(crear({ numeroSemana: 0 }), 'EvidenciaPedagogica_semana_positiva');
-  await violaCheck(crear({ estado: 'REALIZADA' }), 'EvidenciaPedagogica_fecha_realizacion');
   await violaCheck(
-    crear({ fechaRealizacion: new Date() }),
-    'EvidenciaPedagogica_fecha_realizacion',
-  );
-  await violaCheck(crear({ estadoRevision: 'VALIDADA' }), 'EvidenciaPedagogica_revision_realizada');
-  await violaCheck(
-    crear({ estado: 'REALIZADA', fechaRealizacion: new Date(), estadoRevision: 'OBSERVADA' }),
+    crear({ publicadaDesde: new Date(), estadoRevision: 'OBSERVADA' }),
     'EvidenciaPedagogica_observacion',
   );
   await violaCheck(

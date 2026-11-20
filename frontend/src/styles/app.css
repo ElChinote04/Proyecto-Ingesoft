@@ -37,7 +37,8 @@ h3 {
 }
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 button {
@@ -67,7 +68,8 @@ button.secondary:hover:not(:disabled) {
 }
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 3px solid #a78bfa;
   outline-offset: 3px;
 }
@@ -82,14 +84,29 @@ select {
   min-width: 0;
   width: 100%;
 }
+/* Sin esto el navegador usa su fuente monoespaciada y su ancho propio. */
+textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 72px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  padding: 9px 12px;
+  font-weight: 400;
+  resize: vertical;
+}
 input[readonly] {
   background: #f9fafb;
   color: var(--muted);
 }
-input[aria-invalid='true'] {
+input[aria-invalid='true'],
+textarea[aria-invalid='true'] {
   border-color: #dc2626;
 }
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: var(--muted);
 }
 select {
@@ -406,20 +423,6 @@ select {
 .grading-table th,
 .grading-table td {
   padding: 14px 16px;
-}
-.level-options {
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
-}
-.level-options label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-.level-options input {
-  accent-color: var(--brand);
 }
 .summary-card {
   margin-bottom: 18px;
@@ -1270,12 +1273,82 @@ a {
 .grading-competency legend {
   padding: 0;
 }
-.grading-evidence {
+.result-list {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.result-row {
+  padding: 8px 0;
+  border-top: 1px dashed var(--border);
+}
+.result-row:first-child {
+  border-top: 0;
+}
+.result-summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  margin-top: 8px;
+}
+.result-summary > span:first-child {
+  flex: 1 1 220px;
+}
+.result-grade {
+  font-variant-numeric: tabular-nums;
+}
+.result-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.result-condition {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.result-grade-field input {
+  max-width: 140px;
+}
+.result-average {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-weight: 600;
+}
+.grade-context-action {
+  display: flex;
+  align-items: flex-end;
+}
+.evaluation-form {
+  margin: 16px 0;
+}
+.scale-card {
+  margin-bottom: 24px;
+}
+.scale-table {
+  width: auto;
+  margin: 12px 0;
+}
+.scale-table th,
+.scale-table td {
+  padding: 8px 16px 8px 0;
+  text-align: left;
+  vertical-align: top;
+}
+.scale-table input {
+  width: 80px;
 }
 .badge.neutral {
   background: #f3f4f6;
@@ -1331,15 +1404,6 @@ a {
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
-}
-.evidence-form textarea {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font: inherit;
-  font-weight: 400;
-  resize: vertical;
 }
 .evidence-form [aria-invalid='true'] {
   border-color: #dc2626;
@@ -1872,6 +1936,15 @@ a {
   align-items: center;
   gap: 10px;
 }
+.plan-crear-dialog h2 {
+  margin-bottom: 4px;
+}
+/* Campos a todo el ancho del modal, como en el formulario de actividades. */
+.plan-crear {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
 .plan-vacio {
   display: flex;
   flex-wrap: wrap;
@@ -1961,6 +2034,18 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+.actividad-publicacion {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.actividad-publicacion legend {
+  padding: 0 4px;
+  font-weight: 600;
 }
 .actividad-revision {
   display: flex;

@@ -1,207 +1,368 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api/client';
-import EvidenciasCompetencia from './EvidenciasCompetencia';
+import { api, descargar } from '../api/client';
+import CampoArchivos, { CampoError } from './CampoArchivos';
+import ConfirmarAccion from './ConfirmarAccion';
 import { Feedback, Loading, ResourceError } from './Feedback';
 import { useResource } from '../hooks/useResource';
+import { MAX_ARCHIVOS, formatearTamano, validarArchivos } from '../utils/archivosAdjuntos';
+import { fechaCorta } from '../utils/planTrabajo';
+import LetraLogro from './LetraLogro';
+import { CONDICIONES, formatearNota, leerNota } from '../utils/notas';
 
-const NIVELES = ['AD', 'A', 'B', 'C'];
+const rutaResultado = (evaluacionId, matriculaId) =>
+  `/evaluaciones/${evaluacionId}/resultados/${matriculaId}`;
 
-function EvidenciaCompetencia({ competencia, publicado, tieneCambio, onAbrir }) {
-  if (!competencia.calificacionCompetenciaId)
-    return publicado ? null : <p className="caption">Califica y guarda para agregar evidencia.</p>;
+function ArchivosResultado({ evaluacionId, matriculaId, archivos, quitados, onQuitar, onError }) {
   return (
-    <div className="grading-evidence">
-      <button
-        type="button"
-        className="secondary"
-        disabled={tieneCambio}
-        aria-label={`Evidencias de ${competencia.nombre}: ${competencia.totalEvidencias}`}
-        onClick={() => onAbrir(competencia.calificacionCompetenciaId)}
-      >
-        Evidencias ({competencia.totalEvidencias})
-      </button>
-      {!competencia.totalEvidencias && <span className="badge warning">Falta evidencia</span>}
-      {tieneCambio && (
-        <span className="caption">Guarda el cambio de nivel para registrar evidencia.</span>
-      )}
-    </div>
+    <ul className="evidence-files">
+      {archivos.map((archivo) => (
+        <li key={archivo.id} className={quitados?.includes(archivo.id) ? 'muted' : undefined}>
+          <span>
+            {archivo.nombre}{' '}
+            <span className="caption">({formatearTamano(archivo.tamanoBytes)})</span>
+          </span>
+          <span className="row-actions">
+            <button
+              type="button"
+              className="text-button"
+              aria-label={`Descargar ${archivo.nombre}`}
+              onClick={() =>
+                descargar(
+                  `${rutaResultado(evaluacionId, matriculaId)}/archivos/${archivo.id}`,
+                  archivo.nombre,
+                ).catch(onError)
+              }
+            >
+              Descargar
+            </button>
+            {onQuitar && (
+              <button
+                type="button"
+                className="text-button"
+                aria-pressed={quitados.includes(archivo.id)}
+                onClick={() => onQuitar(archivo.id)}
+              >
+                {quitados.includes(archivo.id) ? 'Conservar' : 'Quitar'}
+              </button>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-function CursoCompetencias({ curso, cambios, publicado, onCambio, onEvidencias }) {
-  return (
-    <section className="grading-course">
-      <h3>{curso.nombre}</h3>
-      {!curso.regla ? (
-        <Feedback intent="warning" title="Curso sin regla vigente">
-          El administrador debe definir la regla de consolidación antes de calificar este curso.
-        </Feedback>
-      ) : !curso.competencias.length ? (
-        <p className="muted">Este curso todavía no tiene competencias activas.</p>
-      ) : (
-        curso.competencias.map((competencia) => (
-          <fieldset className="grading-competency" key={competencia.id}>
-            <legend>
-              {competencia.codigo} · {competencia.nombre}
-            </legend>
-            <div className="level-options">
-              {NIVELES.map((nivel) => (
-                <label key={nivel}>
-                  <input
-                    type="radio"
-                    name={`competencia-${competencia.id}`}
-                    checked={(cambios[competencia.id] ?? competencia.nivelLogro) === nivel}
-                    disabled={publicado}
-                    onChange={() => onCambio(competencia, nivel)}
-                  />
-                  {nivel}
-                </label>
-              ))}
-            </div>
-            <EvidenciaCompetencia
-              competencia={competencia}
-              publicado={publicado}
-              tieneCambio={cambios[competencia.id] !== undefined}
-              onAbrir={onEvidencias}
-            />
-          </fieldset>
-        ))
-      )}
-    </section>
-  );
+function ResumenResultado({ resultado }) {
+  if (!resultado) return <span className="badge warning">Pendiente</span>;
+  if (resultado.condicion === 'NO_RINDIO')
+    return <span className="badge neutral">No rindió · cuenta 0</span>;
+  if (resultado.condicion === 'JUSTIFICADA')
+    return (
+      <span className="badge info" title={resultado.motivo}>
+        Justificada · no cuenta
+      </span>
+    );
+  return <strong className="result-grade">{formatearNota(resultado.nota)}</strong>;
 }
 
-function FichaCalificacion({ alumno, opciones, guardando, setGuardando, onClose }) {
-  const [bimestreElegido, setBimestreElegido] = useState('');
-  const [cambios, setCambios] = useState({});
-  const [error, setError] = useState(null);
-  const [guardado, setGuardado] = useState(null);
-  const [notaEvidencias, setNotaEvidencias] = useState(null);
-  const bimestreId = bimestreElegido || opciones[0].id;
-  const ficha = useResource(
-    `/matriculas/${alumno.matriculaId}/calificaciones?bimestreId=${bimestreId}`,
-  );
-  const pendientes = Object.entries(cambios);
-  const publicado = ficha.data?.bimestre.publicado;
+function FormularioResultado({ evaluacion, matriculaId, onGuardado, onCancelar, onCambio }) {
+  const anterior = evaluacion.resultado;
+  const selector = useRef(null);
+  const [condicion, setCondicion] = useState(anterior?.condicion ?? 'CALIFICADA');
+  const [nota, setNota] = useState(anterior?.nota != null ? formatearNota(anterior.nota) : '');
+  const [motivo, setMotivo] = useState(anterior?.motivo ?? '');
+  const [archivos, setArchivos] = useState([]);
+  const [quitados, setQuitados] = useState([]);
+  const [errores, setErrores] = useState({});
+  const [fallo, setFallo] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [quitar, setQuitar] = useState(false);
+  const previos = (anterior?.archivos ?? []).filter(({ id }) => !quitados.includes(id));
+  const id = `resultado-${evaluacion.id}`;
 
-  // Solo viajan las competencias que cambiaron, para no auditar lo que sigue igual.
-  function cambiar(competencia, nivel) {
-    setGuardado(null);
-    setCambios((actual) => {
-      const siguiente = { ...actual, [competencia.id]: nivel };
-      if (nivel === competencia.nivelLogro) delete siguiente[competencia.id];
-      return siguiente;
-    });
-  }
+  const cambiar = (accion) => {
+    accion();
+    setFallo(null);
+    onCambio();
+  };
 
-  async function guardar() {
+  async function guardar(evento) {
+    evento.preventDefault();
+    const encontrados =
+      condicion === 'CALIFICADA'
+        ? {
+            nota:
+              leerNota(nota) === null ? 'Escribe una nota de 0 a 20 con hasta dos decimales.' : '',
+            archivos:
+              validarArchivos(archivos, previos.length, 'nota') ||
+              (archivos.length + previos.length === 0
+                ? 'Adjunta el examen corregido del alumno.'
+                : ''),
+          }
+        : { motivo: condicion === 'JUSTIFICADA' && !motivo.trim() ? 'Escribe el motivo.' : '' };
+    setErrores(encontrados);
+    if (Object.values(encontrados).some(Boolean)) return;
+    const datos = new FormData();
+    datos.set('condicion', condicion);
+    if (condicion === 'CALIFICADA') {
+      datos.set('nota', String(leerNota(nota)));
+      if (quitados.length) datos.set('archivosQuitados', JSON.stringify(quitados));
+      for (const archivo of archivos) datos.append('archivos', archivo);
+    }
+    if (condicion === 'JUSTIFICADA') datos.set('motivo', motivo.trim());
     setGuardando(true);
-    setError(null);
     try {
-      const resultado = await api(`/matriculas/${alumno.matriculaId}/calificaciones`, {
-        method: 'PUT',
-        body: {
-          bimestreId: Number(bimestreId),
-          calificaciones: pendientes.map(([competenciaId, nivelLogro]) => ({
-            competenciaId: Number(competenciaId),
-            nivelLogro,
-          })),
-        },
-      });
-      // El modal sigue abierto: la evidencia exige una nota guardada y este es el momento de subirla.
-      setCambios({});
-      setGuardado(resultado.total);
-      ficha.retry();
-    } catch (fallo) {
-      setError(fallo);
-    } finally {
+      await api(rutaResultado(evaluacion.id, matriculaId), { method: 'PUT', body: datos });
+      onGuardado();
+    } catch (error) {
+      setFallo(error);
       setGuardando(false);
     }
   }
 
   return (
     <>
-      <label className="field">
-        Bimestre
-        <select
-          value={bimestreId}
-          disabled={pendientes.length > 0}
-          onChange={(evento) => {
-            setGuardado(null);
-            setBimestreElegido(Number(evento.target.value));
-          }}
-        >
-          {opciones.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.nombre}
-            </option>
+      <form className="result-form" onSubmit={guardar} noValidate>
+        <fieldset className="result-condition">
+          <legend className="sr-only">Resultado de {evaluacion.titulo}</legend>
+          {CONDICIONES.map(([valor, etiqueta]) => (
+            <label key={valor} className="checkbox-field">
+              <input
+                type="radio"
+                name={`condicion-${evaluacion.id}`}
+                value={valor}
+                checked={condicion === valor}
+                onChange={() => cambiar(() => setCondicion(valor))}
+              />
+              {etiqueta}
+            </label>
           ))}
-        </select>
-      </label>
-      {pendientes.length > 0 && (
-        <p className="muted">Guarda o cancela los cambios para cambiar de bimestre.</p>
-      )}
-      {publicado && (
-        <Feedback intent="info" title="Libreta publicada">
-          La libreta de este salón ya fue publicada: las notas están en modo consulta.
-        </Feedback>
-      )}
-      {ficha.loading ? (
-        <Loading>Cargando competencias…</Loading>
-      ) : ficha.error ? (
-        <ResourceError error={ficha.error} retry={ficha.retry} />
-      ) : (
-        ficha.data.cursos.map((curso) => (
-          <CursoCompetencias
-            key={curso.id}
-            curso={curso}
-            cambios={cambios}
-            publicado={publicado}
-            onCambio={cambiar}
-            onEvidencias={setNotaEvidencias}
-          />
-        ))
-      )}
-      {guardado !== null && (
-        <Feedback intent="success" title="Calificaciones guardadas">
-          Se registraron {guardado} competencias de {alumno.nombre}. Ya puedes agregar su evidencia.
-        </Feedback>
-      )}
-      {error && <Feedback title={error.message} />}
-      <div className="actions">
-        <button type="button" className="secondary" disabled={guardando} onClick={onClose}>
-          {pendientes.length ? 'Cancelar' : 'Cerrar'}
-        </button>
-        {!publicado && (
-          <button type="button" disabled={guardando || !pendientes.length} onClick={guardar}>
-            {guardando ? 'Guardando…' : 'Guardar calificaciones'}
-          </button>
+        </fieldset>
+        {condicion === 'CALIFICADA' && (
+          <>
+            <label className="field result-grade-field">
+              <span>Nota (0 a 20)</span>
+              <input
+                inputMode="decimal"
+                value={nota}
+                aria-invalid={Boolean(errores.nota)}
+                aria-describedby={`${id}-nota-error`}
+                onChange={(evento) =>
+                  cambiar(() => {
+                    setNota(evento.target.value);
+                    setErrores((actual) => ({ ...actual, nota: '' }));
+                  })
+                }
+              />
+              <CampoError id={`${id}-nota-error`}>{errores.nota}</CampoError>
+            </label>
+            {anterior?.archivos.length > 0 && (
+              <ArchivosResultado
+                evaluacionId={evaluacion.id}
+                matriculaId={matriculaId}
+                archivos={anterior.archivos}
+                quitados={quitados}
+                onError={setFallo}
+                onQuitar={(archivoId) =>
+                  cambiar(() =>
+                    setQuitados((actual) =>
+                      actual.includes(archivoId)
+                        ? actual.filter((item) => item !== archivoId)
+                        : [...actual, archivoId],
+                    ),
+                  )
+                }
+              />
+            )}
+            <CampoArchivos
+              id={`${id}-archivos`}
+              selector={selector}
+              error={errores.archivos}
+              unidad="nota"
+              onChange={(evento) =>
+                cambiar(() => {
+                  setArchivos([...evento.target.files]);
+                  setErrores((actual) => ({ ...actual, archivos: '' }));
+                })
+              }
+            />
+            <span className="caption">
+              El examen corregido es obligatorio: de 1 a {MAX_ARCHIVOS} archivos.
+            </span>
+          </>
         )}
-      </div>
-      {notaEvidencias && (
-        <EvidenciasCompetencia
-          notaId={notaEvidencias}
-          onClose={() => {
-            setNotaEvidencias(null);
-            ficha.retry();
+        {condicion === 'JUSTIFICADA' && (
+          <label className="field">
+            <span>Motivo</span>
+            <input
+              value={motivo}
+              maxLength={300}
+              placeholder="Ej.: certificado médico del 12/03"
+              aria-invalid={Boolean(errores.motivo)}
+              aria-describedby={`${id}-motivo-error`}
+              onChange={(evento) =>
+                cambiar(() => {
+                  setMotivo(evento.target.value);
+                  setErrores((actual) => ({ ...actual, motivo: '' }));
+                })
+              }
+            />
+            <CampoError id={`${id}-motivo-error`}>{errores.motivo}</CampoError>
+          </label>
+        )}
+        {condicion === 'NO_RINDIO' && (
+          <p className="caption">Cuenta como 0 en el promedio. No lleva archivo.</p>
+        )}
+        {fallo && <Feedback title={fallo.message} />}
+        <div className="actions">
+          {anterior && (
+            <button
+              type="button"
+              className="text-button"
+              disabled={guardando}
+              onClick={() => setQuitar(true)}
+            >
+              Dejar pendiente
+            </button>
+          )}
+          <button type="button" className="secondary" disabled={guardando} onClick={onCancelar}>
+            Cancelar
+          </button>
+          <button type="submit" disabled={guardando}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </form>
+      {quitar && (
+        <ConfirmarAccion
+          titulo={`¿Dejar pendiente «${evaluacion.titulo}»?`}
+          confirmar="Dejar pendiente"
+          onConfirm={async () => {
+            await api(rutaResultado(evaluacion.id, matriculaId), { method: 'DELETE' });
+            onGuardado();
           }}
-        />
+          onClose={() => setQuitar(false)}
+        >
+          Se quita el resultado y su examen. La evaluación volverá a bloquear la publicación hasta
+          que registres algo.
+        </ConfirmarAccion>
       )}
     </>
   );
 }
 
-export default function CalificarAlumno({ alumno, salon, onClose }) {
+function FilaEvaluacion({ evaluacion, matriculaId, editable, enEdicion, ...acciones }) {
+  const { onEditar, onError } = acciones;
+  return (
+    <li className="result-row">
+      <div className="result-summary">
+        <span>
+          <strong>{evaluacion.titulo}</strong>
+          <span className="caption">
+            {' '}
+            · {fechaCorta(evaluacion.fecha)} · peso {evaluacion.peso}
+          </span>
+        </span>
+        <ResumenResultado resultado={evaluacion.resultado} />
+        {editable && !enEdicion && (
+          <button
+            type="button"
+            className="text-button"
+            aria-label={`${evaluacion.resultado ? 'Editar' : 'Registrar'} ${evaluacion.titulo}`}
+            onClick={onEditar}
+          >
+            {evaluacion.resultado ? 'Editar' : 'Registrar'}
+          </button>
+        )}
+      </div>
+      {!enEdicion && evaluacion.resultado?.condicion === 'JUSTIFICADA' && (
+        <p className="caption">Motivo: {evaluacion.resultado.motivo}</p>
+      )}
+      {!enEdicion && evaluacion.resultado?.archivos.length > 0 && (
+        <ArchivosResultado
+          evaluacionId={evaluacion.id}
+          matriculaId={matriculaId}
+          archivos={evaluacion.resultado.archivos}
+          onError={onError}
+        />
+      )}
+      {enEdicion && (
+        <FormularioResultado evaluacion={evaluacion} matriculaId={matriculaId} {...acciones} />
+      )}
+    </li>
+  );
+}
+
+function Competencia({ competencia, matriculaId, editable, edicion, ...acciones }) {
+  return (
+    <fieldset className="grading-competency">
+      <legend>
+        {competencia.codigo} · {competencia.nombre}
+      </legend>
+      {!competencia.evaluaciones.length ? (
+        <p className="caption">
+          Todavía no hay evaluaciones de esta competencia. Créalas en «Evaluaciones del bimestre».
+        </p>
+      ) : (
+        <ul className="result-list">
+          {competencia.evaluaciones.map((evaluacion) => (
+            <FilaEvaluacion
+              key={evaluacion.id}
+              evaluacion={evaluacion}
+              matriculaId={matriculaId}
+              editable={editable && (edicion === null || edicion === evaluacion.id)}
+              enEdicion={edicion === evaluacion.id}
+              {...acciones}
+              onEditar={() => acciones.onEditar(evaluacion.id)}
+            />
+          ))}
+        </ul>
+      )}
+      <p className="result-average">
+        {competencia.nivelLogro ? (
+          <>
+            Promedio {formatearNota(competencia.promedio)} →{' '}
+            <LetraLogro nivel={competencia.nivelLogro} />
+          </>
+        ) : (
+          <span className="muted">Sin letra todavía</span>
+        )}
+        {competencia.pendientes > 0 && (
+          <span className="caption">
+            {' '}
+            · {competencia.pendientes === 1 ? 'falta 1' : `faltan ${competencia.pendientes}`}
+          </span>
+        )}
+      </p>
+    </fieldset>
+  );
+}
+
+export default function CalificarAlumno({ alumno, salon, bimestre, onClose }) {
   const dialogo = useRef(null);
-  const bimestres = useResource('/bimestres');
-  const [guardando, setGuardando] = useState(false);
+  const ruta = `/matriculas/${alumno.matriculaId}/calificaciones?bimestreId=${bimestre.id}`;
+  const ficha = useResource(ruta);
+  // Se recarga sobre lo ya mostrado para no vaciar el modal tras cada guardado.
+  const [recargada, setRecargada] = useState(null);
+  const datos = recargada ?? ficha.data;
+  const [edicion, setEdicion] = useState(null);
+  const [sucio, setSucio] = useState(false);
+  const [salir, setSalir] = useState(false);
+  const [aviso, setAviso] = useState('');
+  const [fallo, setFallo] = useState(null);
   useEffect(() => {
     dialogo.current.showModal();
   }, []);
+  const publicado = datos?.bimestre.publicado;
 
-  const opciones = (bimestres.data ?? []).filter(
-    (item) => item.anioAcademicoId === salon.anioAcademicoId,
-  );
+  function cerrar() {
+    if (sucio) setSalir(true);
+    else onClose();
+  }
+  const terminar = () => {
+    setEdicion(null);
+    setSucio(false);
+  };
 
   return (
     <dialog
@@ -210,36 +371,74 @@ export default function CalificarAlumno({ alumno, salon, onClose }) {
       aria-labelledby="calificar-titulo"
       onCancel={(evento) => {
         evento.preventDefault();
-        if (!guardando) onClose();
+        cerrar();
       }}
     >
       <h2 id="calificar-titulo">Calificar a {alumno.nombre}</h2>
-      <p className="muted">{salon.nombre}</p>
-      {opciones.length ? (
-        <FichaCalificacion
-          alumno={alumno}
-          opciones={opciones}
-          guardando={guardando}
-          setGuardando={setGuardando}
-          onClose={onClose}
-        />
+      <p className="muted">
+        {salon.nombre} · {bimestre.nombre}
+      </p>
+      {publicado && (
+        <Feedback intent="info" title="Libreta publicada">
+          La libreta de este salón ya fue publicada: las notas están en modo consulta.
+        </Feedback>
+      )}
+      {aviso && <Feedback intent="success" title={aviso} />}
+      {fallo && <Feedback title={fallo.message} />}
+      {!datos && ficha.error ? (
+        <ResourceError error={ficha.error} retry={ficha.retry} />
+      ) : !datos ? (
+        <Loading>Cargando evaluaciones…</Loading>
       ) : (
-        <>
-          {bimestres.loading ? (
-            <Loading>Cargando bimestres…</Loading>
-          ) : bimestres.error ? (
-            <ResourceError error={bimestres.error} retry={bimestres.retry} />
-          ) : (
-            <Feedback intent="warning" title="Sin bimestres para el año académico">
-              El salón seleccionado no tiene bimestres académicos configurados.
-            </Feedback>
-          )}
-          <div className="actions">
-            <button type="button" className="secondary" onClick={onClose}>
-              Cerrar
-            </button>
-          </div>
-        </>
+        datos.cursos.map((curso) => (
+          <section className="grading-course" key={curso.id}>
+            <h3>{curso.nombre}</h3>
+            {!curso.competencias.length ? (
+              <p className="muted">Este curso todavía no tiene competencias activas.</p>
+            ) : (
+              curso.competencias.map((competencia) => (
+                <Competencia
+                  key={competencia.id}
+                  competencia={competencia}
+                  matriculaId={alumno.matriculaId}
+                  editable={!publicado}
+                  edicion={edicion}
+                  onEditar={(id) => {
+                    setAviso('');
+                    setEdicion(id);
+                  }}
+                  onCancelar={terminar}
+                  onCambio={() => setSucio(true)}
+                  onError={setFallo}
+                  onGuardado={async () => {
+                    terminar();
+                    setAviso('Resultado guardado. El promedio y la letra ya están al día.');
+                    try {
+                      setRecargada(await api(ruta));
+                    } catch (error) {
+                      setFallo(error);
+                    }
+                  }}
+                />
+              ))
+            )}
+          </section>
+        ))
+      )}
+      <div className="actions">
+        <button type="button" className="secondary" onClick={cerrar}>
+          Cerrar
+        </button>
+      </div>
+      {salir && (
+        <ConfirmarAccion
+          titulo="¿Descartar el resultado sin guardar?"
+          confirmar="Descartar"
+          onConfirm={onClose}
+          onClose={() => setSalir(false)}
+        >
+          Hay una nota a medio registrar que se perderá.
+        </ConfirmarAccion>
       )}
     </dialog>
   );

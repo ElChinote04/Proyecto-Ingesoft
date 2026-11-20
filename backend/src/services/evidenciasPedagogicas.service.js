@@ -1,7 +1,6 @@
 import * as repository from '../repositories/evidenciasPedagogicas.repository.js';
 import * as planes from '../repositories/planesAcademicos.repository.js';
 import * as libretas from '../repositories/libretas.repository.js';
-import * as almacen from '../integrations/almacenEvidencias.js';
 import { registrarTransaccionCritica } from './auditoria.service.js';
 import { filtrosEstudiantesAutorizados } from './portal.service.js';
 import {
@@ -17,13 +16,14 @@ import {
   presentarEvidenciaResumida,
 } from './planesAcademicos.service.js';
 import {
-  MAX_ARCHIVOS_EVIDENCIA,
-  detectarTipoArchivo,
-  normalizarNombreArchivo,
-} from '../domain/archivoEvidencia.js';
+  conArchivosEnDisco,
+  leerArchivoRegistrado,
+  prepararArchivos,
+} from './archivosAdjuntos.service.js';
+import { MAX_ARCHIVOS_EVIDENCIA } from '../domain/archivoEvidencia.js';
 import { aTexto, estaCerrado, hoyEnLima, totalSemanas } from '../domain/semanasBimestre.js';
+import { estaPublicada, estadoPublicacion } from '../domain/publicacionActividad.js';
 import { AppError } from '../errors/AppError.js';
-import { logger } from '../logging/logger.js';
 
 const fail = (status, code, message) => {
   throw new AppError(status, code, message);
@@ -32,10 +32,14 @@ const fail = (status, code, message) => {
 const esFamilia = (actor) => actor.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol));
 const texto = (valor) => valor && aTexto(valor);
 
-// Lo que un alumno o apoderado puede ver: lo realizado que la coordinación no observó.
-const VISIBLE_PARA_FAMILIA = { estado: 'REALIZADA', estadoRevision: { not: 'OBSERVADA' } };
+const hoy = () => new Date(`${hoyEnLima()}T00:00:00.000Z`);
+
+// Lo que un alumno o apoderado puede ver: lo publicado (hasta hoy) que la coordinación no
+// observó. Una actividad programada aparece sola el día de su publicación.
 const visibleParaFamilia = (evidencia) =>
-  evidencia.activo && evidencia.estado === 'REALIZADA' && evidencia.estadoRevision !== 'OBSERVADA';
+  evidencia.activo &&
+  estaPublicada(evidencia.publicadaDesde) &&
+  evidencia.estadoRevision !== 'OBSERVADA';
 
 const archivosPublicos = (evidencia) =>
   evidencia.archivos.map(({ id, nombreOriginal, tipoMime, tamanoBytes }) => ({
@@ -63,7 +67,7 @@ const presentarParaFamilia = (evidencia) => ({
   tipo: evidencia.tipo,
   titulo: evidencia.titulo,
   descripcion: evidencia.descripcion,
-  fechaRealizacion: texto(evidencia.fechaRealizacion),
+  publicadaDesde: texto(evidencia.publicadaDesde),
   enlaces: evidencia.enlaces,
   archivos: archivosPublicos(evidencia),
 });
@@ -75,8 +79,7 @@ const snapshot = (evidencia) => ({
   tipo: evidencia.tipo,
   titulo: evidencia.titulo,
   descripcion: evidencia.descripcion,
-  estado: evidencia.estado,
-  fechaRealizacion: evidencia.fechaRealizacion,
+  publicadaDesde: evidencia.publicadaDesde,
   enlaces: evidencia.enlaces,
   estadoRevision: evidencia.estadoRevision,
   observacionesRevision: evidencia.observacionesRevision,
@@ -122,6 +125,32 @@ function exigirEdicionPermitida({ bimestre, evidencia, actor, motivo }) {
     );
 }
 
+/**
+ * Traduce lo que pide el formulario a la fecha que se guarda: undefined deja la publicación
+ * como está, null la oculta. Programar admite fechas desde hoy hasta el fin del bimestre.
+ */
+function resolverPublicacion({ publicacion, publicadaDesde }, bimestre) {
+  if (publicacion === undefined) return undefined;
+  if (publicacion === 'OCULTA') return null;
+  if (publicacion === 'AHORA') return hoy();
+  if (publicadaDesde < hoyEnLima())
+    fail(400, 'INVALID_PUBLICATION_DATE', 'La fecha de publicación no puede ser anterior a hoy.');
+  if (publicadaDesde > aTexto(bimestre.fechaFin))
+    fail(
+      400,
+      'INVALID_PUBLICATION_DATE',
+      'La fecha de publicación debe estar dentro del bimestre.',
+    );
+  return new Date(`${publicadaDesde}T00:00:00.000Z`);
+}
+
+function eventoDePublicacion(antes, despues) {
+  if (despues === undefined) return undefined;
+  if (!despues) return antes ? 'EVIDENCIA_PEDAGOGICA_OCULTADA' : undefined;
+  if (!antes || aTexto(antes) !== aTexto(despues)) return 'EVIDENCIA_PEDAGOGICA_PUBLICADA';
+  return undefined;
+}
+
 function exigirCupo(total) {
   if (total > MAX_ARCHIVOS_EVIDENCIA)
     fail(
@@ -129,42 +158,6 @@ function exigirCupo(total) {
       'TOO_MANY_FILES',
       `Puedes adjuntar hasta ${MAX_ARCHIVOS_EVIDENCIA} archivos por actividad.`,
     );
-}
-
-function prepararArchivos(archivos) {
-  return archivos.map(({ buffer, originalname, size }) => {
-    const tipoMime = detectarTipoArchivo(buffer);
-    if (!tipoMime) fail(400, 'FILE_TYPE_NOT_ALLOWED', 'Solo se aceptan archivos PDF, JPG o PNG.');
-    return {
-      contenido: buffer,
-      nombreOriginal: normalizarNombreArchivo(originalname),
-      tipoMime,
-      tamanoBytes: size,
-    };
-  });
-}
-
-/**
- * Los archivos van primero a disco (escribirlos dentro de la transacción arriesgaría su
- * tiempo límite) y se borran si la operación falla después: nunca queda una fila sin su
- * archivo ni un archivo sin su fila.
- */
-async function conArchivosEnDisco(archivos, actor, operacion) {
-  if (!archivos.length) return operacion([]);
-  const nombres = await almacen.guardarArchivos(archivos.map(({ contenido }) => contenido));
-  const registros = archivos.map(({ nombreOriginal, tipoMime, tamanoBytes }, indice) => ({
-    nombreOriginal,
-    tipoMime,
-    tamanoBytes,
-    nombreAlmacenado: nombres[indice],
-    creadoPorId: actor.id,
-  }));
-  try {
-    return await operacion(registros);
-  } catch (error) {
-    await almacen.borrarArchivos(nombres);
-    throw error;
-  }
 }
 
 async function exigirMatriculaVisible(matriculaId, actor) {
@@ -196,7 +189,7 @@ async function listarParaFamilia({ matriculaId, cursoId, bimestreId }, actor) {
     bimestreId,
   });
   const evidencias = plan
-    ? await repository.listEvidencias({ planId: plan.id, ...VISIBLE_PARA_FAMILIA })
+    ? await repository.listEvidenciasPublicadas({ planId: plan.id, hasta: hoy() })
     : [];
   return {
     bimestre: presentarBimestre(bimestre),
@@ -214,7 +207,6 @@ export async function listarEvidencias(filtros, actor) {
   const evidencias = await repository.listEvidencias({
     planId: plan.id,
     ...(filtros.numeroSemana && { numeroSemana: filtros.numeroSemana }),
-    ...(filtros.estado && { estado: filtros.estado }),
   });
   return evidencias.map(presentar);
 }
@@ -244,6 +236,7 @@ export async function crearEvidencia(input, archivos, actor, requestId) {
   exigirSemana(input.numeroSemana, plan.bimestre);
   exigirEdicionPermitida({ bimestre: plan.bimestre, actor, motivo: input.motivo });
   exigirCupo(archivos.length);
+  resolverPublicacion(input, plan.bimestre);
   const preparados = prepararArchivos(archivos);
   const creada = await conArchivosEnDisco(preparados, actor, (registros) =>
     planes.transaction(async (db) => {
@@ -261,10 +254,7 @@ export async function crearEvidencia(input, archivos, actor, requestId) {
           titulo: input.titulo,
           descripcion: input.descripcion ?? null,
           enlaces: input.enlaces,
-          ...(input.realizada && {
-            estado: 'REALIZADA',
-            fechaRealizacion: new Date(`${hoyEnLima()}T00:00:00.000Z`),
-          }),
+          publicadaDesde: resolverPublicacion(input, actual.bimestre),
           creadoPorId: actor.id,
           modificadoPorId: actor.id,
           archivos: registros,
@@ -311,9 +301,9 @@ async function cambiarEnTransaccion(id, { actor, motivo, requestId, evento }, op
 }
 
 export async function modificarEvidencia(id, input, archivos, actor, requestId) {
-  const { motivo, estado, ...cambios } = input;
+  const { motivo, publicacion, publicadaDesde, ...cambios } = input;
   const hayCambios = Object.values(cambios).some((valor) => valor !== undefined);
-  if (!hayCambios && !estado && !archivos.length)
+  if (!hayCambios && !publicacion && !archivos.length)
     fail(400, 'VALIDATION_ERROR', 'Indica al menos un dato para actualizar.');
   const encontrada = await exigirEvidencia(id);
   await exigirGestionPlan(encontrada.plan, actor);
@@ -326,6 +316,7 @@ export async function modificarEvidencia(id, input, archivos, actor, requestId) 
   });
   if (cambios.numeroSemana) exigirSemana(cambios.numeroSemana, encontrada.plan.bimestre);
   exigirCupo(encontrada._count.archivos + archivos.length);
+  resolverPublicacion({ publicacion, publicadaDesde }, encontrada.plan.bimestre);
   const preparados = prepararArchivos(archivos);
   return conArchivosEnDisco(preparados, actor, (registros) =>
     repository.transaction((db) =>
@@ -335,7 +326,10 @@ export async function modificarEvidencia(id, input, archivos, actor, requestId) 
         async (anterior, db) => {
           if (cambios.numeroSemana) exigirSemana(cambios.numeroSemana, anterior.plan.bimestre);
           exigirCupo(anterior._count.archivos + registros.length);
-          const pasaARealizada = estado === 'REALIZADA' && anterior.estado !== 'REALIZADA';
+          const publicada = resolverPublicacion(
+            { publicacion, publicadaDesde },
+            anterior.plan.bimestre,
+          );
           if (registros.length)
             await repository.createArchivos(
               registros.map((registro) => ({ ...registro, evidenciaId: id })),
@@ -347,15 +341,12 @@ export async function modificarEvidencia(id, input, archivos, actor, requestId) 
               ...Object.fromEntries(
                 Object.entries(cambios).filter(([, valor]) => valor !== undefined),
               ),
-              ...(pasaARealizada && {
-                estado: 'REALIZADA',
-                fechaRealizacion: new Date(`${hoyEnLima()}T00:00:00.000Z`),
-              }),
+              ...(publicada !== undefined && { publicadaDesde: publicada }),
               modificadoPorId: actor.id,
             },
             db,
           );
-          return pasaARealizada ? 'EVIDENCIA_PEDAGOGICA_REALIZADA' : undefined;
+          return eventoDePublicacion(anterior.publicadaDesde, publicada);
         },
         db,
       ),
@@ -370,8 +361,8 @@ export async function revisarEvidencia(id, input, actor, requestId) {
     await repository.bloquearEvidencia(id, db);
     const anterior = await exigirEvidencia(id, db);
     exigirActiva(anterior);
-    if (anterior.estado !== 'REALIZADA')
-      fail(409, 'EVIDENCE_NOT_DONE', 'Solo se revisan actividades realizadas.');
+    if (estadoPublicacion(anterior.publicadaDesde) !== 'PUBLICADA')
+      fail(409, 'EVIDENCE_NOT_PUBLISHED', 'Solo se revisan actividades publicadas.');
     await repository.updateEvidencia(
       id,
       {
@@ -431,14 +422,9 @@ export async function descargarArchivo(id, archivoId, actor) {
   await exigirConsulta(evidencia, actor);
   const archivo = evidencia.archivos.find((item) => item.id === archivoId);
   if (!archivo) fail(404, 'FILE_NOT_FOUND', 'El archivo no existe o ya fue retirado.');
-  const contenido = await almacen.leerArchivo(archivo.nombreAlmacenado);
-  if (!contenido) {
-    logger.error('Falta en disco un archivo de actividad', {
-      module: 'evidencias-pedagogicas',
-      evidenciaId: id,
-      archivoId,
-    });
-    fail(404, 'FILE_NOT_FOUND', 'El archivo no está disponible.');
-  }
-  return { contenido, nombre: archivo.nombreOriginal, tipoMime: archivo.tipoMime };
+  return leerArchivoRegistrado(archivo, {
+    module: 'evidencias-pedagogicas',
+    evidenciaId: id,
+    archivoId,
+  });
 }

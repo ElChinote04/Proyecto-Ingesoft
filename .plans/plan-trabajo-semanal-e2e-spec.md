@@ -199,3 +199,13 @@ paso para probar en pantalla.
 5. Seed de demo.
 6. Frontend: docente, administrador, alumno/apoderado.
 7. Documentación y recorrido en el navegador.
+
+## Cambio posterior: subida y publicada (2026-11-20)
+
+Decidido con el equipo tras probar el flujo. PLANIFICADA/REALIZADA se reemplaza por la
+visibilidad para los alumnos, derivada de publicadaDesde al consultar: null es subida (solo la
+ve el docente), una fecha futura es programada y hoy o antes es publicada. El docente sube con
+anticipación, publica a mano o programa una fecha (entre hoy y el fin del bimestre) y puede
+ocultar lo publicado salvo que esté validado. La coordinación solo revisa lo publicado, y
+ocultar conserva la revisión. Migración 20261121120000_publicacion_evidencias_pedagogicas: lo
+que estaba realizado queda publicado desde su fecha de realización.

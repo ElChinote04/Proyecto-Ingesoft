@@ -4,6 +4,7 @@ import request from 'supertest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
+import { NOTA_DE, crearCalificador, fecharBimestres } from './support/notas.js';
 
 const base = '/api/v1';
 const clave = 'ClaveSegura123!';
@@ -20,12 +21,13 @@ const adminYApoderado = request.agent(app);
 const docenteYApoderado = request.agent(app);
 
 const regla = (estrategia, extras) => JSON.stringify({ estrategia, ...extras });
-// Niveles de los cuatro bimestres. Cada curso prueba una estrategia distinta de su regla.
+// Niveles de los cuatro bimestres. Cada curso prueba una estrategia distinta de su regla. El
+// docente registra notas 0–20 y el servidor las convierte: NOTA_DE da la nota de cada letra.
 const CURSOS = [
   {
     codigo: '10-COM',
     nombre: 'Comunicación',
-    metodo: regla('reciente', { minimoEvidencias: 1 }),
+    metodo: regla('reciente', { minimoNotas: 1 }),
     competencias: {
       'COM-1': ['AD', 'B', 'B', 'A'],
       'COM-2': ['A', 'A', 'AD', 'B'],
@@ -34,7 +36,7 @@ const CURSOS = [
   {
     codigo: '2-PS',
     nombre: 'Personal Social',
-    metodo: regla('frecuencia', { desempate: 'alto', minimoEvidencias: 1 }),
+    metodo: regla('frecuencia', { desempate: 'alto', minimoNotas: 1 }),
     competencias: {
       'PS-2': ['A', 'A', 'A', 'AD'],
       'PS-1': ['B', 'A', 'B', 'B'],
@@ -43,7 +45,9 @@ const CURSOS = [
   {
     codigo: '5-MAT',
     nombre: 'Matemática',
-    metodo: regla('prioridad', { minimoEvidencias: 5 }),
+    // Pide dos notas por bimestre para publicar; la nota anual no aplica ese mínimo.
+    metodo: regla('prioridad', { minimoNotas: 2 }),
+    notasPorBimestre: 2,
     competencias: {
       'MAT-1': ['C', 'B', 'A', 'B'],
       'MAT-2': ['C', 'C', 'B', 'C'],
@@ -52,7 +56,7 @@ const CURSOS = [
   {
     codigo: '99-TR',
     nombre: 'Competencias transversales',
-    metodo: regla('frecuencia', { desempate: 'reciente', minimoEvidencias: 1 }),
+    metodo: regla('frecuencia', { desempate: 'reciente', minimoNotas: 1 }),
     competencias: {
       'TR-1': ['A', 'A', 'A', 'A'],
       'TR-2': ['B', 'B', 'B', 'B'],
@@ -121,35 +125,31 @@ const competenciaDe = (libreta, codigo) =>
     .flatMap((area) => area.competencias)
     .find((competencia) => competencia.codigo === codigo);
 
+const notas = crearCalificador(docente);
+
 async function calificarBimestre(indice) {
-  const calificaciones = CURSOS.flatMap((curso) =>
-    Object.entries(curso.competencias).map(([codigo, niveles]) => ({
-      competenciaId: competencias[codigo].id,
-      nivelLogro: niveles[indice],
-    })),
-  );
-  await docente
-    .put(`${base}/matriculas/${matricula.id}/calificaciones`)
-    .send({ bimestreId: bimestres[indice].id, calificaciones })
-    .expect(200);
+  for (const curso of CURSOS)
+    for (const [codigo, niveles] of Object.entries(curso.competencias))
+      for (let vez = 0; vez < (curso.notasPorBimestre ?? 1); vez += 1) {
+        const evaluacionId = await notas.evaluacion({
+          seccionId: seccionA.id,
+          cursoId: cursos[curso.codigo].id,
+          competenciaId: competencias[codigo].id,
+          bimestre: bimestres[indice],
+          nueva: true,
+        });
+        await notas
+          .registrar(evaluacionId, matricula.id, { nota: NOTA_DE[niveles[indice]] })
+          .expect(200);
+      }
 }
 
-async function publicarBimestre(indice) {
-  const bimestreId = bimestres[indice].id;
-  const ficha = await docente
-    .get(`${base}/matriculas/${matricula.id}/calificaciones?bimestreId=${bimestreId}`)
-    .expect(200);
-  for (const curso of ficha.body.data.cursos)
-    for (const { calificacionCompetenciaId } of curso.competencias)
-      await docente
-        .post(`${base}/calificaciones-competencias/${calificacionCompetenciaId}/evidencias`)
-        .field('titulo', 'Evidencia')
-        .field('descripcion', 'Sustento de la nota')
-        .expect(201);
-  await admin
-    .post(`${base}/calificaciones/bimestres/${bimestreId}/secciones/${seccionA.id}/publicacion`)
+const publicarBimestre = (indice) =>
+  admin
+    .post(
+      `${base}/calificaciones/bimestres/${bimestres[indice].id}/secciones/${seccionA.id}/publicacion`,
+    )
     .expect(201);
-}
 
 before(async () => {
   await request(app)
@@ -233,10 +233,7 @@ before(async () => {
   await vincular(cuentaAdmin.apoderadoId, cuentaAlumno.estudianteId);
   await vincular(cuentaDocenteApoderado.apoderadoId, cuentaAlumno.estudianteId);
 
-  bimestres = await prisma.bimestreAcademico.findMany({
-    where: { anioAcademicoId: anio.id },
-    orderBy: { numero: 'asc' },
-  });
+  bimestres = await fecharBimestres(anio.id);
   await calificarBimestre(0);
   await calificarBimestre(1);
   await publicarBimestre(0);
@@ -351,7 +348,7 @@ test('LIB-13 con todos publicados, la nota anual sigue la estrategia de la regla
   assert.equal(anual('MAT-1'), 'A');
 });
 
-test('LIB-14 un mínimo mayor a 4 no impide la nota anual', async () => {
+test('LIB-14 el mínimo de notas del bimestre no se aplica a la nota anual', async () => {
   const libreta = await consultar(alumno);
   assert.equal(competenciaDe(libreta, 'MAT-2').calificacionAnual, 'B');
 });
@@ -362,7 +359,7 @@ test('LIB-15 cambiar la regla después de publicar no altera la nota anual', asy
     cursoId: cursos['2-PS'].id,
     nombre: 'Regla nueva',
     version: 2,
-    metodo: regla('prioridad', { minimoEvidencias: 1 }),
+    metodo: regla('prioridad', { minimoNotas: 1 }),
   });
   assert.equal(competenciaDe(await consultar(alumno), 'PS-1').calificacionAnual, 'B');
 });

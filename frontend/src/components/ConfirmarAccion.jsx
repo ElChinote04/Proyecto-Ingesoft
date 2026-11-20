@@ -22,10 +22,11 @@ export default function ConfirmarAccion({ titulo, children, confirmar, onConfirm
       <p>{children}</p>
       {error && <Feedback>{error}</Feedback>}
       <div className="actions">
-        <button className="secondary" disabled={ocupado} onClick={onClose}>
+        <button type="button" className="secondary" disabled={ocupado} onClick={onClose}>
           Cancelar
         </button>
         <button
+          type="button"
           className="destructive"
           disabled={ocupado}
           onClick={async () => {

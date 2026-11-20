@@ -97,38 +97,6 @@ export const updateCompetenciaSchema = z
   .object({ descripcion: text('la descripción de la competencia', 500) })
   .strict();
 
-const logro = z.enum(['AD', 'A', 'B', 'C']);
-const calificacionCompetenciaInput = z
-  .object({ competenciaId: id, nivelLogro: logro, conclusionDescriptiva: z.string().trim().max(500).optional() })
-  .strict();
-
-export const createCalificacionSchema = z
-  .object({
-    matriculaId: id,
-    bimestreId: id,
-    asignacionId: id,
-    reglaId: id,
-    conclusionDescriptiva: z.string().trim().max(500).optional(),
-    competencias: z.array(calificacionCompetenciaInput).min(1, 'Registra al menos una competencia.'),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    const ids = value.competencias.map(({ competenciaId }) => competenciaId);
-    if (new Set(ids).size !== ids.length)
-      context.addIssue({ code: 'custom', path: ['competencias'], message: 'No repitas competencias.' });
-  });
-
-export const updateCalificacionSchema = z
-  .object({
-    conclusionDescriptiva: z.string().trim().max(500).optional(),
-    competencias: z.array(calificacionCompetenciaInput).min(1).optional(),
-    motivo: motivoCorreccion.optional(),
-  })
-  .strict()
-  .refine((value) => value.conclusionDescriptiva !== undefined || value.competencias !== undefined, {
-    message: 'Indica al menos un dato para actualizar.',
-  });
-
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa una fecha válida YYYY-MM-DD.');
 export const createReglaConsolidacionSchema = z
   .object({
@@ -144,12 +112,6 @@ export const updateReglaConsolidacionSchema = z
   .object({ version: z.number().int().positive(), metodo: text('el método de consolidación', 100) })
   .strict();
 
-export const createCalificacionCompetenciaSchema = z
-  .object({ calificacionId: id, competenciaId: id, nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional() })
-  .strict();
-export const updateCalificacionCompetenciaSchema = z
-  .object({ nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional(), motivo: motivoCorreccion.optional() })
-  .strict();
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Usa una hora válida HH:mm.');
 export const blockSchema = z
   .object({

@@ -3,6 +3,89 @@ import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { pathToFileURL } from 'node:url';
+import { guardarArchivos } from '../src/integrations/almacenEvidencias.js';
+import { recalcularLogro } from '../src/services/logros.service.js';
+
+const EXAMEN_DEMO = Buffer.from('%PDF-1.4\n%Examen corregido de demostración\n');
+
+// Evaluaciones de demo del IV bimestre de Matemática en 3.° B. Cada fila es un alumno, en el
+// orden de la lista de alumnos: una nota, NO_RINDIO, JUSTIFICADA o null (pendiente).
+const EVALUACIONES_DEMO = [
+  ['MAT-03-C1', 'Práctica calificada 1', '2026-10-16', 1, [15, 18, 'NO_RINDIO', 'JUSTIFICADA', 12]],
+  ['MAT-03-C1', 'Examen parcial', '2026-11-06', 2, [16.5, 19, 11, null, null]],
+  ['MAT-03-C2', 'Práctica calificada 1', '2026-10-23', 1, [13, 17, 9, 14, 10.5]],
+  ['MAT-03-C2', 'Trabajo en equipo', '2026-11-13', 1, [14, 18, 12, 15, 11]],
+];
+
+/**
+ * Registra los resultados de demo y calcula sus letras con el mismo servicio que la API. Los
+ * exámenes se escriben en disco antes; si el seed falla después, quedan archivos sin fila,
+ * aceptable en datos de demostración.
+ */
+async function sembrarEvaluaciones(tx, { clase, asignacion, competencias, estudiantes, usuario }) {
+  const escala = await tx.escalaCalificacion.findFirst({ where: { vigenteHasta: null } });
+  const notas = EVALUACIONES_DEMO.flatMap(([, , , , resultados]) =>
+    resultados.filter((valor) => typeof valor === 'number'),
+  );
+  const archivos = await guardarArchivos(notas.map(() => EXAMEN_DEMO));
+  for (const [codigo, titulo, fecha, peso, resultados] of EVALUACIONES_DEMO) {
+    const evaluacion = await tx.evaluacion.create({
+      data: {
+        ...clase,
+        asignacionId: asignacion.id,
+        competenciaId: competencias[codigo].id,
+        titulo,
+        fecha: new Date(`${fecha}T00:00:00Z`),
+        peso,
+        creadoPorId: usuario.id,
+        modificadoPorId: usuario.id,
+      },
+    });
+    for (const [indice, valor] of resultados.entries()) {
+      if (valor === null) continue;
+      const calificada = typeof valor === 'number';
+      const matricula = await tx.matricula.findFirst({
+        where: { estudianteId: estudiantes[indice].id, seccionId: clase.seccionId },
+      });
+      await tx.resultadoEvaluacion.create({
+        data: {
+          evaluacionId: evaluacion.id,
+          matriculaId: matricula.id,
+          condicion: calificada ? 'CALIFICADA' : valor,
+          nota: calificada ? valor.toFixed(2) : null,
+          motivo: valor === 'JUSTIFICADA' ? 'Certificado médico presentado por la familia.' : null,
+          creadoPorId: usuario.id,
+          modificadoPorId: usuario.id,
+          ...(calificada && {
+            archivos: {
+              create: {
+                nombreOriginal: `${titulo} - ${estudiantes[indice].codigoEstudiante}.pdf`,
+                nombreAlmacenado: archivos.shift(),
+                tipoMime: 'application/pdf',
+                tamanoBytes: EXAMEN_DEMO.length,
+                creadoPorId: usuario.id,
+              },
+            },
+          }),
+        },
+      });
+      await recalcularLogro(
+        {
+          matriculaId: matricula.id,
+          bimestreId: clase.bimestreId,
+          cursoId: clase.cursoId,
+          seccionId: clase.seccionId,
+          competenciaId: competencias[codigo].id,
+          asignacionId: asignacion.id,
+        },
+        escala,
+        usuario,
+        tx,
+      );
+    }
+  }
+}
+
 export async function seed(db) {
   if (process.env.NODE_ENV === 'production')
     throw new Error('El seed demo no se ejecuta en producción.');
@@ -185,7 +268,7 @@ export async function seed(db) {
         );
       }
 
-      // Plan de trabajo de demo del IV bimestre, con actividades en varias semanas.
+      // Plan de trabajo de demo del IV bimestre: actividades publicadas, una subida y una programada.
       const cuartoBimestre = bimestres[3];
       const clase = { cursoId: curso.id, seccionId: seccion.id, bimestreId: cuartoBimestre.id };
       const plan =
@@ -225,9 +308,12 @@ export async function seed(db) {
             'Avance del plan y ajustes.',
             '2026-11-18',
           ],
+          // Subida con anticipación, todavía oculta para los alumnos.
           [7, 'EJERCICIO', 'Problemas con decimales', 'Práctica guiada en clase.', null],
+          // Programada: los alumnos la verán desde el inicio de la semana 9.
+          [9, 'EXPOSICION', 'Exposiciones sobre decimales', 'Grupos de tres.', '2026-12-07'],
         ];
-        for (const [numeroSemana, tipo, titulo, descripcion, realizada] of actividades)
+        for (const [numeroSemana, tipo, titulo, descripcion, publicadaDesde] of actividades)
           await tx.evidenciaPedagogica.create({
             data: {
               planId: plan.id,
@@ -236,15 +322,52 @@ export async function seed(db) {
               titulo,
               descripcion,
               enlaces: tipo === 'VIDEO' ? ['https://www.youtube.com/watch?v=demo-fracciones'] : [],
-              ...(realizada && {
-                estado: 'REALIZADA',
-                fechaRealizacion: new Date(`${realizada}T00:00:00Z`),
-              }),
+              publicadaDesde: publicadaDesde && new Date(`${publicadaDesde}T00:00:00Z`),
               creadoPorId: user.id,
               modificadoPorId: user.id,
             },
           });
       }
+
+      // Competencias, regla y evaluaciones de Matemática: la letra del bimestre sale de las notas.
+      const competencias = {};
+      for (const [codigo, nombre] of [
+        ['MAT-03-C1', 'Resuelve problemas de cantidad'],
+        ['MAT-03-C2', 'Resuelve problemas de regularidad y cambio'],
+      ])
+        competencias[codigo] = await tx.competencia.upsert({
+          where: { codigo },
+          update: {},
+          create: { cursoId: curso.id, codigo, nombre, descripcion: nombre },
+        });
+      if (
+        !(await tx.reglaConsolidacion.findFirst({
+          where: { gradoId: grado.id, cursoId: curso.id },
+        }))
+      )
+        await tx.reglaConsolidacion.create({
+          data: {
+            gradoId: grado.id,
+            cursoId: curso.id,
+            nombre: 'Matemática 3.°',
+            version: 1,
+            metodo: JSON.stringify({
+              estrategia: 'frecuencia',
+              desempate: 'reciente',
+              minimoNotas: 2,
+            }),
+            creadoPorId: user.id,
+            modificadoPorId: user.id,
+          },
+        });
+      if (!(await tx.evaluacion.count({ where: clase })))
+        await sembrarEvaluaciones(tx, {
+          clase,
+          asignacion,
+          competencias,
+          estudiantes,
+          usuario: user,
+        });
       return { roles: 4, alumnos: 5, sesionId: sesion.id, docente: 'Ana Torres', planId: plan.id };
     },
     { timeout: 15000 },

@@ -22,8 +22,7 @@ const evidencia = {
   tipo: true,
   titulo: true,
   descripcion: true,
-  estado: true,
-  fechaRealizacion: true,
+  publicadaDesde: true,
   enlaces: true,
   estadoRevision: true,
   observacionesRevision: true,
@@ -56,6 +55,13 @@ export const listEvidencias = (where, db = prisma) =>
     select: evidencia,
     orderBy: [{ numeroSemana: 'asc' }, { creadoEn: 'asc' }, { id: 'asc' }],
   });
+
+// Lo que ve la familia: publicado hasta hoy y no observado por la coordinación.
+export const listEvidenciasPublicadas = ({ planId, hasta }, db = prisma) =>
+  listEvidencias(
+    { planId, publicadaDesde: { lte: hasta }, estadoRevision: { not: 'OBSERVADA' } },
+    db,
+  );
 
 export const createEvidencia = ({ archivos, ...datos }, db) =>
   db.evidenciaPedagogica.create({

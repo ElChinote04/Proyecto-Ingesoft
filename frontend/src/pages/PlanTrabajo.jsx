@@ -44,18 +44,18 @@ function CrearPlan({ asignacion, bimestre, onCreado, onClose }) {
   return (
     <dialog
       ref={dialogo}
-      className="confirmation-dialog"
+      className="confirmation-dialog plan-crear-dialog"
       aria-labelledby="crear-plan-titulo"
       onCancel={(evento) => {
         evento.preventDefault();
         if (!guardando) onClose();
       }}
     >
-      <form onSubmit={crear} noValidate className="stack">
-        <h2 id="crear-plan-titulo">Crear plan de trabajo</h2>
-        <p className="muted">
-          {asignacion.curso.nombre} · {nombreSeccion(asignacion.seccion)} · {bimestre.nombre}
-        </p>
+      <h2 id="crear-plan-titulo">Crear plan de trabajo</h2>
+      <p className="muted">
+        {asignacion.curso.nombre} · {nombreSeccion(asignacion.seccion)} · {bimestre.nombre}
+      </p>
+      <form onSubmit={crear} noValidate className="plan-crear">
         {fallo && <Feedback title={fallo.message} />}
         <label className="field">
           <span>Título *</span>
