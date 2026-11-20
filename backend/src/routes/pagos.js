@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validate, idSchema } from '../validators/schemas.js';
 import * as schemas from '../validators/pagos.schemas.js';
@@ -6,6 +7,7 @@ import * as controller from '../controllers/pagos.controller.js';
 import * as cobranza from '../controllers/cobranza.controller.js';
 import * as cobranzaSchemas from '../validators/cobranza.schemas.js';
 import { env } from '../config/env.js';
+import { AppError } from '../errors/AppError.js';
 
 export const pagosRouter = Router();
 
@@ -38,6 +40,32 @@ pagosRouter.get(
   requireAuth,
   validate(idSchema, 'params'),
   controller.descargarComprobante,
+);
+
+// US-009 — reenviar ese comprobante por correo. Se limita por usuario para que
+// el servidor de correo no pueda usarse para enviar en masa.
+const limiteCorreos = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  keyGenerator: (req) => `usuario-${req.user.id}`,
+  handler: (_req, _res, next) =>
+    next(
+      new AppError(
+        429,
+        'DEMASIADOS_CORREOS',
+        'Enviaste demasiados correos seguidos. Espera unos minutos antes de volver a intentar.',
+      ),
+    ),
+});
+pagosRouter.post(
+  '/compromisos-pago/:id/comprobante/envio',
+  requireAuth,
+  validate(idSchema, 'params'),
+  validate(schemas.envioComprobanteSchema),
+  limiteCorreos,
+  controller.enviarComprobante,
 );
 
 // US-010 — pago fraccionado de una boleta pendiente.

@@ -1,5 +1,20 @@
 # Registro de cambios
 
+## Reenvío del comprobante por correo (US-009) — 2026-11-20
+
+- Completa el criterio «se puede descargar o reenviar por correo» de US-009.
+  `POST /compromisos-pago/:id/comprobante/envio` con `{ correo }` envía el PDF del comprobante como
+  adjunto. Mismos permisos y errores que la descarga; 502 `CORREO_NO_ENVIADO` si el servidor de
+  correo falla (se puede reintentar) y como máximo 10 envíos cada 15 minutos por usuario (429).
+- Botón **Enviar por correo** junto a **Descargar comprobante** en Pagos y boletas y en la pantalla
+  de resultado del pago. El último correo usado se recuerda en el navegador.
+- Nueva integración `integrations/correo.js` con dos proveedores, como la pasarela: `simulado` (por
+  defecto, no sale a la red) y `smtp`. Nuevas variables `CORREO_PROVEEDOR`, `CORREO_REMITENTE` y
+  `SMTP_*` en `.env.example`. Nueva dependencia `nodemailer`.
+- 5 pruebas nuevas en `tests/pagos.test.js`.
+- `docs/API.md`: se documentan todos los endpoints de pagos que faltaban (US-006, US-007A, US-007B,
+  US-009 y US-010).
+
 ## Evaluaciones con nota 0–20 y letra calculada — 2026-11-22
 
 - El docente ya no elige la letra: crea las **evaluaciones del bimestre** del salón (competencia,

@@ -323,7 +323,7 @@ GET `/admin/estudiantes` devuelve estudiantes con identidad, código y sus matr�
 
 POST `/admin/estudiantes`: `{ numeroDocumento, nombres, apellidos }`. Devuelve perfil Estudiante con id/personaId/codigoEstudiante. No crea credenciales. Reutiliza una Persona coincidente; perfil repetido: 409 STUDENT_EXISTS; documento de otra identidad: 409 PERSON_MISMATCH.
 
-POST `/admin/matriculas`: `{ estudianteId, seccionId }`. Devuelve matrícula activa; el servidor deriva anioAcademicoId de Seccion. No acepta el año enviado por el cliente. Requiere estudiante/persona activos y sección existente. Una matrícula por estudiante/año, incluso si se elige otra sección: 409 DUPLICATE_ENROLLMENT. Una matrícula nueva incorpora al alumno al padrón de esa sección.
+POST `/admin/matriculas`: `{ estudianteId, seccionId }`. Devuelve matrícula activa; el servidor deriva anioAcademicoId de Seccion. No acepta el año enviado por el cliente. Requiere estudiante/persona activos y sección existente. Una matrícula por estudiante/año, incluso si se elige otra sección: 409 DUPLICATE_ENROLLMENT. Una matrícula nueva incorpora al alumno al padrón de esa sección. Acepta además `planPago` opcional para emitir el compromiso de pago en la misma transacción (ver `POST /matriculas/:id/plan-pago`).
 
 ### Horarios, asignaciones y sesiones
 
@@ -576,7 +576,96 @@ deja de aparecer en horarios personales. Es posible crear después el mismo inte
 en un bloque nuevo. No se borra físicamente. Un año inactivo responde 409 INACTIVE_YEAR
 al crear/editar/retirar bloques o crear sesiones. Un bloque retirado no permite nuevas sesiones.
 
-## Cobranza y anulación de pagos
+## Pagos
+
+Montos siempre como texto con dos decimales (`"350.00"`), en soles. Estados de una boleta:
+`PENDIENTE`, `MOROSA` (no se guarda: es una PENDIENTE vencida antes de hoy), `PARCIAL` (fraccionada
+en cuotas, US-010), `PAGADA` y `ANULADA`. Estados de un pago: `INICIADO`, `PROCESANDO`,
+`CONFIRMADO`, `RECHAZADO`, `CANCELADO` y `ANULADO`. La pasarela se elige con `PAGOS_PROVEEDOR`
+(`simulada` en desarrollo y pruebas, `stripe` en producción).
+
+### POST /matriculas/:id/plan-pago (US-006)
+
+Solo administrador. Emite el compromiso de pago de una matrícula ya registrada. Cuerpo
+`{ montoPension, numeroCuotas (1–12), diaVencimiento (1–28), mesInicio (1–12), concepto? }`
+(`concepto` por defecto `"Pensión"`). Responde 201 con `{ id, matriculaId, montoPension,
+numeroCuotas, diaVencimiento, boletas[] }`: una boleta por cuota, que vence el `diaVencimiento` de
+cada mes desde `mesInicio`. 404 si la matrícula no existe, 409 `MATRICULA_INACTIVA` y 409
+`PLAN_DUPLICADO` si ya tiene compromiso. También puede emitirse al matricular, enviando el mismo
+objeto en `planPago` dentro de `POST /admin/matriculas`; ahí se crea en la misma transacción y la
+respuesta trae `detail: { planPagoId, cuotasEmitidas }`.
+
+### GET /compromisos-pago (US-007A)
+
+Historial de boletas. Query opcional: `estudianteId`, `estado`, `pagina` (1), `limite` (20, máx.
+100). El apoderado solo ve las de sus estudiantes vinculados (403 si pide un `estudianteId` ajeno
+o si no es apoderado de nadie; lista vacía si aún no tiene boletas); el administrador ve todas.
+Responde `{ boletas[], total, pagina, limite }`, donde cada boleta trae `{ id, numeroCuota,
+concepto, periodo, monto, fechaVencimiento, estado, pagadaEn, comprobante, boletaOrigenId,
+numeroFraccion, totalFracciones, montoPagado, pagoEnCursoId, estudiante: { id, nombres, apellidos
+}, anioAcademico }`. `comprobante` es el número vigente (`B001-00000012`) o `null`.
+`pagoEnCursoId` solo aparece para quien puede abrir ese pago; el administrador recibe además
+`pagoConfirmadoId` (ver US-013).
+
+### POST /pagos (US-007B)
+
+Solo el apoderado a cargo del estudiante. Cuerpo `{ "compromisoPagoId": 15 }`: el monto y el
+estudiante los resuelve el servidor. Crea el pago y la sesión en la pasarela y responde 201 con
+`{ pagoId, estado: "PROCESANDO", monto, urlCheckout }`; el frontend redirige a `urlCheckout`
+(Stripe Checkout, que también resuelve la verificación 3-D Secure). Errores: 403 boleta ajena, 409
+`BOLETA_YA_PAGADA`, `BOLETA_ANULADA`, `BOLETA_FRACCIONADA` (hay que pagar sus cuotas) y
+`PAGO_EN_CURSO` (ya hay un intento abierto para esa boleta). La boleta **no** cambia aquí: solo
+pasa a PAGADA cuando la pasarela lo confirma.
+
+### POST /pagos/notificaciones (US-007B)
+
+Webhook de la pasarela. No usa sesión: se valida la firma (`stripe-signature`, o `x-sage-firma`
+con la pasarela simulada) y responde 401 `FIRMA_INVALIDA` si no coincide. No confía en el cuerpo:
+consulta el estado real al proveedor. Al confirmar, en una sola transacción, el pago pasa a
+CONFIRMADO, la boleta a PAGADA con `pagadaEn` y se emite su comprobante. Responde siempre 200
+`{ recibido: true, aplicado, ... }`, también ante un reenvío repetido, que no tiene efecto. En
+producción debe registrarse en el dashboard de Stripe apuntando a esta ruta.
+
+### GET /pagos/:id y DELETE /pagos/:id (US-007B)
+
+`GET` lo usa la pantalla de resultado mientras espera la confirmación: `{ id, estado, monto,
+referencia, confirmadoEn, motivoRechazo, boleta }`. `DELETE` cancela un intento abandonado en la
+pasarela para poder volver a pagar la boleta: responde `{ id, estado: "CANCELADO" }`, o
+`yaCerrado: true` si ya estaba cerrado, y 409 `PAGO_CONFIRMADO` si la pasarela alcanzó a
+cobrarlo. Ambos solo para quien inició el pago o el administrador (403 en otro caso). En
+desarrollo con la pasarela simulada existe además `POST /pagos/:id/simular` con `{ resultado:
+"PAGADO" | "RECHAZADO" | "EXPIRADO" | "PENDIENTE" }`; no se registra en producción.
+
+### GET /compromisos-pago/:id/comprobante (US-009)
+
+Descarga el comprobante vigente en PDF (`Content-Type: application/pdf`, `Content-Disposition:
+attachment; filename="comprobante-B001-00000012.pdf"`) con los datos del alumno, concepto, monto y
+fecha del pago. Solo el apoderado a cargo del estudiante o el administrador (403 en otro caso).
+409 `BOLETA_NO_PAGADA` si la boleta aún no está pagada y 409 `BOLETA_FRACCIONADA` si se pagó en
+cuotas (cada cuota tiene su propio comprobante).
+
+### POST /compromisos-pago/:id/comprobante/envio (US-009)
+
+Reenvía ese mismo PDF como adjunto a un correo. Cuerpo `{ "correo": "familia@correo.pe" }`; se
+guarda en minúsculas y sin espacios, y un correo inválido o un campo extra responde 400. Mismos
+permisos y errores que la descarga (403, 404, 409 `BOLETA_NO_PAGADA` / `BOLETA_FRACCIONADA`).
+Responde 200 con `{ comprobante, enviadoA, enviadoEn }`. Si el servidor de correo falla responde
+502 `CORREO_NO_ENVIADO` sin cambiar nada, y se puede reintentar. Límite de 10 envíos cada 15
+minutos por usuario (429 `DEMASIADOS_CORREOS`). El destino lo escribe quien lo pide porque SAGE no
+guarda correos de contacto. El envío se configura con `CORREO_PROVEEDOR`: `simulado` (por
+defecto; no sale a la red y solo deja `CORREO_SIMULADO` en el log) o `smtp` con `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_SECURE`, `SMTP_USUARIO`, `SMTP_CLAVE` y `CORREO_REMITENTE`.
+
+### POST /compromisos-pago/:id/fracciones (US-010)
+
+Solo administrador. Divide una boleta PENDIENTE en cuotas: cuerpo `{ numeroCuotas (2–6),
+montoCuota, fechaPrimerVencimiento: "YYYY-MM-DD" }`. Las cuotas vencen una por mes y la última se
+ajusta para que la suma sea exactamente el total; 400 `FRACCIONES_EXCEDEN_TOTAL` o
+`FRACCIONES_NO_CUBREN_TOTAL` si no cuadra. Responde 201 con `{ id, estado: "PARCIAL", montoTotal,
+fracciones[{ id, numeroFraccion, monto, fechaVencimiento }] }`. Cada cuota es una boleta hija que
+se paga por `POST /pagos` y tiene su propio comprobante; la original queda PARCIAL (no se puede
+pagar entera) y pasa a PAGADA cuando se paga la última cuota. 409 `BOLETA_NO_PENDIENTE`,
+`BOLETA_ES_FRACCION` (ya es una cuota) y `PAGO_EN_CURSO`. Se audita como `BOLETA_FRACCIONADA`.
 
 ### GET /reportes/pagos/morosidad (US-008)
 
