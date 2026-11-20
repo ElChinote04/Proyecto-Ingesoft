@@ -1,10 +1,14 @@
 import { before, after, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
+import { logDirectory } from '../src/logging/logger.js';
 import { registrarTransaccionCritica } from '../src/services/auditoria.service.js';
+import { crearCalificador } from './support/notas.js';
 
 const base = '/api/v1';
 const clave = 'ClaveSegura123!';
@@ -202,7 +206,8 @@ test('AUD-07 cada operación de un pago queda registrada con usuario, fecha y de
   assert.equal(confirmado.detalle.monto, '350.00');
 });
 
-// De punta a punta: se usan las rutas reales del módulo de Gestión Académica.
+// De punta a punta: se usan las rutas reales del módulo de Gestión Académica. La letra ya no se
+// escribe a mano: lo que cambia es la nota 0–20 de una evaluación y, con ella, la letra.
 test('AUD-08 un cambio de nota queda registrado con usuario, fecha, valor anterior y nuevo', async () => {
   const curso = await alta('admin/catalogos/cursos', { codigo: 'MAT', nombre: 'Matemática' });
   const aula = await alta('admin/catalogos/aulas', { codigo: 'A101' });
@@ -211,13 +216,6 @@ test('AUD-08 un cambio de nota queda registrado con usuario, fecha, valor anteri
     codigo: 'C1',
     nombre: 'Resuelve problemas de cantidad',
     descripcion: 'Competencia de prueba para la auditoría',
-  });
-  const regla = await alta('reglas-consolidacion', {
-    gradoId: grado.id,
-    cursoId: curso.id,
-    nombre: 'Regla de prueba',
-    version: 1,
-    metodo: 'PROMEDIO',
   });
   await alta('admin/bloques', {
     cursoId: curso.id,
@@ -237,42 +235,44 @@ test('AUD-08 un cambio de nota queda registrado con usuario, fecha, valor anteri
     estudianteId: alumno.id,
     seccionId: seccion.id,
   });
-  const asignacion = await prisma.cursoSeccionDocente.findFirst({
-    where: { cursoId: curso.id, seccionId: seccion.id },
-  });
-  const bimestre = await prisma.bimestreAcademico.findFirst({
-    where: { anioAcademicoId: anio.id, numero: 1 },
+  // Solo el primero: AUD-10 necesita otro bimestre sin fechas.
+  const bimestre = await prisma.bimestreAcademico.update({
+    where: { anioAcademicoId_numero: { anioAcademicoId: anio.id, numero: 1 } },
+    data: {
+      fechaInicio: new Date('2026-03-02T00:00:00Z'),
+      fechaFin: new Date('2026-05-08T00:00:00Z'),
+    },
   });
 
-  const nota = (
-    await docente
-      .post(`${base}/calificaciones`)
-      .send({
-        matriculaId: matricula.id,
-        bimestreId: bimestre.id,
-        asignacionId: asignacion.id,
-        reglaId: regla.id,
-        competencias: [{ competenciaId: competencia.id, nivelLogro: 'B' }],
-      })
-      .expect(201)
-  ).body.data;
-  await admin
-    .put(`${base}/calificaciones/${nota.id}`)
-    .send({ competencias: [{ competenciaId: competencia.id, nivelLogro: 'A' }] })
-    .expect(200);
+  const notas = crearCalificador(docente);
+  const evaluacionId = await notas.calificar(matricula.id, {
+    seccionId: seccion.id,
+    cursoId: curso.id,
+    competenciaId: competencia.id,
+    bimestre,
+    nota: 12,
+  });
+  await notas.registrar(evaluacionId, matricula.id, { nota: 15 }).expect(200);
 
-  const [creada] = (await consultar({ tipoEvento: 'CALIFICACION_CREADA' })).registros;
+  const [creada] = (await consultar({ tipoEvento: 'EVALUACION_CREADA' })).registros;
   assert.equal(creada.usuario, 'docente-auditoria@prueba.local');
-  assert.equal(creada.entidadId, nota.id);
-  const [modificada] = (await consultar({ tipoEvento: 'CALIFICACION_MODIFICADA' })).registros;
-  assert.equal(modificada.usuario, 'admin-auditoria@prueba.local');
-  assert.equal(modificada.entidad, 'Calificacion');
-  assert.equal(modificada.entidadId, nota.id);
+  assert.equal(creada.entidadId, evaluacionId);
+  const [registrada] = (await consultar({ tipoEvento: 'RESULTADO_EVALUACION_REGISTRADO' }))
+    .registros;
+  const [modificada] = (await consultar({ tipoEvento: 'RESULTADO_EVALUACION_MODIFICADO' }))
+    .registros;
+  assert.equal(modificada.usuario, 'docente-auditoria@prueba.local');
+  assert.equal(modificada.entidad, 'ResultadoEvaluacion');
+  assert.equal(modificada.entidadId, registrada.entidadId);
   assert.ok(modificada.fechaHora && modificada.requestId);
-  assert.equal(modificada.detalle.valorAnterior.competencias[0].nivelLogro, 'B');
-  assert.equal(modificada.detalle.valorNuevo.competencias[0].nivelLogro, 'A');
-  // El filtro "Éxito" incluye los registros de notas, que se guardan como EXITOSO.
-  const exitosas = await consultar({ resultado: 'EXITO', tipoEvento: 'CALIFICACION_MODIFICADA' });
+  assert.equal(modificada.detalle.valorAnterior.nota, 12);
+  assert.equal(modificada.detalle.valorNuevo.nota, 15);
+  assert.equal(modificada.detalle.contexto.logroAnterior.nivelLogro, 'B');
+  assert.equal(modificada.detalle.contexto.logroNuevo.nivelLogro, 'A');
+  const exitosas = await consultar({
+    resultado: 'EXITO',
+    tipoEvento: 'RESULTADO_EVALUACION_MODIFICADO',
+  });
   assert.equal(exitosas.total, 1);
 });
 
@@ -305,4 +305,145 @@ test('AUD-09 casos inválidos y valores límite restantes del registro y la cons
 
   for (const invalida of [{ pagina: 0 }, { desde: '23/10/2026' }, { tipoEvento: '' }])
     await admin.get(`${base}/admin/auditoria`).query(invalida).expect(400);
+});
+
+// Regresión: auditPlanAcademico escribía columnas que RegistroAuditoria no tiene, así que
+// crear, modificar o desactivar un plan siempre fallaba. Las pruebas anteriores creaban el
+// plan directamente con Prisma y no lo detectaban.
+test('AUD-10 crear, modificar y desactivar un plan académico queda auditado', async () => {
+  const curso = await alta('admin/catalogos/cursos', { codigo: 'COM', nombre: 'Comunicación' });
+  const aula = await alta('admin/catalogos/aulas', { codigo: 'A102' });
+  await alta('admin/bloques', {
+    cursoId: curso.id,
+    seccionId: seccion.id,
+    docenteId: cuentaDocente.docenteId,
+    aulaId: aula.id,
+    diaSemana: 2,
+    horaInicio: '08:00',
+    horaFin: '09:00',
+  });
+  const asignacion = await prisma.cursoSeccionDocente.findFirst({
+    where: { cursoId: curso.id, seccionId: seccion.id },
+  });
+  // El servicio exige que el plan nazca dentro del bimestre: se abre uno alrededor de hoy.
+  const hoy = new Date(`${hoyLima}T00:00:00.000Z`);
+  const dia = 24 * 60 * 60 * 1000;
+  const bimestre = await prisma.bimestreAcademico.update({
+    where: { anioAcademicoId_numero: { anioAcademicoId: anio.id, numero: 2 } },
+    data: { fechaInicio: new Date(hoy - 30 * dia), fechaFin: new Date(+hoy + 30 * dia) },
+  });
+  const plan = { bimestreId: bimestre.id, asignacionId: asignacion.id, objetivo: 'Leer textos' };
+  const eventos = async (tipoEvento, entidadId) =>
+    prisma.registroAuditoria.findMany({
+      where: { tipoEvento, entidad: 'PlanAcademico', entidadId },
+    });
+
+  const delAdmin = await alta('planes-academicos', { ...plan, titulo: 'Plan del administrador' });
+  const [creadoAdmin] = await eventos('PLAN_ACADEMICO_CREADO', delAdmin.id);
+  assert.equal(creadoAdmin.usuarioId, adminId);
+  assert.equal(creadoAdmin.resultado, 'EXITO');
+  assert.ok(creadoAdmin.requestId);
+  assert.equal(creadoAdmin.detalle.valorNuevo.titulo, 'Plan del administrador');
+
+  // Una sola ruta para los dos roles, y un solo plan activo por clase y bimestre.
+  const duplicado = await docente
+    .post(`${base}/planes-academicos`)
+    .send({ ...plan, titulo: 'Plan del docente' })
+    .expect(409);
+  assert.equal(duplicado.body.error.code, 'PLAN_EXISTS');
+
+  // El docente vigente gestiona el plan de su clase aunque lo haya creado otro.
+  await docente
+    .patch(`${base}/planes-academicos/${delAdmin.id}`)
+    .send({ titulo: 'Plan corregido' })
+    .expect(200);
+  const [modificado] = await eventos('PLAN_ACADEMICO_MODIFICADO', delAdmin.id);
+  assert.equal(modificado.usuarioId, cuentaDocente.id);
+  assert.equal(modificado.detalle.valorAnterior.titulo, 'Plan del administrador');
+  assert.equal(modificado.detalle.valorNuevo.titulo, 'Plan corregido');
+
+  await admin.delete(`${base}/planes-academicos/${delAdmin.id}`).expect(200);
+  const [desactivado] = await eventos('PLAN_ACADEMICO_DESACTIVADO', delAdmin.id);
+  assert.equal(desactivado.detalle.valorAnterior.activo, true);
+  assert.equal(desactivado.detalle.valorNuevo.activo, false);
+
+  // Con el anterior inactivo, la clase vuelve a admitir un plan.
+  const delDocente = (
+    await docente
+      .post(`${base}/planes-academicos`)
+      .send({ ...plan, titulo: 'Plan del docente' })
+      .expect(201)
+  ).body.data;
+  const [creadoDocente] = await eventos('PLAN_ACADEMICO_CREADO', delDocente.id);
+  assert.equal(creadoDocente.usuarioId, cuentaDocente.id);
+
+  // Un plan rechazado no deja rastro: ni plan ni auditoría.
+  const antes = await prisma.registroAuditoria.count({ where: { entidad: 'PlanAcademico' } });
+  const sinFechas = await prisma.bimestreAcademico.findFirst({
+    where: { anioAcademicoId: anio.id, numero: 3 },
+  });
+  const rechazo = await admin
+    .post(`${base}/planes-academicos`)
+    .send({ ...plan, bimestreId: sinFechas.id, titulo: 'Plan imposible' })
+    .expect(409);
+  assert.equal(rechazo.body.error.code, 'TERM_WITHOUT_DATES');
+  assert.equal(
+    await prisma.registroAuditoria.count({ where: { entidad: 'PlanAcademico' } }),
+    antes,
+  );
+});
+
+test('AUD-11 filtra por solicitud y marca las que dejaron un error en el log', async () => {
+  const fallido = await request(app)
+    .post(`${base}/auth/login`)
+    .send({ identificador: 'nadie@prueba.local', contrasena: 'Incorrecta123!' })
+    .expect(401);
+  const conError = fallido.headers['x-request-id'];
+  // Copia rotada simulada: la prueba no depende de cuándo Winston escribe a disco.
+  writeFileSync(
+    path.join(logDirectory, 'app1.log'),
+    JSON.stringify({ level: 'warn', code: 'INVALID_CREDENTIALS', requestId: conError }),
+  );
+  const filtrada = await consultar({ requestId: conError });
+  assert.equal(filtrada.total, 1);
+  assert.equal(filtrada.registros[0].tipoEvento, 'LOGIN_FALLIDO');
+  assert.equal(filtrada.registros[0].tieneError, true);
+  const [exitoso] = (await consultar({ tipoEvento: 'LOGIN_EXITOSO' })).registros;
+  assert.equal(exitoso.tieneError, false);
+  assert.equal((await consultar({ requestId: 'no-existe' })).total, 0);
+  await admin
+    .get(`${base}/admin/auditoria`)
+    .query({ requestId: 'x'.repeat(101) })
+    .expect(400);
+});
+
+test('AUD-12 historial de una cuenta y de un registro', async () => {
+  const acciones = (await consultar({ usuarioId: adminId })).registros;
+  assert.ok(acciones.length > 0);
+  assert.ok(acciones.every((evento) => evento.usuarioId === adminId));
+  const historial = await consultar({ entidad: 'Usuario', entidadId: cuentaDocente.id });
+  assert.ok(historial.total > 0);
+  assert.ok(
+    historial.registros.every(
+      (evento) => evento.entidad === 'Usuario' && evento.entidadId === cuentaDocente.id,
+    ),
+  );
+  for (const invalida of [{ usuarioId: 0 }, { entidadId: 'abc' }])
+    await admin.get(`${base}/admin/auditoria`).query(invalida).expect(400);
+});
+
+test('AUD-13 resumen de seguridad por periodo', async () => {
+  const resumen = async (filtros = {}) =>
+    (await admin.get(`${base}/admin/auditoria/resumen`).query(filtros).expect(200)).body.data;
+  for (const { tipoEvento, total } of await resumen())
+    assert.equal(total, (await consultar({ tipoEvento })).total, tipoEvento);
+  assert.ok((await resumen({ desde: '2099-01-01' })).every((tarjeta) => tarjeta.total === 0));
+  for (const invalida of [
+    { desde: '2026-10-20', hasta: '2026-10-01' },
+    { desde: '2026-02-30' },
+    { tipoEvento: 'LOGIN_FALLIDO' },
+  ])
+    await admin.get(`${base}/admin/auditoria/resumen`).query(invalida).expect(400);
+  await request(app).get(`${base}/admin/auditoria/resumen`).expect(401);
+  await docente.get(`${base}/admin/auditoria/resumen`).expect(403);
 });

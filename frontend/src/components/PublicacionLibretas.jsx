@@ -22,7 +22,7 @@ const RAZONES = {
 };
 
 const AVISO_PUBLICAR =
-  'Los docentes ya no podrán cambiar notas ni evidencia. Esta acción no se puede deshacer.';
+  'Los docentes ya no podrán cambiar evaluaciones ni notas. Esta acción no se puede deshacer.';
 
 function PendientesSeccion({ seccion, onClose }) {
   return (
@@ -34,14 +34,25 @@ function PendientesSeccion({ seccion, onClose }) {
         </button>
       </div>
       <TablaDatos
-        columnas={['Curso', 'Responsable', 'Sin nota', 'Sin evidencia']}
+        columnas={[
+          'Curso',
+          'Docente',
+          'Competencias sin evaluaciones',
+          'Notas por registrar',
+          'Sin letra',
+          'Bajo el mínimo',
+          'Regla',
+        ]}
         filas={seccion.pendientes.map((pendiente) => ({
           id: pendiente.curso,
           celdas: [
             pendiente.curso,
-            pendiente.sinRegla ? 'Administrador: sin regla de consolidación' : pendiente.docente,
-            pendiente.sinNota,
-            pendiente.sinEvidencia,
+            pendiente.docente,
+            pendiente.sinEvaluaciones,
+            pendiente.resultadosPendientes,
+            pendiente.sinLetra,
+            pendiente.bajoMinimo ? `${pendiente.bajoMinimo} (pide ${pendiente.minimoNotas})` : 0,
+            pendiente.sinRegla ? 'Falta (administrador)' : 'Vigente',
           ],
         }))}
       />
@@ -267,7 +278,8 @@ export default function PublicacionLibretas() {
     <section className="publication-section" aria-labelledby="publicacion-titulo">
       <h2 id="publicacion-titulo">Publicación de libretas</h2>
       <p className="muted">
-        Una sección se publica cuando todas sus competencias tienen nota y evidencia.
+        Una sección se publica cuando cada alumno tiene registradas todas sus evaluaciones, una
+        letra y el mínimo de notas de la regla en cada competencia.
       </p>
       {bimestres.loading ? (
         <Loading>Cargando bimestres…</Loading>

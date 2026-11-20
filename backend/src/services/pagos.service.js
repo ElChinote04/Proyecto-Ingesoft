@@ -14,6 +14,7 @@ import { env } from '../config/env.js';
 import { registrarTransaccionCritica } from './auditoria.service.js';
 import { generarComprobantePdf, numeroComprobante } from '../domain/comprobante.js';
 import { construirFracciones } from '../domain/fraccionamiento.js';
+import { enviarCorreo } from '../integrations/correo.js';
 
 const fail = (status, code, message) => {
   throw new AppError(status, code, message);
@@ -582,6 +583,50 @@ export async function obtenerComprobante(compromisoPagoId, actor) {
     nombreArchivo: `comprobante-${numero}.pdf`,
     pdf: await generarComprobantePdf(comprobante),
   };
+}
+
+/**
+ * US-009: reenvía por correo el comprobante en PDF de una boleta pagada.
+ * Los permisos son los mismos que para descargarlo (apoderado a cargo o
+ * administrador). El destino lo indica quien lo pide, porque SAGE no guarda
+ * correos de contacto. Un fallo del servidor de correo no cambia nada: la
+ * boleta y el comprobante siguen igual y se puede reintentar.
+ */
+export async function enviarComprobantePorCorreo(compromisoPagoId, { correo }, actor, requestId) {
+  const { numero, nombreArchivo, pdf } = await obtenerComprobante(compromisoPagoId, actor);
+  try {
+    await enviarCorreo({
+      para: correo,
+      asunto: `Comprobante de pago ${numero} — SAGE`,
+      texto:
+        `Adjuntamos el comprobante de pago ${numero}.\n\n` +
+        'Este correo se envió desde SAGE a pedido de un usuario del sistema. ' +
+        'Si no lo esperabas, puedes ignorarlo.',
+      adjuntos: [{ nombre: nombreArchivo, contenido: pdf, tipo: 'application/pdf' }],
+    });
+  } catch (error) {
+    logger.error('CORREO_COMPROBANTE_FALLIDO', {
+      module: 'pagos',
+      requestId,
+      userId: actor.id,
+      entidadId: compromisoPagoId,
+      error: error.message,
+    });
+    fail(
+      502,
+      'CORREO_NO_ENVIADO',
+      'No pudimos enviar el correo en este momento. Inténtalo de nuevo en unos minutos.',
+    );
+  }
+  logger.info('COMPROBANTE_ENVIADO', {
+    module: 'pagos',
+    requestId,
+    userId: actor.id,
+    entidadId: compromisoPagoId,
+    comprobante: numero,
+    para: correo,
+  });
+  return { comprobante: numero, enviadoA: correo, enviadoEn: new Date().toISOString() };
 }
 
 export { RESULTADO };

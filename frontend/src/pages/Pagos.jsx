@@ -3,6 +3,7 @@ import AppLayout from '../layouts/AppLayout';
 import { Feedback, Loading, ResourceError } from '../components/Feedback';
 import TablaDatos from '../components/TablaDatos';
 import DescargarComprobante from '../components/DescargarComprobante';
+import EnviarComprobante from '../components/EnviarComprobante';
 import AnularPago from '../components/AnularPago';
 import FraccionarBoleta from '../components/FraccionarBoleta';
 import AvisosVencimiento from '../components/AvisosVencimiento';
@@ -373,10 +374,16 @@ function Boletas() {
                               Pagada el {fechaDeInstante(boleta.pagadaEn)}
                             </span>
                             {boleta.comprobante && (
-                              <DescargarComprobante
-                                boletaId={boleta.id}
-                                numero={boleta.comprobante}
-                              />
+                              <>
+                                <DescargarComprobante
+                                  boletaId={boleta.id}
+                                  numero={boleta.comprobante}
+                                />
+                                <EnviarComprobante
+                                  boletaId={boleta.id}
+                                  numero={boleta.comprobante}
+                                />
+                              </>
                             )}
                             {puedeAnular && boleta.pagoConfirmadoId && (
                               <button

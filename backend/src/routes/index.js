@@ -22,16 +22,19 @@ import { cursoRouter } from './curso.js';
 import { competenciaRouter } from './competencia.js';
 import { calificacionRouter } from './calificacion.js';
 import { reglaConsolidacionRouter } from './reglaConsolidacion.js';
-import { planAcademicoRouter } from './planAcademico.js';
-import { evidenciaPedagogicaRouter } from './evidenciaPedagogica.js';
+import { planesAcademicosRouter } from './planesAcademicos.js';
+import { evidenciasPedagogicasRouter } from './evidenciasPedagogicas.js';
+import { asignacionesRouter } from './asignaciones.js';
 import { calificacionCompetenciaRouter } from './calificacionCompetencia.js';
 import { calificacionesAlumnoRouter } from './calificacionesAlumno.js';
-import { evidenciasCalificacionRouter } from './evidenciasCalificacion.js';
-import { prisma } from '../config/database.js';
+import { evaluacionesRouter } from './evaluaciones.js';
+import { escalaCalificacionRouter } from './escalaCalificacion.js';
 import { asistenciaDocenteRouter } from './asistenciaDocenteRoutes.js';
 import { pagosRouter } from './pagos.js';
 import { erroresRouter } from './errores.js';
 import { libretasRouter } from './libretas.js';
+import { bimestresRouter } from './bimestres.js';
+
 export const router = Router();
 
 const requirePortal = (req, res, next) => {
@@ -83,19 +86,16 @@ router.use('/cursos', cursoRouter);
 router.use('/competencias', competenciaRouter);
 router.use('/calificaciones', calificacionRouter);
 router.use('/libretas', libretasRouter);
-router.get('/bimestres', requireAuth, async (_req, res) => {
-  const bimestres = await prisma.bimestreAcademico.findMany({
-    where: { activo: true, anioAcademico: { activo: true } },
-    orderBy: [{ anioAcademicoId: 'asc' }, { numero: 'asc' }],
-  });
-  res.json({ data: bimestres });
-});
+router.use('/bimestres', bimestresRouter);
+
 router.use('/reglas-consolidacion', reglaConsolidacionRouter);
-router.use('/planes-academicos', planAcademicoRouter);
-router.use('/evidencias-pedagogicas', evidenciaPedagogicaRouter);
+router.use('/planes-academicos', planesAcademicosRouter);
+router.use('/evidencias-pedagogicas', evidenciasPedagogicasRouter);
+router.use('/asignaciones', asignacionesRouter);
 router.use('/calificaciones-competencias', calificacionCompetenciaRouter);
 router.use(calificacionesAlumnoRouter);
-router.use(evidenciasCalificacionRouter);
+router.use('/evaluaciones', evaluacionesRouter);
+router.use('/escala-calificacion', escalaCalificacionRouter);
 router.use(pagosRouter);
 
 router.post('/auth/login', loginLimit, validate(loginSchema), auth.login);

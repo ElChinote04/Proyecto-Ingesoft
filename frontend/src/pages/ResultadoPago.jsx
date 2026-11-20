@@ -3,6 +3,7 @@ import AppLayout from '../layouts/AppLayout';
 import { Feedback, Loading } from '../components/Feedback';
 import { api } from '../api/client';
 import DescargarComprobante from '../components/DescargarComprobante';
+import EnviarComprobante from '../components/EnviarComprobante';
 import { conceptoDe, periodoLargo } from '../utils/pagos';
 
 // Estados en los que la pasarela todavía no ha dicho la última palabra.
@@ -163,11 +164,14 @@ export default function ResultadoPago({ id, cancelado = false }) {
 
         <div className="actions">
           {pago?.estado === 'CONFIRMADO' && pago.boleta.comprobante && (
-            <DescargarComprobante
-              boletaId={pago.boleta.id}
-              numero={pago.boleta.comprobante}
-              className=""
-            />
+            <>
+              <DescargarComprobante
+                boletaId={pago.boleta.id}
+                numero={pago.boleta.comprobante}
+                className=""
+              />
+              <EnviarComprobante boletaId={pago.boleta.id} numero={pago.boleta.comprobante} />
+            </>
           )}
           <button
             className={pago?.estado === 'CONFIRMADO' ? 'secondary' : undefined}

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Feedback } from '../components/Feedback';
+import { rutaActual } from '../utils/format';
 
 export default function AppLayout({
   children,
@@ -61,7 +62,7 @@ export default function AppLayout({
                     (
                       route === 'reglas'
                         ? window.location.hash.startsWith('#/gestion')
-                        : window.location.hash === `#/admin/${route}`
+                        : rutaActual() === `#/admin/${route}`
                     )
                       ? 'nav-active'
                       : 'nav-item'
@@ -77,7 +78,7 @@ export default function AppLayout({
                 >
                   <img
                     src={
-                      window.location.hash === `#/admin/${route}`
+                      rutaActual() === `#/admin/${route}`
                         ? '/figma/nav-active.svg'
                         : '/figma/nav.svg'
                     }
@@ -170,6 +171,24 @@ export default function AppLayout({
               )}
 
             {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['DOCENTE'].includes(rol)) && (
+                <button
+                  className={section === 'Plan de trabajo' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/plan-trabajo';
+                    })
+                  }
+                >
+                  <img
+                    src={section === 'Plan de trabajo' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                    alt=""
+                  />
+                  Plan de trabajo
+                </button>
+              )}
+
+            {!user.requiereCambioContrasena &&
               user.roles.some((rol) =>
                 ['ALUMNO', 'APODERADO'].includes(rol)
               ) && (
@@ -195,6 +214,24 @@ export default function AppLayout({
                   />
 
                   Mis evaluaciones
+                </button>
+              )}
+
+            {!user.requiereCambioContrasena &&
+              user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)) && (
+                <button
+                  className={section === 'Actividades de clase' ? 'nav-active' : 'nav-item'}
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/actividades';
+                    })
+                  }
+                >
+                  <img
+                    src={section === 'Actividades de clase' ? '/figma/nav-active.svg' : '/figma/nav.svg'}
+                    alt=""
+                  />
+                  Actividades de clase
                 </button>
               )}
 

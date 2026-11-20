@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import ExcelJS from 'exceljs';
 import { jsPDF } from 'jspdf';
@@ -107,9 +106,7 @@ const estilos = {
 };
 
 function porcentaje(valor, total) {
-  return total > 0
-    ? Number(((valor / total) * 100).toFixed(2))
-    : 0;
+  return total > 0 ? Number(((valor / total) * 100).toFixed(2)) : 0;
 }
 
 function resumenEstudiante(alumno) {
@@ -147,9 +144,7 @@ function formatearFecha(fecha) {
 
   const partes = fecha.slice(0, 10).split('-');
 
-  return partes.length === 3
-    ? `${partes[2]}/${partes[1]}/${partes[0]}`
-    : fecha;
+  return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : fecha;
 }
 
 function nombreEstado(estado) {
@@ -180,14 +175,7 @@ function estadoColor(estado) {
   };
 }
 
-const encabezadosDetalle = [
-  'Fecha',
-  'Estudiante',
-  'Código',
-  'Curso',
-  'Estado',
-  'Observación',
-];
+const encabezadosDetalle = ['Fecha', 'Estudiante', 'Código', 'Curso', 'Estado', 'Observación'];
 
 const encabezadosResumen = [
   'Estudiante',
@@ -250,10 +238,11 @@ function aplicarEncabezadoExcel(fila) {
 
 export default function TeacherStudentAttendanceReport() {
   const [sesiones, setSesiones] = useState([]);
-  const [alumnos, setAlumnos] = useState([]);
+  // Alumnos cargados y la sesión a la que corresponden: la carga se deriva de esa clave,
+  // así el efecto no tiene que limpiar estado de forma síncrona.
+  const [alumnosCargados, setAlumnosCargados] = useState({ sesionId: null, alumnos: [] });
 
   const [cargandoDatos, setCargandoDatos] = useState(true);
-  const [cargandoAlumnos, setCargandoAlumnos] = useState(false);
   const [consultando, setConsultando] = useState(false);
   const [exportando, setExportando] = useState(false);
 
@@ -275,9 +264,7 @@ export default function TeacherStudentAttendanceReport() {
     })
       .then((resultado) => {
         if (!controller.signal.aborted) {
-          setSesiones(
-            Array.isArray(resultado) ? resultado : []
-          );
+          setSesiones(Array.isArray(resultado) ? resultado : []);
         }
       })
       .catch((e) => {
@@ -295,76 +282,48 @@ export default function TeacherStudentAttendanceReport() {
   }, []);
 
   const secciones = Array.from(
-    new Map(
-      sesiones.map((sesion) => [
-        sesion.seccion.id,
-        sesion.seccion,
-      ])
-    ).values()
-  ).sort((a, b) =>
-    a.nombre.localeCompare(b.nombre, 'es')
-  );
+    new Map(sesiones.map((sesion) => [sesion.seccion.id, sesion.seccion])).values(),
+  ).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 
-  const sesionesSeccion = sesiones.filter(
-    (sesion) =>
-      String(sesion.seccion.id) === seccionId
-  );
+  const sesionesSeccion = sesiones.filter((sesion) => String(sesion.seccion.id) === seccionId);
 
   const cursos = Array.from(
-    new Map(
-      sesionesSeccion.map((sesion) => [
-        sesion.curso.id,
-        sesion.curso,
-      ])
-    ).values()
-  ).sort((a, b) =>
-    a.nombre.localeCompare(b.nombre, 'es')
-  );
+    new Map(sesionesSeccion.map((sesion) => [sesion.curso.id, sesion.curso])).values(),
+  ).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
+  const sesionDeSeccion = seccionId
+    ? sesiones.find((item) => String(item.seccion.id) === seccionId)
+    : null;
+  const sesionAlumnosId = sesionDeSeccion?.id ?? null;
+  const alumnos =
+    sesionAlumnosId && alumnosCargados.sesionId === sesionAlumnosId ? alumnosCargados.alumnos : [];
+  const cargandoAlumnos = sesionAlumnosId !== null && alumnosCargados.sesionId !== sesionAlumnosId;
 
   useEffect(() => {
-    if (!seccionId) {
-      setAlumnos([]);
-      setCargandoAlumnos(false);
-      return;
-    }
-
-    const sesion = sesiones.find(
-      (item) =>
-        String(item.seccion.id) === seccionId
-    );
-
-    if (!sesion) {
-      setAlumnos([]);
-      setCargandoAlumnos(false);
-      return;
-    }
+    if (!sesionAlumnosId) return undefined;
 
     const controller = new AbortController();
 
-    setCargandoAlumnos(true);
-
-    api(`/sesiones/${sesion.id}/alumnos`, {
+    api(`/sesiones/${sesionAlumnosId}/alumnos`, {
       signal: controller.signal,
     })
       .then((resultado) => {
         if (!controller.signal.aborted) {
-          setAlumnos(resultado.alumnos ?? []);
+          setAlumnosCargados({
+            sesionId: sesionAlumnosId,
+            alumnos: resultado.alumnos ?? [],
+          });
         }
       })
       .catch((e) => {
         if (!controller.signal.aborted) {
           setError(e.message);
-          setAlumnos([]);
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setCargandoAlumnos(false);
+          setAlumnosCargados({ sesionId: sesionAlumnosId, alumnos: [] });
         }
       });
 
     return () => controller.abort();
-  }, [seccionId, sesiones]);
+  }, [sesionAlumnosId]);
 
   function limpiarReporte() {
     setReporte(null);
@@ -378,16 +337,12 @@ export default function TeacherStudentAttendanceReport() {
     limpiarReporte();
 
     if (!seccionId || !fechaInicio || !fechaFin) {
-      setError(
-        'Selecciona una sección y un rango de fechas.'
-      );
+      setError('Selecciona una sección y un rango de fechas.');
       return;
     }
 
     if (fechaInicio > fechaFin) {
-      setError(
-        'La fecha inicial no puede superar a la final.'
-      );
+      setError('La fecha inicial no puede superar a la final.');
       return;
     }
 
@@ -408,32 +363,19 @@ export default function TeacherStudentAttendanceReport() {
         params.set('alumnoId', alumnoId);
       }
 
-      const resultado = await api(
-        `/reportes/asistencia/estudiantes?${params.toString()}`
-      );
+      const resultado = await api(`/reportes/asistencia/estudiantes?${params.toString()}`);
 
       setReporte(resultado);
 
       setFiltrosReporte({
-        seccion:
-          secciones.find(
-            (s) => String(s.id) === seccionId
-          )?.nombre ?? '',
-        curso:
-          cursos.find(
-            (c) => String(c.id) === cursoId
-          )?.nombre ?? 'Todos mis cursos',
-        alumno:
-          alumnos.find(
-            (a) => String(a.alumnoId) === alumnoId
-          )?.nombre ?? 'Todos los alumnos',
+        seccion: secciones.find((s) => String(s.id) === seccionId)?.nombre ?? '',
+        curso: cursos.find((c) => String(c.id) === cursoId)?.nombre ?? 'Todos mis cursos',
+        alumno: alumnos.find((a) => String(a.alumnoId) === alumnoId)?.nombre ?? 'Todos los alumnos',
         fechaInicio,
         fechaFin,
       });
     } catch (e) {
-      setError(
-        e.message || 'No se pudo generar el reporte.'
-      );
+      setError(e.message || 'No se pudo generar el reporte.');
     } finally {
       setConsultando(false);
     }
@@ -449,21 +391,9 @@ export default function TeacherStudentAttendanceReport() {
     ['Presentes', presentes, '#166534'],
     ['Tardanzas', tardanzas, '#92400e'],
     ['Ausencias', ausencias, '#991b1b'],
-    [
-      '% Asistencia',
-      `${porcentaje(presentes + tardanzas, total)}%`,
-      '#2563eb',
-    ],
-    [
-      '% Tardanzas',
-      `${porcentaje(tardanzas, total)}%`,
-      '#b45309',
-    ],
-    [
-      '% Ausencias',
-      `${porcentaje(ausencias, total)}%`,
-      '#dc2626',
-    ],
+    ['% Asistencia', `${porcentaje(presentes + tardanzas, total)}%`, '#2563eb'],
+    ['% Tardanzas', `${porcentaje(tardanzas, total)}%`, '#b45309'],
+    ['% Ausencias', `${porcentaje(ausencias, total)}%`, '#dc2626'],
   ];
 
   const detalle = reporte?.detalle ?? [];
@@ -501,8 +431,7 @@ export default function TeacherStudentAttendanceReport() {
 
       const titulo = hoja.getCell('A1');
 
-      titulo.value =
-        'SAGE - REPORTE DE ASISTENCIA ESTUDIANTIL';
+      titulo.value = 'SAGE - REPORTE DE ASISTENCIA ESTUDIANTIL';
 
       titulo.font = {
         size: 17,
@@ -536,9 +465,7 @@ export default function TeacherStudentAttendanceReport() {
 
       hoja.addRow([]);
 
-      const tituloResumen = hoja.addRow([
-        'RESUMEN GENERAL',
-      ]);
+      const tituloResumen = hoja.addRow(['RESUMEN GENERAL']);
 
       tituloResumen.getCell(1).font = {
         bold: true,
@@ -552,9 +479,7 @@ export default function TeacherStudentAttendanceReport() {
 
       hoja.addRow([]);
 
-      const tituloAlumnos = hoja.addRow([
-        'RESUMEN POR ESTUDIANTE',
-      ]);
+      const tituloAlumnos = hoja.addRow(['RESUMEN POR ESTUDIANTE']);
 
       tituloAlumnos.getCell(1).font = {
         bold: true,
@@ -562,9 +487,7 @@ export default function TeacherStudentAttendanceReport() {
         size: 12,
       };
 
-      const encabezadoResumen = hoja.addRow(
-        encabezadosResumen
-      );
+      const encabezadoResumen = hoja.addRow(encabezadosResumen);
 
       aplicarEncabezadoExcel(encabezadoResumen);
 
@@ -580,9 +503,7 @@ export default function TeacherStudentAttendanceReport() {
       hoja.pageSetup.fitToPage = true;
       hoja.pageSetup.fitToWidth = 1;
 
-      const hojaDetalle = libro.addWorksheet(
-        'Detalle por fecha'
-      );
+      const hojaDetalle = libro.addWorksheet('Detalle por fecha');
 
       hojaDetalle.columns = [
         { header: 'Fecha', key: 'fecha', width: 17 },
@@ -633,12 +554,10 @@ export default function TeacherStudentAttendanceReport() {
         new Blob([buffer], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         }),
-        `Reporte_Docente_Estudiantes_${filtrosReporte.fechaInicio}_${filtrosReporte.fechaFin}.xlsx`
+        `Reporte_Docente_Estudiantes_${filtrosReporte.fechaInicio}_${filtrosReporte.fechaFin}.xlsx`,
       );
     } catch (e) {
-      setError(
-        e.message || 'No se pudo exportar a Excel.'
-      );
+      setError(e.message || 'No se pudo exportar a Excel.');
     } finally {
       setExportando(false);
     }
@@ -664,53 +583,29 @@ export default function TeacherStudentAttendanceReport() {
       pdf.setTextColor(255, 255, 255);
       pdf.setFontSize(16);
 
-      pdf.text(
-        'SAGE - Reporte de asistencia estudiantil',
-        14,
-        16
-      );
+      pdf.text('SAGE - Reporte de asistencia estudiantil', 14, 16);
 
       pdf.setTextColor(40, 40, 40);
       pdf.setFontSize(10);
 
-      pdf.text(
-        `Sección: ${filtrosReporte.seccion}`,
-        14,
-        36
-      );
+      pdf.text(`Sección: ${filtrosReporte.seccion}`, 14, 36);
+
+      pdf.text(`Curso: ${filtrosReporte.curso}`, 14, 43);
+
+      pdf.text(`Alumno: ${filtrosReporte.alumno}`, 14, 50);
 
       pdf.text(
-        `Curso: ${filtrosReporte.curso}`,
-        14,
-        43
-      );
-
-      pdf.text(
-        `Alumno: ${filtrosReporte.alumno}`,
-        14,
-        50
-      );
-
-      pdf.text(
-        `Periodo: ${formatearFecha(
-          filtrosReporte.fechaInicio
-        )} al ${formatearFecha(
-          filtrosReporte.fechaFin
+        `Periodo: ${formatearFecha(filtrosReporte.fechaInicio)} al ${formatearFecha(
+          filtrosReporte.fechaFin,
         )}`,
         14,
-        57
+        57,
       );
 
       autoTable(pdf, {
         startY: 64,
-        head: [
-          indicadores.map(([nombre]) => nombre),
-        ],
-        body: [
-          indicadores.map(([, valor]) =>
-            String(valor)
-          ),
-        ],
+        head: [indicadores.map(([nombre]) => nombre)],
+        body: [indicadores.map(([, valor]) => String(valor))],
         theme: 'grid',
         headStyles: {
           fillColor: [85, 28, 157],
@@ -726,40 +621,23 @@ export default function TeacherStudentAttendanceReport() {
         },
       });
 
-      const inicioDetalle =
-        (pdf.lastAutoTable?.finalY ?? 85) + 10;
+      const inicioDetalle = (pdf.lastAutoTable?.finalY ?? 85) + 10;
 
       if (inicioDetalle > 190) {
         pdf.addPage();
       }
 
-      const posicionDetalle =
-        inicioDetalle > 190 ? 20 : inicioDetalle;
+      const posicionDetalle = inicioDetalle > 190 ? 20 : inicioDetalle;
 
       pdf.setTextColor(40, 40, 40);
       pdf.setFontSize(12);
 
-      pdf.text(
-        'Detalle de asistencia por fecha',
-        14,
-        posicionDetalle
-      );
+      pdf.text('Detalle de asistencia por fecha', 14, posicionDetalle);
 
       autoTable(pdf, {
         startY: posicionDetalle + 4,
         head: [encabezadosDetalle],
-        body: filasPorFecha.length
-          ? filasPorFecha
-          : [
-              [
-                'Sin registros',
-                '',
-                '',
-                '',
-                '',
-                '',
-              ],
-            ],
+        body: filasPorFecha.length ? filasPorFecha : [['Sin registros', '', '', '', '', '']],
         theme: 'grid',
         headStyles: {
           fillColor: [85, 28, 157],
@@ -774,42 +652,25 @@ export default function TeacherStudentAttendanceReport() {
         },
       });
 
-      const inicioResumen =
-        (pdf.lastAutoTable?.finalY ?? 90) + 12;
+      const inicioResumen = (pdf.lastAutoTable?.finalY ?? 90) + 12;
 
       if (inicioResumen > 190) {
         pdf.addPage();
       }
 
-      const posicionResumen =
-        inicioResumen > 190 ? 20 : inicioResumen;
+      const posicionResumen = inicioResumen > 190 ? 20 : inicioResumen;
 
       pdf.setFontSize(12);
       pdf.setTextColor(40, 40, 40);
 
-      pdf.text(
-        'Resumen por estudiante',
-        14,
-        posicionResumen
-      );
+      pdf.text('Resumen por estudiante', 14, posicionResumen);
 
       autoTable(pdf, {
         startY: posicionResumen + 4,
         head: [encabezadosResumen],
         body: filasPorAlumno.length
           ? filasPorAlumno
-          : [
-              [
-                'Sin registros',
-                '',
-                '',
-                '',
-                '',
-                '',
-                '',
-                '',
-              ],
-            ],
+          : [['Sin registros', '', '', '', '', '', '', '']],
         theme: 'grid',
         headStyles: {
           fillColor: [85, 28, 157],
@@ -825,46 +686,31 @@ export default function TeacherStudentAttendanceReport() {
       });
 
       pdf.save(
-        `Reporte_Docente_Estudiantes_${filtrosReporte.fechaInicio}_${filtrosReporte.fechaFin}.pdf`
+        `Reporte_Docente_Estudiantes_${filtrosReporte.fechaInicio}_${filtrosReporte.fechaFin}.pdf`,
       );
     } catch (e) {
-      setError(
-        e.message || 'No se pudo exportar a PDF.'
-      );
+      setError(e.message || 'No se pudo exportar a PDF.');
     }
   }
 
   return (
-    <AppLayout
-      section="Reporte de asistencia estudiantil"
-      step="Consultar reporte"
-    >
+    <AppLayout section="Reporte de asistencia estudiantil" step="Consultar reporte">
       <section style={estilos.tarjeta}>
         <h2>Reporte de asistencia estudiantil</h2>
 
-        <p className="muted">
-          Consulta las asistencias de tus cursos y
-          secciones asignados.
-        </p>
+        <p className="muted">Consulta las asistencias de tus cursos y secciones asignados.</p>
 
         {cargandoDatos ? (
-          <Loading>
-            Cargando sesiones...
-          </Loading>
+          <Loading>Cargando sesiones...</Loading>
         ) : !sesiones.length ? (
-          <Feedback
-            intent="info"
-            title="Sin sesiones"
-          >
-            No tienes sesiones disponibles para consultar
-            reportes.
+          <Feedback intent="info" title="Sin sesiones">
+            No tienes sesiones disponibles para consultar reportes.
           </Feedback>
         ) : (
           <form onSubmit={consultar}>
             <div style={estilos.filtros}>
               <label style={estilos.campo}>
                 Sección
-
                 <select
                   required
                   value={seccionId}
@@ -873,19 +719,13 @@ export default function TeacherStudentAttendanceReport() {
                     setSeccionId(e.target.value);
                     setCursoId('');
                     setAlumnoId('');
-                    setAlumnos([]);
                     limpiarReporte();
                   }}
                 >
-                  <option value="">
-                    Seleccionar sección...
-                  </option>
+                  <option value="">Seleccionar sección...</option>
 
                   {secciones.map((seccion) => (
-                    <option
-                      key={seccion.id}
-                      value={seccion.id}
-                    >
+                    <option key={seccion.id} value={seccion.id}>
                       {seccion.nombre}
                     </option>
                   ))}
@@ -894,7 +734,6 @@ export default function TeacherStudentAttendanceReport() {
 
               <label style={estilos.campo}>
                 Curso
-
                 <select
                   value={cursoId}
                   disabled={!seccionId}
@@ -904,15 +743,10 @@ export default function TeacherStudentAttendanceReport() {
                     limpiarReporte();
                   }}
                 >
-                  <option value="">
-                    Todos mis cursos
-                  </option>
+                  <option value="">Todos mis cursos</option>
 
                   {cursos.map((curso) => (
-                    <option
-                      key={curso.id}
-                      value={curso.id}
-                    >
+                    <option key={curso.id} value={curso.id}>
                       {curso.nombre}
                     </option>
                   ))}
@@ -921,12 +755,9 @@ export default function TeacherStudentAttendanceReport() {
 
               <label style={estilos.campo}>
                 Alumno
-
                 <select
                   value={alumnoId}
-                  disabled={
-                    !seccionId || cargandoAlumnos
-                  }
+                  disabled={!seccionId || cargandoAlumnos}
                   style={estilos.entrada}
                   onChange={(e) => {
                     setAlumnoId(e.target.value);
@@ -934,16 +765,11 @@ export default function TeacherStudentAttendanceReport() {
                   }}
                 >
                   <option value="">
-                    {cargandoAlumnos
-                      ? 'Cargando alumnos...'
-                      : 'Todos los alumnos'}
+                    {cargandoAlumnos ? 'Cargando alumnos...' : 'Todos los alumnos'}
                   </option>
 
                   {alumnos.map((alumno) => (
-                    <option
-                      key={alumno.alumnoId}
-                      value={alumno.alumnoId}
-                    >
+                    <option key={alumno.alumnoId} value={alumno.alumnoId}>
                       {alumno.nombre}
                     </option>
                   ))}
@@ -952,7 +778,6 @@ export default function TeacherStudentAttendanceReport() {
 
               <label style={estilos.campo}>
                 Fecha inicial
-
                 <input
                   type="date"
                   required
@@ -967,7 +792,6 @@ export default function TeacherStudentAttendanceReport() {
 
               <label style={estilos.campo}>
                 Fecha final
-
                 <input
                   type="date"
                   required
@@ -983,26 +807,14 @@ export default function TeacherStudentAttendanceReport() {
             </div>
 
             <div style={estilos.acciones}>
-              <button
-                type="submit"
-                disabled={consultando}
-                style={estilos.boton}
-              >
-                {consultando
-                  ? 'Consultando...'
-                  : 'Generar reporte'}
+              <button type="submit" disabled={consultando} style={estilos.boton}>
+                {consultando ? 'Consultando...' : 'Generar reporte'}
               </button>
             </div>
           </form>
         )}
 
-        {error && (
-          <Feedback
-            title="No se pudo completar la operación"
-          >
-            {error}
-          </Feedback>
-        )}
+        {error && <Feedback title="No se pudo completar la operación">{error}</Feedback>}
       </section>
 
       {reporte && (
@@ -1052,38 +864,26 @@ export default function TeacherStudentAttendanceReport() {
           <h3>Resumen general</h3>
 
           <div style={estilos.resumen}>
-            {indicadores.map(
-              ([nombre, valor, color]) => (
-                <div
-                  key={nombre}
-                  style={estilos.indicador}
-                >
-                  <p className="muted">
-                    {nombre}
-                  </p>
+            {indicadores.map(([nombre, valor, color]) => (
+              <div key={nombre} style={estilos.indicador}>
+                <p className="muted">{nombre}</p>
 
-                  <strong
-                    style={{
-                      fontSize: '25px',
-                      color,
-                    }}
-                  >
-                    {valor}
-                  </strong>
-                </div>
-              )
-            )}
+                <strong
+                  style={{
+                    fontSize: '25px',
+                    color,
+                  }}
+                >
+                  {valor}
+                </strong>
+              </div>
+            ))}
           </div>
 
-          <h3>
-            Detalle de asistencia por fecha
-          </h3>
+          <h3>Detalle de asistencia por fecha</h3>
 
           {!detalle.length ? (
-            <p className="muted">
-              No se encontraron asistencias en el
-              periodo seleccionado.
-            </p>
+            <p className="muted">No se encontraron asistencias en el periodo seleccionado.</p>
           ) : (
             <div
               style={{
@@ -1094,90 +894,58 @@ export default function TeacherStudentAttendanceReport() {
               <table style={estilos.tabla}>
                 <thead>
                   <tr>
-                    {encabezadosDetalle.map(
-                      (titulo) => (
-                        <th
-                          key={titulo}
-                          style={{
-                            ...estilos.celda,
-                            background: '#f3f4f6',
-                          }}
-                        >
-                          {titulo}
-                        </th>
-                      )
-                    )}
+                    {encabezadosDetalle.map((titulo) => (
+                      <th
+                        key={titulo}
+                        style={{
+                          ...estilos.celda,
+                          background: '#f3f4f6',
+                        }}
+                      >
+                        {titulo}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
 
                 <tbody>
-                  {detalle.map(
-                    (registro, indice) => (
-                      <tr
-                        key={
-                          registro.id ??
-                          `${registro.sesionId}-${registro.alumnoId}-${indice}`
-                        }
-                      >
-                        <td style={estilos.celda}>
-                          {formatearFecha(
-                            registro.fecha
-                          )}
-                        </td>
+                  {detalle.map((registro, indice) => (
+                    <tr key={registro.id ?? `${registro.sesionId}-${registro.alumnoId}-${indice}`}>
+                      <td style={estilos.celda}>{formatearFecha(registro.fecha)}</td>
 
-                        <td style={estilos.celda}>
-                          {registro.estudiante}
-                        </td>
+                      <td style={estilos.celda}>{registro.estudiante}</td>
 
-                        <td style={estilos.celda}>
-                          {registro.codigo}
-                        </td>
+                      <td style={estilos.celda}>{registro.codigo}</td>
 
-                        <td style={estilos.celda}>
-                          {registro.curso}
-                        </td>
+                      <td style={estilos.celda}>{registro.curso}</td>
 
-                        <td style={estilos.celda}>
-                          <span
-                            style={{
-                              ...estadoColor(
-                                registro.estado
-                              ),
-                              borderRadius: '999px',
-                              padding: '5px 10px',
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {nombreEstado(
-                              registro.estado
-                            )}
-                          </span>
-                        </td>
+                      <td style={estilos.celda}>
+                        <span
+                          style={{
+                            ...estadoColor(registro.estado),
+                            borderRadius: '999px',
+                            padding: '5px 10px',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {nombreEstado(registro.estado)}
+                        </span>
+                      </td>
 
-                        <td style={estilos.celda}>
-                          {registro.observacion ||
-                            '—'}
-                        </td>
-                      </tr>
-                    )
-                  )}
+                      <td style={estilos.celda}>{registro.observacion || '—'}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
 
-          <h3>
-            Resumen por estudiante
-          </h3>
+          <h3>Resumen por estudiante</h3>
 
           {!filasPorAlumno.length ? (
-            <Feedback
-              intent="info"
-              title="Sin registros"
-            >
-              No se encontraron asistencias para
-              los filtros seleccionados.
+            <Feedback intent="info" title="Sin registros">
+              No se encontraron asistencias para los filtros seleccionados.
             </Feedback>
           ) : (
             <div
@@ -1188,44 +956,30 @@ export default function TeacherStudentAttendanceReport() {
               <table style={estilos.tabla}>
                 <thead>
                   <tr>
-                    {encabezadosResumen.map(
-                      (columna) => (
-                        <th
-                          key={columna}
-                          style={{
-                            ...estilos.celda,
-                            background: '#f3f4f6',
-                          }}
-                        >
-                          {columna}
-                        </th>
-                      )
-                    )}
+                    {encabezadosResumen.map((columna) => (
+                      <th
+                        key={columna}
+                        style={{
+                          ...estilos.celda,
+                          background: '#f3f4f6',
+                        }}
+                      >
+                        {columna}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filasPorAlumno.map(
-                    (fila, indice) => (
-                      <tr
-                        key={
-                          reporte.alumnos[indice]
-                            .alumnoId
-                        }
-                      >
-                        {fila.map(
-                          (valor, columna) => (
-                            <td
-                              key={columna}
-                              style={estilos.celda}
-                            >
-                              {valor}
-                            </td>
-                          )
-                        )}
-                      </tr>
-                    )
-                  )}
+                  {filasPorAlumno.map((fila, indice) => (
+                    <tr key={reporte.alumnos[indice].alumnoId}>
+                      {fila.map((valor, columna) => (
+                        <td key={columna} style={estilos.celda}>
+                          {valor}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

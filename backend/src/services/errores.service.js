@@ -1,4 +1,5 @@
 import * as repository from '../repositories/errores.repository.js';
+import * as auditoriaRepository from '../repositories/auditoria.repository.js';
 
 const SEVERIDAD_POR_NIVEL = { error: 'ERROR', warn: 'ADVERTENCIA' };
 export const SEVERIDADES_ERROR = Object.values(SEVERIDAD_POR_NIVEL);
@@ -11,8 +12,18 @@ const finDelDia = (fecha) => new Date(inicioDelDia(fecha).getTime() + 24 * 60 * 
 const describir = ({ message, code, errorType }) =>
   code === 'INTERNAL_ERROR' && errorType ? `${message} (${errorType})` : message;
 
+// Solicitudes que dejaron un error o advertencia; la auditoría las usa para enlazar sus eventos.
+export async function obtenerSolicitudesConError() {
+  const registros = await repository.leerRegistros();
+  return new Set(
+    registros
+      .filter((registro) => SEVERIDAD_POR_NIVEL[registro.level] && registro.requestId)
+      .map((registro) => registro.requestId),
+  );
+}
+
 export async function obtenerErrores(consulta) {
-  const { pagina, limite, severidad, codigo, usuario, desde, hasta } = consulta;
+  const { pagina, limite, severidad, codigo, usuario, requestId, desde, hasta } = consulta;
   const errores = (await repository.leerRegistros()).filter(
     (registro) => SEVERIDAD_POR_NIVEL[registro.level],
   );
@@ -35,14 +46,26 @@ export async function obtenerErrores(consulta) {
       (!severidad || registro.severidad === severidad) &&
       (!codigo || registro.codigo === codigo) &&
       (!usuario || registro.usuario === usuario) &&
+      (!requestId || registro.requestId === requestId) &&
       (!desde || new Date(registro.fechaHora) >= inicioDelDia(desde)) &&
       (!hasta || new Date(registro.fechaHora) < finDelDia(hasta)),
+  );
+  const visibles = filtrados.slice((pagina - 1) * limite, pagina * limite);
+  // El enlace "Ver en auditoría" solo se ofrece si esa solicitud dejó algún evento.
+  const solicitudes = [...new Set(visibles.map((registro) => registro.requestId).filter(Boolean))];
+  const auditadas = new Set(
+    (await auditoriaRepository.buscarSolicitudesAuditadas(solicitudes)).map(
+      (fila) => fila.requestId,
+    ),
   );
   return {
     total: filtrados.length,
     pagina,
     limite,
     codigos: [...new Set(registros.map((registro) => registro.codigo))].sort(),
-    registros: filtrados.slice((pagina - 1) * limite, pagina * limite),
+    registros: visibles.map((registro) => ({
+      ...registro,
+      enAuditoria: auditadas.has(registro.requestId),
+    })),
   };
 }
