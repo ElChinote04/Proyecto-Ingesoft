@@ -24,7 +24,6 @@ import { competenciaRouter } from './competencia.js';
 import { calificacionRouter } from './calificacion.js';
 import { reglaConsolidacionRouter } from './reglaConsolidacion.js';
 import { planAcademicoRouter } from './planAcademico.js';
-import { evidenciaPedagogicaRouter } from './evidenciaPedagogica.js';
 import { calificacionCompetenciaRouter } from './calificacionCompetencia.js';
 import { calificacionesAlumnoRouter } from './calificacionesAlumno.js';
 import { evidenciasCalificacionRouter } from './evidenciasCalificacion.js';
@@ -125,7 +124,6 @@ router.get(
 
 router.use('/reglas-consolidacion', reglaConsolidacionRouter);
 router.use('/planes-academicos', planAcademicoRouter);
-router.use('/evidencias-pedagogicas', evidenciaPedagogicaRouter);
 router.use('/calificaciones-competencias', calificacionCompetenciaRouter);
 router.use(calificacionesAlumnoRouter);
 router.use(evidenciasCalificacionRouter);

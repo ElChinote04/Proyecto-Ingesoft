@@ -466,38 +466,6 @@ test('EVC-19 la ficha indica la nota, sus evidencias y si está publicada', asyn
   assert.equal(segunda.totalEvidencias, 0);
 });
 
-test('EVC-20 regresión: la evidencia del plan académico se crea y se audita', async () => {
-  const asignacion = await prisma.cursoSeccionDocente.findFirst({
-    where: { cursoId: curso.id, seccionId: seccion.id },
-  });
-  const plan = await prisma.planAcademico.create({
-    data: {
-      bimestreId: bimestre.id,
-      asignacionId: asignacion.id,
-      titulo: 'Plan',
-      objetivo: 'Objetivo',
-      fechaInicio: new Date('2036-03-01'),
-      creadoPorId: cuentaDocente.id,
-      modificadoPorId: cuentaDocente.id,
-    },
-  });
-  const { body } = await docente
-    .post(`${base}/evidencias-pedagogicas`)
-    .send({
-      docenteId: cuentaDocente.docenteId,
-      planId: plan.id,
-      descripcionAvance: 'Avance del plan',
-      archivos: ['informe.pdf'],
-    })
-    .expect(201);
-  const [evento] = await prisma.registroAuditoria.findMany({
-    where: { tipoEvento: 'EVIDENCIA_CREADA', entidadId: body.data.id },
-  });
-  assert.equal(evento.entidad, 'EvidenciaPedagogica');
-  assert.equal(evento.resultado, 'EXITO');
-  assert.equal(evento.detalle.valorNuevo.descripcionAvance, 'Avance del plan');
-});
-
 // Al final: deja el curso en manos de otro docente.
 test('EVC-18 tras cambiar de docente, el nuevo accede y el anterior no', async () => {
   const anterior = await prisma.cursoSeccionDocente.findFirst({

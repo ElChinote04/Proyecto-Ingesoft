@@ -306,3 +306,79 @@ test('AUD-09 casos inválidos y valores límite restantes del registro y la cons
   for (const invalida of [{ pagina: 0 }, { desde: '23/10/2026' }, { tipoEvento: '' }])
     await admin.get(`${base}/admin/auditoria`).query(invalida).expect(400);
 });
+
+// Regresión: auditPlanAcademico escribía columnas que RegistroAuditoria no tiene, así que
+// crear, modificar o desactivar un plan siempre fallaba. Las pruebas anteriores creaban el
+// plan directamente con Prisma y no lo detectaban.
+test('AUD-10 crear, modificar y desactivar un plan académico queda auditado', async () => {
+  const curso = await alta('admin/catalogos/cursos', { codigo: 'COM', nombre: 'Comunicación' });
+  const aula = await alta('admin/catalogos/aulas', { codigo: 'A102' });
+  await alta('admin/bloques', {
+    cursoId: curso.id,
+    seccionId: seccion.id,
+    docenteId: cuentaDocente.docenteId,
+    aulaId: aula.id,
+    diaSemana: 2,
+    horaInicio: '08:00',
+    horaFin: '09:00',
+  });
+  const asignacion = await prisma.cursoSeccionDocente.findFirst({
+    where: { cursoId: curso.id, seccionId: seccion.id },
+  });
+  // El servicio exige que el plan nazca dentro del bimestre: se abre uno alrededor de hoy.
+  const hoy = new Date(`${hoyLima}T00:00:00.000Z`);
+  const dia = 24 * 60 * 60 * 1000;
+  const bimestre = await prisma.bimestreAcademico.update({
+    where: { anioAcademicoId_numero: { anioAcademicoId: anio.id, numero: 2 } },
+    data: { fechaInicio: new Date(hoy - 30 * dia), fechaFin: new Date(+hoy + 30 * dia) },
+  });
+  const plan = { bimestreId: bimestre.id, asignacionId: asignacion.id, objetivo: 'Leer textos' };
+  const eventos = async (tipoEvento, entidadId) =>
+    prisma.registroAuditoria.findMany({
+      where: { tipoEvento, entidad: 'PlanAcademico', entidadId },
+    });
+
+  const delAdmin = await alta('planes-academicos', { ...plan, titulo: 'Plan del administrador' });
+  const [creadoAdmin] = await eventos('PLAN_ACADEMICO_CREADO', delAdmin.id);
+  assert.equal(creadoAdmin.usuarioId, adminId);
+  assert.equal(creadoAdmin.resultado, 'EXITO');
+  assert.ok(creadoAdmin.requestId);
+  assert.equal(creadoAdmin.detalle.valorNuevo.titulo, 'Plan del administrador');
+
+  const delDocente = (
+    await docente
+      .post(`${base}/planes-academicos/docente`)
+      .send({ ...plan, titulo: 'Plan del docente' })
+      .expect(201)
+  ).body.data;
+  const [creadoDocente] = await eventos('PLAN_ACADEMICO_CREADO', delDocente.id);
+  assert.equal(creadoDocente.usuarioId, cuentaDocente.id);
+
+  await docente
+    .put(`${base}/planes-academicos/${delDocente.id}`)
+    .send({ titulo: 'Plan corregido' })
+    .expect(200);
+  const [modificado] = await eventos('PLAN_ACADEMICO_MODIFICADO', delDocente.id);
+  assert.equal(modificado.detalle.valorAnterior.titulo, 'Plan del docente');
+  assert.equal(modificado.detalle.valorNuevo.titulo, 'Plan corregido');
+
+  await admin.delete(`${base}/planes-academicos/${delDocente.id}`).expect(200);
+  const [desactivado] = await eventos('PLAN_ACADEMICO_DESACTIVADO', delDocente.id);
+  assert.equal(desactivado.detalle.valorAnterior.activo, true);
+  assert.equal(desactivado.detalle.valorNuevo.activo, false);
+
+  // Un plan rechazado no deja rastro: ni plan ni auditoría.
+  const antes = await prisma.registroAuditoria.count({ where: { entidad: 'PlanAcademico' } });
+  const fueraDeFecha = await prisma.bimestreAcademico.findFirst({
+    where: { anioAcademicoId: anio.id, numero: 3 },
+  });
+  const rechazo = await admin
+    .post(`${base}/planes-academicos`)
+    .send({ ...plan, bimestreId: fueraDeFecha.id, titulo: 'Plan imposible' })
+    .expect(400);
+  assert.equal(rechazo.body.error.code, 'INVALID_PLAN_START');
+  assert.equal(
+    await prisma.registroAuditoria.count({ where: { entidad: 'PlanAcademico' } }),
+    antes,
+  );
+});

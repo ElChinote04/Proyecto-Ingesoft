@@ -1,5 +1,21 @@
 # Registro de cambios
 
+## Evaluación continua: modelo de datos — 2026-11-19
+
+- `EvidenciaPedagogica` se reemplaza por `Evaluacion`, `ResultadoEvaluacion` y `ArchivoEvaluacion`.
+  Era el informe de avance del docente sobre un plan, sin alumno ni nota; la tabla no tenía datos.
+- Una evaluación es una actividad de una competencia en una clase y bimestre, con `peso` y estado
+  `BORRADOR`/`REGISTRADA`. Cada resultado guarda una nota de 0 a 20 con dos decimales y un
+  comentario opcional, con borrado lógico. Solo cambia el modelo: aún no hay API ni consolidación.
+- La base garantiza la nota de 0 a 20, el peso positivo, un solo resultado activo por alumno
+  (índice único parcial) y, con FK compuestas, que la asignación y la competencia sean del mismo
+  curso y sección que la evaluación.
+- Se retira la API `/evidencias-pedagogicas`, que ningún frontend usaba, y la prueba EVC-20.
+- Corregidos: la auditoría de planes académicos escribía columnas inexistentes, así que crear,
+  modificar o desactivar un plan fallaba siempre; y el modelo `Usuario` tenía campos duplicados
+  tras un merge, lo que impedía validar el esquema.
+- Nueva suite `evaluaciones-modelo` (EVM-01 a EVM-07) y prueba AUD-10.
+
 ## Libreta de notas por competencias (US-020) — 2026-11-06
 
 - Alumno y apoderado consultan la libreta bimestral y la anual en `Mis evaluaciones`, con el formato
@@ -40,10 +56,11 @@
 - Se retiran `GET /calificaciones/contexto` y `POST /calificaciones/competencias/bulk`.
 - Al sobrescribir una nota, la auditoría conserva el nivel anterior.
 - Nueva suite `tests/calificaciones-alumno.test.js` (CAA-01 a CAA-13).
+
 ## Pago en cuotas (US-010) — 2026-11-06
 
 - `POST /compromisos-pago/:id/fracciones` (administrador) con `{ numeroCuotas, montoCuota,
-  fechaPrimerVencimiento }` divide una boleta pendiente en 2 a 6 cuotas que vencen una por mes. La
+fechaPrimerVencimiento }` divide una boleta pendiente en 2 a 6 cuotas que vencen una por mes. La
   última cuota se ajusta para que la suma sea exactamente el total (RF140): 400
   `FRACCIONES_EXCEDEN_TOTAL` o `FRACCIONES_NO_CUBREN_TOTAL` si no cuadra. Se audita como
   `BOLETA_FRACCIONADA`.

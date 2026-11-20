@@ -167,25 +167,6 @@ export const updatePlanAcademicoSchema = z
     message: 'Indica al menos un dato para actualizar.',
   });
 
-const evidenceDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa una fecha válida YYYY-MM-DD.');
-const evidenceFiles = z.array(z.string().trim().min(1)).min(1, 'Registra al menos un archivo.');
-export const createEvidenciaPedagogicaSchema = z
-  .object({
-    docenteId: id,
-    planId: id,
-    fechaEntrega: evidenceDate.optional(),
-    descripcionAvance: text('la descripción del avance', 2000),
-    archivos: evidenceFiles,
-  })
-  .strict();
-export const updateEvidenciaPedagogicaSchema = z
-  .object({ fechaEntrega: evidenceDate.optional(), descripcionAvance: text('la descripción del avance', 2000).optional(), archivos: evidenceFiles.optional() })
-  .strict()
-  .refine((value) => value.fechaEntrega !== undefined || value.descripcionAvance !== undefined || value.archivos !== undefined, { message: 'Indica al menos un dato para actualizar.' });
-export const reviewEvidenciaPedagogicaSchema = z
-  .object({ estadoRevision: z.enum(['PENDIENTE_REVISION', 'OBSERVADA', 'VALIDADA']), observacionesRevision: z.string().trim().max(2000).optional() })
-  .strict();
-
 export const createCalificacionCompetenciaSchema = z
   .object({ calificacionId: id, competenciaId: id, nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional() })
   .strict();

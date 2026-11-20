@@ -29,6 +29,7 @@ try {
     'evidencias-calificacion',
     'publicacion-libretas',
     'libretas',
+    'evaluaciones-modelo',
     'errores',
     'cobranza',
   ]) {
