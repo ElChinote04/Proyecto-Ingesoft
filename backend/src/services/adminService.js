@@ -300,7 +300,7 @@ function mensajeCruce(conflicto, input) {
   if (asignacion.docenteId === input.docenteId) recursos.push(`docente ${docente}`);
   if (conflicto.aulaId === input.aulaId) recursos.push(`aula ${conflicto.aula.codigo}`);
   if (asignacion.seccionId === input.seccionId) recursos.push(`sección ${seccion}`);
-  const dia = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'][
+  const dia = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes'][
     conflicto.diaSemana - 1
   ];
   return `Cruce de ${recursos.join(', ')} con ${asignacion.curso.nombre} (bloque #${conflicto.id}), sección ${seccion}, docente ${docente}, aula ${conflicto.aula.codigo}, año ${asignacion.seccion.anioAcademico.codigo}, ${dia} de ${conflicto.horaInicio} a ${conflicto.horaFin}. No se guardaron cambios.`;
@@ -357,7 +357,7 @@ export function createClass(input, actor, requestId) {
     const fecha = new Date(input.fecha + 'T00:00:00Z');
     if (String(fecha.getUTCFullYear()) !== block.asignacion.seccion.anioAcademico.codigo)
       fail(400, 'YEAR_MISMATCH', 'La fecha debe pertenecer al año académico del bloque.');
-    if ((fecha.getUTCDay() || 7) !== block.diaSemana)
+    if (fecha.getUTCDay() !== block.diaSemana)
       fail(400, 'DAY_MISMATCH', 'La fecha debe coincidir con el día de la semana del bloque.');
     if (await repository.existingClass(block.id, fecha, db))
       fail(409, 'DUPLICATE_CLASS', 'Ya existe una sesión para este bloque y fecha.');

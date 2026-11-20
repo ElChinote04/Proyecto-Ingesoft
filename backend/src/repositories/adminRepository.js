@@ -208,6 +208,7 @@ export const createClass = (data, db) => db.sesionClase.create({ data });
 export async function schedule() {
   const [bloques, sesiones] = await Promise.all([
     prisma.cursoSeccionDocenteAula.findMany({
+      where: { diaSemana: { gte: 1, lte: 5 } },
       include: blockInclude,
       orderBy: [{ diaSemana: 'asc' }, { horaInicio: 'asc' }],
     }),

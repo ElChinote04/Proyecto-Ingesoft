@@ -356,7 +356,9 @@ POST `/admin/bloques`:
 }
 ```
 
-El docente debe tener perfil, persona/cuenta activas y rol DOCENTE. Día 1=lunes … 7=domingo. Horas HH:mm de 24 horas, inicio anterior al fin. Crea/reutiliza CursoSeccionDocente y crea el bloque; devuelve bloque con relaciones. No genera sesiones automáticamente.
+El docente debe tener perfil, persona/cuenta activas y rol DOCENTE. Día 1=lunes … 5=viernes. Sábado y domingo se rechazan con 400, tanto en alta y edición como en la consulta previa. Las sesiones también requieren una fecha de lunes a viernes. Horas HH:mm de 24 horas, inicio anterior al fin. Crea/reutiliza CursoSeccionDocente y crea el bloque; devuelve bloque con relaciones. No genera sesiones automáticamente.
+
+La migración `20261120120000_horarios_lunes_viernes` retira los bloques de fin de semana existentes (`activo=false`) conservando sus sesiones y asistencias. Una restricción de PostgreSQL impide crear o reactivar bloques fuera de lunes a viernes. Las matrices administrativas y personales muestran únicamente esos cinco días.
 
 Un solapamiento de docente, aula o sección dentro del mismo año académico devuelve 409 SCHEDULE_CONFLICT con el recurso y horario incompatibles. El intervalo se considera [inicio, fin), por lo que dos bloques contiguos son válidos. La validación y la escritura se serializan con un advisory lock transaccional en PostgreSQL; un rechazo no deja asignaciones parciales.
 

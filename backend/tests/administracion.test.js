@@ -387,6 +387,45 @@ test('US-022 alta, edición y consulta previa identifican el mismo conflicto com
   assert.equal(await prisma.cursoSeccionDocenteAula.count(), 2);
 });
 
+test('horarios rechaza fines de semana en alta, edición, consulta previa y sesiones', async () => {
+  const input = {
+    cursoId: course.id,
+    seccionId: section.id,
+    docenteId: teacherUser.docenteId,
+    aulaId: room.id,
+    horaInicio: '12:00',
+    horaFin: '13:00',
+  };
+  const anterior = await prisma.cursoSeccionDocenteAula.findUnique({ where: { id: block.id } });
+  const totalBloques = await prisma.cursoSeccionDocenteAula.count();
+  const totalSesiones = await prisma.sesionClase.count();
+  for (const diaSemana of [6, 7]) {
+    const body = { ...input, diaSemana };
+    for (const response of [
+      await admin.post(`${base}/admin/bloques`).send(body).expect(400),
+      await admin.put(`${base}/admin/bloques/${block.id}`).send(body).expect(400),
+      await admin.post(`${base}/admin/bloques/validar`).send(body).expect(400),
+    ]) {
+      assert.equal(response.body.error.code, 'VALIDATION_ERROR');
+    }
+    await assert.rejects(
+      prisma.cursoSeccionDocenteAula.create({
+        data: { ...anterior, id: undefined, diaSemana },
+      }),
+      /CursoSeccionDocenteAula_dia_laborable_activo/,
+    );
+  }
+  for (const fecha of ['2026-10-03', '2026-10-04']) {
+    await admin.post(`${base}/admin/sesiones`).send({ bloqueId: block.id, fecha }).expect(400);
+  }
+  assert.equal(await prisma.cursoSeccionDocenteAula.count(), totalBloques);
+  assert.equal(await prisma.sesionClase.count(), totalSesiones);
+  assert.deepEqual(
+    await prisma.cursoSeccionDocenteAula.findUnique({ where: { id: block.id } }),
+    anterior,
+  );
+});
+
 test('12 valida fecha/día/año y crea una sola sesión coherente con el bloque', async () => {
   for (const fecha of ['2026-02-30', '2026-10-01', '2027-10-01'])
     await post('sesiones', { bloqueId: block.id, fecha }, 400);
@@ -470,6 +509,49 @@ test('17 protege al administrador y al cambiar contraseña revoca el acceso ante
     .send({ identificador: teacherUser.identificador, contrasena: 'NuevaClave123!' })
     .expect(200);
 });
+test('migración retira bloques antiguos de fin de semana conservando sesiones y asistencias', async () => {
+  const rollback = new Error('Restaurar el escenario de pruebas');
+  const migration = readFileSync(
+    new URL('../prisma/migrations/20261120120000_horarios_lunes_viernes/migration.sql', import.meta.url),
+    'utf8',
+  );
+  await assert.rejects(
+    prisma.$transaction(async (db) => {
+      await db.$executeRawUnsafe(
+        'ALTER TABLE "CursoSeccionDocenteAula" DROP CONSTRAINT "CursoSeccionDocenteAula_dia_laborable_activo"',
+      );
+      await db.cursoSeccionDocenteAula.update({ where: { id: block.id }, data: { diaSemana: 6 } });
+      await db.sesionClase.update({ where: { id: session.id }, data: { fecha: new Date('2026-10-03T00:00:00Z') } });
+      const sesionAnterior = await db.sesionClase.findUnique({
+        where: { id: session.id }, include: { asistencias: true },
+      });
+      assert.ok(sesionAnterior.asistencias.length > 0);
+      const laborales = await db.cursoSeccionDocenteAula.findMany({
+        where: { diaSemana: { gte: 1, lte: 5 } }, orderBy: { id: 'asc' },
+      });
+      for (const sql of migration.split(';').filter((sql) => sql.trim())) {
+        await db.$executeRawUnsafe(sql);
+      }
+      assert.equal(
+        (await db.cursoSeccionDocenteAula.findUnique({ where: { id: block.id } })).activo,
+        false,
+      );
+      assert.deepEqual(
+        await db.sesionClase.findUnique({ where: { id: session.id }, include: { asistencias: true } }),
+        sesionAnterior,
+      );
+      assert.deepEqual(
+        await db.cursoSeccionDocenteAula.findMany({
+          where: { diaSemana: { gte: 1, lte: 5 } }, orderBy: { id: 'asc' },
+        }),
+        laborales,
+      );
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+});
+
 test('18 auditoría administrativa y logs físicos registran el recorrido sin secretos', async () => {
   for (const event of [
     'ADMINISTRADOR_INICIAL_CREADO',

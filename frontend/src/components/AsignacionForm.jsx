@@ -3,7 +3,7 @@ import { AdminForm, Field, Select } from './AdminForm';
 import { Feedback } from './Feedback';
 import { api } from '../api/client';
 
-const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 const CAMPOS_ID = ['cursoId', 'seccionId', 'docenteId', 'aulaId', 'diaSemana'];
 const VACIO = {
   cursoId: '',

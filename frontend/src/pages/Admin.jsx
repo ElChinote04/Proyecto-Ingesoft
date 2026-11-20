@@ -20,7 +20,7 @@ const sectionLabel = (s) => `${s.anioAcademico.codigo} · ${s.grado.nombre} ${s.
 const options = (list, label) => list.map((i) => ({ id: i.id, label: label(i) }));
 const numbers = (form, keys) =>
   Object.fromEntries([...form].map(([k, v]) => [k, keys.includes(k) ? Number(v) : v]));
-const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 const blockLabel = (b) =>
   `${sectionLabel(b.asignacion.seccion)} · ${b.asignacion.curso.nombre} · ${days[b.diaSemana - 1]} ${b.horaInicio}–${b.horaFin}`;
 const titles = {
@@ -639,7 +639,11 @@ function Schedule() {
                 name="bloqueId"
                 items={options(
                   schedule.bloques.filter(
-                    (bloque) => bloque.activo && bloque.asignacion.seccion.anioAcademico.activo,
+                    (bloque) =>
+                      bloque.activo &&
+                      bloque.diaSemana >= 1 &&
+                      bloque.diaSemana <= 5 &&
+                      bloque.asignacion.seccion.anioAcademico.activo,
                   ),
                   blockLabel,
                 )}

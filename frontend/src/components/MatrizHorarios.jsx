@@ -1,6 +1,6 @@
 import { buildScheduleMatrix } from '../utils/scheduleMatrix';
 
-const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 export default function MatrizHorarios({ bloques, onSelect }) {
   const { horas, alturas, dias } = buildScheduleMatrix(bloques);
   const columnas = dias.reduce((total, dia) => total + dia.length, 0);

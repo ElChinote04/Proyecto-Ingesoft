@@ -33,20 +33,32 @@ test('los bloques contiguos comparten columna y los días se mantienen separados
   const matriz = buildScheduleMatrix([
     bloque(1, '08:00', '09:00'),
     bloque(2, '09:00', '10:00'),
-    bloque(3, '08:00', '10:00', 7),
+    bloque(3, '08:00', '10:00', 5),
   ]);
   assert.equal(matriz.dias[0].length, 1);
   assert.deepEqual(
-    matriz.dias[6][0].map((b) => b.id),
+    matriz.dias[4][0].map((b) => b.id),
     [3],
   );
 });
 
-test('una matriz vacía mantiene los siete días sin generar filas inválidas', () => {
+test('una matriz vacía mantiene los cinco días sin generar filas inválidas', () => {
   const matriz = buildScheduleMatrix([]);
   assert.deepEqual(matriz.horas, []);
   assert.deepEqual(matriz.alturas, []);
-  assert.equal(matriz.dias.length, 7);
+  assert.equal(matriz.dias.length, 5);
+});
+
+test('los bloques antiguos de fin de semana no agregan columnas ni horas a la matriz', () => {
+  const finDeSemana = [bloque(2, '06:00', '07:00', 6), bloque(3, '22:00', '23:00', 7)];
+  const matriz = buildScheduleMatrix([bloque(1, '08:00', '09:00'), ...finDeSemana]);
+  assert.deepEqual(matriz.horas, ['08:00', '09:00']);
+  assert.equal(matriz.dias.length, 5);
+  assert.deepEqual(matriz.dias.flat(2).map((b) => b.id), [1]);
+  const vacia = buildScheduleMatrix(finDeSemana);
+  assert.deepEqual(vacia.horas, []);
+  assert.deepEqual(vacia.alturas, []);
+  assert.equal(vacia.dias.length, 5);
 });
 
 test('las clases breves mantienen espacio para leer su información', () => {

@@ -3,8 +3,9 @@ const hora = (valor) =>
   `${String(Math.floor(valor / 60)).padStart(2, '0')}:${String(valor % 60).padStart(2, '0')}`;
 
 export function buildScheduleMatrix(bloques) {
+  bloques = bloques.filter((bloque) => bloque.diaSemana >= 1 && bloque.diaSemana <= 5);
   if (!bloques.length)
-    return { horas: [], alturas: [], dias: Array.from({ length: 7 }, () => [[]]) };
+    return { horas: [], alturas: [], dias: Array.from({ length: 5 }, () => [[]]) };
   const limites = new Set(bloques.flatMap((b) => [minutos(b.horaInicio), minutos(b.horaFin)]));
   const primero = Math.min(...limites),
     ultimo = Math.max(...limites);
@@ -24,7 +25,7 @@ export function buildScheduleMatrix(bloques) {
     }
   }
   // Al mostrar varios recursos, sus clases simultáneas ocupan columnas separadas.
-  const dias = Array.from({ length: 7 }, (_, dia) => {
+  const dias = Array.from({ length: 5 }, (_, dia) => {
     const columnas = [[]];
     for (const bloque of bloques
       .filter((b) => b.diaSemana === dia + 1)

@@ -338,7 +338,7 @@ La creación del bloque y su auditoría se confirman juntas. Un rechazo no debe 
 
 ### 6.5 Sesiones de clase
 
-Crear un bloque no genera automáticamente clases. Se debe enviar `bloqueId` y una fecha real `YYYY-MM-DD` a la creación de sesión. El docente debe seguir habilitado; año y día de semana deben coincidir con el bloque. Lunes es 1 y domingo 7. Las horas se copian del bloque, sin aceptar otras desde el cliente.
+Crear un bloque no genera automáticamente clases. Se debe enviar `bloqueId` y una fecha real `YYYY-MM-DD` a la creación de sesión. El docente debe seguir habilitado; año y día de semana deben coincidir con el bloque. Solo se admiten lunes a viernes, numerados del 1 al 5. Las horas se copian del bloque, sin aceptar otras desde el cliente.
 
 La fecha se interpreta como fecha de calendario con medianoche UTC y se guarda en columna SQL DATE. Unicidad bloque/fecha. No hay regla de negocio que obligue a tomar asistencia únicamente hoy ni que prohíba sesiones futuras/pasadas. No añadir esa restricción sin contrastarla con los requisitos.
 
@@ -474,7 +474,7 @@ Límites efectivos:
 - Versiones: enteros no negativos.
 - Año: texto de cuatro dígitos entre 1900 y 2199. Grado: 1–50 caracteres.
 - Nombre de sección y códigos de curso/aula: 1–30, mayúsculas/trim. Nombre de curso: 1–100.
-- Día: entero 1–7. Horas: `HH:mm`, 24 horas, inicio menor que fin.
+- Día: entero 1–5, de lunes a viernes. Horas: `HH:mm`, 24 horas, inicio menor que fin.
 - Fecha: `YYYY-MM-DD` y fecha real, no solo una cadena que cumple regex.
 - Asistencias: 1–500 elementos. Observación opcional, trim, máximo 300 caracteres, predeterminada vacía.
 
