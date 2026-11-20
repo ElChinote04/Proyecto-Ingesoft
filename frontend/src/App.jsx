@@ -140,11 +140,14 @@ function Screens() {
     return <Libreta key={perfiles} />;
   }
 
+  // Auditoría y errores reciben filtros por enlace (#/errores?requestId=...); no cambian la pantalla.
+  const ruta = route.split('?')[0];
+
   if (
-    route === '/errores' &&
+    ruta === '/errores' &&
     user.permisos.includes('errores.consultar')
   ) {
-    return <LogErrores />;
+    return <LogErrores key={route} />;
   }
 
   if (
@@ -157,14 +160,14 @@ function Screens() {
   if (
     user.roles.includes('ADMINISTRADOR') &&
     (
-      route.startsWith('/admin') ||
+      ruta.startsWith('/admin') ||
       !user.roles.includes('DOCENTE')
     )
   ) {
     return (
       <Admin
         key={route}
-        page={route.split('/')[2] || 'inicio'}
+        page={ruta.split('/')[2] || 'inicio'}
       />
     );
   }

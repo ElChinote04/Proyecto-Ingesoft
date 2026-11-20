@@ -18,6 +18,17 @@ export async function buscarEventos(where, pagina, limite) {
   return { total, registros };
 }
 
+export const contarPorTipo = (where) =>
+  prisma.registroAuditoria.groupBy({ by: ['tipoEvento'], where, _count: { _all: true } });
+
+// Qué solicitudes de una lista dejaron algún evento; enlaza el log de errores con la auditoría.
+export const buscarSolicitudesAuditadas = (requestIds) =>
+  prisma.registroAuditoria.findMany({
+    where: { requestId: { in: requestIds } },
+    select: { requestId: true },
+    distinct: ['requestId'],
+  });
+
 const SOLO_NOMBRE_PERSONA = {
   id: true,
   persona: { select: { nombres: true, apellidos: true } },

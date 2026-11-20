@@ -19,6 +19,7 @@ export const consultaAuditoriaSchema = z
     entidad: texto,
     entidadId: id,
     usuarioId: id,
+    requestId: z.string().trim().min(1).max(100).optional(),
     resultado: z.enum(RESULTADOS_AUDITORIA).optional(),
     desde: fecha,
     hasta: fecha,
@@ -28,6 +29,15 @@ export const consultaAuditoriaSchema = z
       .refine((valor) => [10, 25, 50].includes(valor), 'El límite debe ser 10, 25 o 50.')
       .default(10),
   })
+  .strict()
+  .refine((filtro) => !filtro.desde || !filtro.hasta || filtro.desde <= filtro.hasta, {
+    message: 'La fecha inicial no puede ser posterior a la final.',
+    path: ['hasta'],
+  });
+
+// El resumen solo depende del periodo; el resto de filtros de la tabla no lo afectan.
+export const resumenAuditoriaSchema = z
+  .object({ desde: fecha, hasta: fecha })
   .strict()
   .refine((filtro) => !filtro.desde || !filtro.hasta || filtro.desde <= filtro.hasta, {
     message: 'La fecha inicial no puede ser posterior a la final.',

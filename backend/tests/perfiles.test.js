@@ -150,6 +150,18 @@ test('US-001: bloqueo por cuenta, recuperación temporal y auditoría sin secret
     .expect(401);
   const guardada = await prisma.usuario.findUnique({ where: { id: cuentaAlumno.id } });
   assert.ok(guardada.bloqueadoHasta > new Date());
+  const bloqueo = await prisma.registroAuditoria.findMany({
+    where: { tipoEvento: 'CUENTA_BLOQUEADA', usuarioId: cuentaAlumno.id },
+  });
+  assert.equal(bloqueo.length, 1);
+  assert.equal(bloqueo[0].resultado, 'DENEGADO');
+  assert.equal(bloqueo[0].detalle.intentosFallidos, env.LOGIN_MAX_ATTEMPTS);
+  assert.ok(bloqueo[0].requestId);
+  const ultimoFallo = await prisma.registroAuditoria.findFirst({
+    where: { tipoEvento: 'LOGIN_FALLIDO', usuarioId: cuentaAlumno.id },
+    orderBy: { id: 'desc' },
+  });
+  assert.equal(ultimoFallo.detalle.motivo, 'CUENTA_BLOQUEADA');
   await prisma.usuario.update({
     where: { id: cuentaAlumno.id },
     data: { bloqueadoHasta: new Date(Date.now() - 1000) },
@@ -170,6 +182,9 @@ test('US-001: bloqueo por cuenta, recuperación temporal y auditoría sin secret
     where: { tipoEvento: 'LOGIN_FALLIDO' },
   });
   assert.ok(eventos.some((evento) => evento.usuarioId === null));
+  const desconocida = eventos.find((evento) => evento.usuarioId === null);
+  assert.equal(desconocida.detalle.motivo, 'CREDENCIALES_INVALIDAS');
+  assert.equal(desconocida.detalle.intentosFallidos, undefined);
   assert.ok(eventos.every((evento) => evento.requestId && evento.resultado === 'DENEGADO'));
   assert.ok(eventos.every((evento) => evento.detalle.origen?.metodo === 'POST'));
   assert.ok(!JSON.stringify(eventos).includes('Incorrecta123!'));

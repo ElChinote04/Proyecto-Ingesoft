@@ -26,6 +26,14 @@
   AUD-08 pasan al flujo de evaluaciones.
 - Seed: competencias, regla y evaluaciones de demo de Matemática en 3.° B (IV bimestre).
 
+## Seguridad y auditoría (US-001, US-003, US-004) — 2026-11-20
+
+- Se audita el bloqueo de cuenta (`CUENTA_BLOQUEADA`) y el motivo de cada `LOGIN_FALLIDO`. Un
+  login fallido ya no aparece dos veces en el log de errores.
+- Auditoría y log de errores se enlazan por `requestId`, con un filtro nuevo en ambas consultas.
+- Auditoría: historial por usuario o entidad, resumen de seguridad
+  (`GET /admin/auditoria/resumen`) y cambios con el valor anterior y el nuevo destacados.
+
 ## Plan de trabajo semanal y evidencias pedagógicas — 2026-11-20
 
 - La evidencia pedagógica vuelve como **actividad semanal del plan de trabajo del docente**

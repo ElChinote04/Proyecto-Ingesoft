@@ -1,15 +1,27 @@
 import { useState } from 'react';
 import AppLayout from '../layouts/AppLayout';
 import TablaDatos from '../components/TablaDatos';
+import CodigoSolicitud from '../components/CodigoSolicitud';
 import { Loading, ResourceError } from '../components/Feedback';
 import { useResource } from '../hooks/useResource';
-import { formatTimestamp } from '../utils/format';
+import { filtroDelEnlace, formatTimestamp } from '../utils/format';
 
 const SEVERIDADES = { ERROR: ['Error', 'danger'], ADVERTENCIA: ['Advertencia', 'warning'] };
-const SIN_FILTROS = { severidad: '', codigo: '', usuario: '', desde: '', hasta: '' };
+const SIN_FILTROS = {
+  severidad: '',
+  codigo: '',
+  usuario: '',
+  desde: '',
+  hasta: '',
+  requestId: '',
+};
 
 export default function LogErrores() {
-  const [filtros, setFiltros] = useState(SIN_FILTROS);
+  // Al llegar desde auditoría, la tabla se abre filtrada por esa solicitud.
+  const [filtros, setFiltros] = useState(() => ({
+    ...SIN_FILTROS,
+    requestId: filtroDelEnlace('requestId'),
+  }));
   const [pagina, setPagina] = useState(1);
   const [limite, setLimite] = useState(10);
   const consulta = new URLSearchParams({ pagina, limite });
@@ -19,6 +31,12 @@ export default function LogErrores() {
   const cambiarFiltro = (campo) => (e) => {
     setFiltros({ ...filtros, [campo]: e.target.value });
     setPagina(1);
+  };
+  const quitarSolicitud = (otros) => {
+    setFiltros({ ...otros, requestId: '' });
+    setPagina(1);
+    // Quita el filtro del enlace sin volver a montar la pantalla.
+    window.history.replaceState(null, '', '#/errores');
   };
   // Conserva el código elegido aunque la lista aún se esté recargando.
   const codigos = [...new Set([...(datos?.codigos ?? []), filtros.codigo])];
@@ -64,16 +82,18 @@ export default function LogErrores() {
           Hasta
           <input type="date" value={filtros.hasta} onChange={cambiarFiltro('hasta')} />
         </label>
-        <button
-          className="secondary"
-          onClick={() => {
-            setFiltros(SIN_FILTROS);
-            setPagina(1);
-          }}
-        >
+        <button className="secondary" onClick={() => quitarSolicitud(SIN_FILTROS)}>
           Limpiar filtros
         </button>
       </div>
+      {filtros.requestId && (
+        <p className="filtro-activo">
+          Filtrando: <strong>Solicitud {filtros.requestId}</strong>
+          <button type="button" className="enlace-tabla" onClick={() => quitarSolicitud(filtros)}>
+            ✕ Quitar
+          </button>
+        </p>
+      )}
       {errores.loading && <Loading>Cargando errores…</Loading>}
       {errores.error && <ResourceError {...errores} />}
       {datos && (
@@ -101,7 +121,19 @@ export default function LogErrores() {
                   error.codigo,
                   error.descripcion,
                   error.usuario ?? 'Sin sesión',
-                  error.requestId ?? '—',
+                  <CodigoSolicitud
+                    key="solicitud"
+                    requestId={error.requestId}
+                    enlace={
+                      error.enAuditoria && (
+                        <a
+                          href={`#/admin/auditoria?requestId=${encodeURIComponent(error.requestId)}`}
+                        >
+                          Ver en auditoría
+                        </a>
+                      )
+                    }
+                  />,
                 ],
               };
             })}
