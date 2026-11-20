@@ -1,5 +1,13 @@
 # Registro de cambios
 
+## Seguridad y auditoría (US-001, US-003, US-004) — 2026-11-20
+
+- Se audita el bloqueo de cuenta (`CUENTA_BLOQUEADA`) y el motivo de cada `LOGIN_FALLIDO`. Un
+  login fallido ya no aparece dos veces en el log de errores.
+- Auditoría y log de errores se enlazan por `requestId`, con un filtro nuevo en ambas consultas.
+- Auditoría: historial por usuario o entidad, resumen de seguridad
+  (`GET /admin/auditoria/resumen`) y cambios con el valor anterior y el nuevo destacados.
+
 ## Pago en cuotas (US-010) — 2026-11-06
 
 - `POST /compromisos-pago/:id/fracciones` (administrador) con `{ numeroCuotas, montoCuota,

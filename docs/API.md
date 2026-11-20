@@ -36,6 +36,8 @@ Identificador requerido, máximo 200 caracteres, normalizado a minúsculas y sin
 También se bloquea temporalmente por cuenta al alcanzar LOGIN_MAX_ATTEMPTS consecutivos
 (5 por defecto), durante LOGIN_LOCK_SECONDS (900). El mensaje 401 no revela si existe
 la cuenta. Éxitos/fallos dejan auditoría de seguridad con resultado, origen y requestId.
+LOGIN_FALLIDO guarda además el `motivo` y los `intentosFallidos`; al llegar al umbral se
+registra también CUENTA_BLOQUEADA. El motivo no se envía al cliente.
 No se devuelve bloqueo, hash ni token en el DTO.
 
 ### GET /auth/me
@@ -349,22 +351,28 @@ POST `/admin/sesiones`: `{ "bloqueId": 1, "fecha": "2027-10-01" }`. Devuelve la 
 
 ### Log de errores
 
-GET `/errores?severidad&codigo&usuario&desde&hasta&pagina&limite`: requiere el permiso
+GET `/errores?severidad&codigo&usuario&requestId&desde&hasta&pagina&limite`: requiere el permiso
 `errores.consultar`. Todos los filtros son opcionales; `severidad` ∈ ERROR|ADVERTENCIA;
 `desde`/`hasta` son fechas `YYYY-MM-DD` de Lima (ambas inclusive); `limite` ∈ 10|25|50 (10 por
 defecto). Responde `{ total, pagina, limite, codigos[], registros[{ fechaHora, severidad, modulo,
-codigo, descripcion, usuario, requestId }] }`, del más reciente al más antiguo. Se lee de los
-archivos de log del servidor y no hay rutas para alterarlos.
+codigo, descripcion, usuario, requestId, enAuditoria }] }`, del más reciente al más antiguo.
+`enAuditoria` indica si esa solicitud tiene eventos de auditoría. Se lee de los archivos de log
+del servidor y no hay rutas para alterarlos.
 
 ### Auditoría
 
-GET `/admin/auditoria?tipoEvento&entidad&entidadId&usuarioId&resultado&desde&hasta&pagina&limite`:
+GET `/admin/auditoria?tipoEvento&entidad&entidadId&usuarioId&requestId&resultado&desde&hasta&pagina&limite`:
 todos los filtros son opcionales; `resultado` ∈ EXITO|DENEGADO|FALLO; `desde`/`hasta` son
 fechas `YYYY-MM-DD` de Lima (ambas inclusive); `limite` ∈ 10|25|50 (10 por defecto). Responde
-`{ total, pagina, limite, tiposEvento[], registros[{ id, fechaHora, usuario, tipoEvento,
-entidad, entidadId, resultado, requestId, detalle }] }`, del más reciente al más antiguo.
-`usuario` es el identificador de la cuenta o null. Un filtro inválido o un campo extra devuelve
-400 VALIDATION_ERROR. No hay rutas para alterar eventos y SQL rechaza UPDATE/DELETE mediante trigger.
+`{ total, pagina, limite, tiposEvento[], registros[{ id, fechaHora, usuarioId, usuario, tipoEvento,
+entidad, entidadId, resultado, requestId, tieneError, detalle }] }`, del más reciente al más antiguo.
+`usuario` es el identificador de la cuenta o null. `tieneError` indica si esa solicitud dejó un
+error en el log. Un filtro inválido o un campo extra devuelve 400 VALIDATION_ERROR. No hay rutas
+para alterar eventos y SQL rechaza UPDATE/DELETE mediante trigger.
+
+GET `/admin/auditoria/resumen?desde&hasta`: cuenta en el periodo los eventos LOGIN_FALLIDO,
+CUENTA_BLOQUEADA, ACCESO_DENEGADO, CALIFICACION_MODIFICADA y PAGO_ANULADO. Responde
+`[{ tipoEvento, total }]`.
 
 Las transacciones críticas de notas y pagos (US-003) se registran con
 `registrarTransaccionCritica` dentro de la transacción de cada módulo; su `detalle` es
