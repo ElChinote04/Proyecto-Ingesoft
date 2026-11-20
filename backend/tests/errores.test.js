@@ -124,6 +124,7 @@ test('ERR-04 lista errores y advertencias, del más reciente al más antiguo', a
       descripcion: 'No tienes permiso.',
       usuario: null,
       requestId: 'req-2',
+      enAuditoria: false,
     },
     {
       fechaHora: '2020-01-10T15:00:00.000Z',
@@ -133,6 +134,7 @@ test('ERR-04 lista errores y advertencias, del más reciente al más antiguo', a
       descripcion: 'Error interno de aplicación (TypeError)',
       usuario: 'admin-errores@prueba.local',
       requestId: 'req-1',
+      enAuditoria: false,
     },
   ]);
   assert.ok(datos.codigos.includes('INTERNAL_ERROR'));
@@ -184,4 +186,32 @@ test('ERR-08 cada error registra el módulo de la ruta que falló', async (t) =>
   const log = t.mock.method(logger, 'log');
   await admin.get(`${base}/errores`).query({ limite: 7 }).expect(400);
   assert.equal(log.mock.calls.at(-1).arguments[2].module, 'errores');
+});
+
+test('ERR-09 filtra por solicitud y marca las que dejaron un evento de auditoría', async () => {
+  const fallido = await request(app)
+    .post(`${base}/auth/login`)
+    .send({ identificador: 'nadie@prueba.local', contrasena: 'Incorrecta123!' })
+    .expect(401);
+  const auditada = fallido.headers['x-request-id'];
+  writeFileSync(
+    path.join(logDirectory, 'app3.log'),
+    JSON.stringify({
+      level: 'warn',
+      message: 'No pudimos validar el acceso.',
+      module: 'auth',
+      code: 'INVALID_CREDENTIALS',
+      requestId: auditada,
+      timestamp: '2020-01-20T15:00:00.000Z',
+    }),
+  );
+  const [conEvento] = (await consultar({ requestId: auditada })).registros;
+  assert.equal(conEvento.enAuditoria, true);
+  const [sinEvento] = (await consultar({ requestId: 'req-2' })).registros;
+  assert.equal(sinEvento.enAuditoria, false);
+  assert.equal((await consultar({ requestId: 'no-existe' })).total, 0);
+  await admin
+    .get(`${base}/errores`)
+    .query({ requestId: 'x'.repeat(201) })
+    .expect(400);
 });

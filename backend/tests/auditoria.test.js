@@ -1,9 +1,12 @@
 import { before, after, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
+import { logDirectory } from '../src/logging/logger.js';
 import { registrarTransaccionCritica } from '../src/services/auditoria.service.js';
 
 const base = '/api/v1';
@@ -305,4 +308,59 @@ test('AUD-09 casos inválidos y valores límite restantes del registro y la cons
 
   for (const invalida of [{ pagina: 0 }, { desde: '23/10/2026' }, { tipoEvento: '' }])
     await admin.get(`${base}/admin/auditoria`).query(invalida).expect(400);
+});
+
+test('AUD-10 filtra por solicitud y marca las que dejaron un error en el log', async () => {
+  const fallido = await request(app)
+    .post(`${base}/auth/login`)
+    .send({ identificador: 'nadie@prueba.local', contrasena: 'Incorrecta123!' })
+    .expect(401);
+  const conError = fallido.headers['x-request-id'];
+  // Copia rotada simulada: la prueba no depende de cuándo Winston escribe a disco.
+  writeFileSync(
+    path.join(logDirectory, 'app1.log'),
+    JSON.stringify({ level: 'warn', code: 'INVALID_CREDENTIALS', requestId: conError }),
+  );
+  const filtrada = await consultar({ requestId: conError });
+  assert.equal(filtrada.total, 1);
+  assert.equal(filtrada.registros[0].tipoEvento, 'LOGIN_FALLIDO');
+  assert.equal(filtrada.registros[0].tieneError, true);
+  const [exitoso] = (await consultar({ tipoEvento: 'LOGIN_EXITOSO' })).registros;
+  assert.equal(exitoso.tieneError, false);
+  assert.equal((await consultar({ requestId: 'no-existe' })).total, 0);
+  await admin
+    .get(`${base}/admin/auditoria`)
+    .query({ requestId: 'x'.repeat(101) })
+    .expect(400);
+});
+
+test('AUD-11 historial de una cuenta y de un registro', async () => {
+  const acciones = (await consultar({ usuarioId: adminId })).registros;
+  assert.ok(acciones.length > 0);
+  assert.ok(acciones.every((evento) => evento.usuarioId === adminId));
+  const historial = await consultar({ entidad: 'Usuario', entidadId: cuentaDocente.id });
+  assert.ok(historial.total > 0);
+  assert.ok(
+    historial.registros.every(
+      (evento) => evento.entidad === 'Usuario' && evento.entidadId === cuentaDocente.id,
+    ),
+  );
+  for (const invalida of [{ usuarioId: 0 }, { entidadId: 'abc' }])
+    await admin.get(`${base}/admin/auditoria`).query(invalida).expect(400);
+});
+
+test('AUD-12 resumen de seguridad por periodo', async () => {
+  const resumen = async (filtros = {}) =>
+    (await admin.get(`${base}/admin/auditoria/resumen`).query(filtros).expect(200)).body.data;
+  for (const { tipoEvento, total } of await resumen())
+    assert.equal(total, (await consultar({ tipoEvento })).total, tipoEvento);
+  assert.ok((await resumen({ desde: '2099-01-01' })).every((tarjeta) => tarjeta.total === 0));
+  for (const invalida of [
+    { desde: '2026-10-20', hasta: '2026-10-01' },
+    { desde: '2026-02-30' },
+    { tipoEvento: 'LOGIN_FALLIDO' },
+  ])
+    await admin.get(`${base}/admin/auditoria/resumen`).query(invalida).expect(400);
+  await request(app).get(`${base}/admin/auditoria/resumen`).expect(401);
+  await docente.get(`${base}/admin/auditoria/resumen`).expect(403);
 });

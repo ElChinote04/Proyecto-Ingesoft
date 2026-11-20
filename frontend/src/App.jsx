@@ -72,12 +72,15 @@ function Screens() {
     user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol))
   )
     return <Libreta key={perfiles} />;
-  if (route === '/errores' && user.permisos.includes('errores.consultar')) return <LogErrores />;
+  // Auditoría y errores reciben filtros por enlace (#/errores?requestId=...); no cambian la pantalla.
+  const ruta = route.split('?')[0];
+  if (ruta === '/errores' && user.permisos.includes('errores.consultar'))
+    return <LogErrores key={route} />;
   if (
     user.roles.includes('ADMINISTRADOR') &&
-    (route.startsWith('/admin') || !user.roles.includes('DOCENTE'))
+    (ruta.startsWith('/admin') || !user.roles.includes('DOCENTE'))
   )
-    return <Admin key={route} page={route.split('/')[2] || 'inicio'} />;
+    return <Admin key={route} page={ruta.split('/')[2] || 'inicio'} />;
   if (!user.roles.includes('DOCENTE')) return <Portal key={perfiles} />;
   if (route === '/confirmacion' && saved) return <Confirmation result={saved} />;
   const match = route.match(/^\/sesiones\/(\d+)$/);

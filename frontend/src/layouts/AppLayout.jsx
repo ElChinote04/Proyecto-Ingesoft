@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Feedback } from '../components/Feedback';
+import { rutaActual } from '../utils/format';
 export default function AppLayout({
   children,
   step = 'Seleccionar sesión',
@@ -47,9 +48,11 @@ export default function AppLayout({
                 <button
                   key={route}
                   className={
-                    (route === 'reglas'
-                      ? window.location.hash.startsWith('#/gestion')
-                      : window.location.hash === `#/admin/${route}`)
+                    (
+                      route === 'reglas'
+                        ? window.location.hash.startsWith('#/gestion')
+                        : rutaActual() === `#/admin/${route}`
+                    )
                       ? 'nav-active'
                       : 'nav-item'
                   }
@@ -61,7 +64,7 @@ export default function AppLayout({
                 >
                   <img
                     src={
-                      window.location.hash === `#/admin/${route}`
+                      rutaActual() === `#/admin/${route}`
                         ? '/figma/nav-active.svg'
                         : '/figma/nav.svg'
                     }
