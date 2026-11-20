@@ -1,5 +1,94 @@
 # Registro de cambios
 
+## Pago en cuotas (US-010) — 2026-11-06
+
+- `POST /compromisos-pago/:id/fracciones` (administrador) con `{ numeroCuotas, montoCuota,
+fechaPrimerVencimiento }` divide una boleta pendiente en 2 a 6 cuotas que vencen una por mes. La
+  última cuota se ajusta para que la suma sea exactamente el total (RF140): 400
+  `FRACCIONES_EXCEDEN_TOTAL` o `FRACCIONES_NO_CUBREN_TOTAL` si no cuadra. Se audita como
+  `BOLETA_FRACCIONADA`.
+- Cada cuota es una boleta hija (`boletaOrigenId`, `numeroFraccion`) que el apoderado paga por la
+  pasarela y que tiene su propio comprobante. La original pasa al nuevo estado `PARCIAL` y ya no se
+  paga entera (409 `BOLETA_FRACCIONADA`); queda PAGADA al pagarse la última cuota (RF139).
+- No se divide una boleta pagada, ya dividida, que ya es una cuota o con un pago en curso (409).
+- Integración con lo existente: el reporte de pagos (US-012) cuenta las cuotas y no la original;
+  anular el pago de una cuota (US-013) devuelve la original a `PARCIAL`.
+- Botón **Pagar en cuotas** en Pagos y boletas (administrador) con vista previa de las cuotas.
+- Migración `20261106170000_fraccionamiento_boletas`.
+
+## Cobranza y anulación de pagos (US-008, US-011, US-012, US-013) — 2026-11-06
+
+- **US-008 Morosidad:** `GET /reportes/pagos/morosidad` agrupa las boletas vencidas por
+  estudiante, con su deuda, cantidad de boletas, atraso y apoderados vinculados. Filtros por año,
+  grado y sección. Pestaña **Morosidad** en Pagos y boletas (administrador).
+- **US-012 Reporte de pagos:** `GET /reportes/pagos?desde&hasta` devuelve lo emitido, recaudado,
+  pendiente y moroso, en total y por periodo, filtrable por año, grado y sección. Con
+  `formato=pdf|xlsx` lo descarga (PDF con `pdfkit`, Excel con la nueva dependencia
+  `write-excel-file`). Pestaña **Reporte de pagos**.
+- **US-013 Anulación:** `PUT /pagos/:id/anulacion` con `{ motivo }` (administrador). El pago queda
+  ANULADO con quién, cuándo y por qué; su comprobante queda anulado y la boleta vuelve a
+  PENDIENTE para cobrarse de nuevo. Se audita como `PAGO_ANULADO` con
+  `registrarTransaccionCritica`. Botón **Anular pago** en el historial de boletas.
+- **US-011 Aviso de vencimiento:** `GET /avisos-vencimiento` (apoderado) lista las boletas que vencen
+  en los próximos `PAGOS_DIAS_AVISO` días (5 por defecto, nueva variable en `.env.example`). Aviso
+  en el portal del apoderado y en Pagos y boletas. Sin correo.
+- Migración `20261106150000_anulacion_pagos`: estado `ANULADO` en `EstadoPago`, columnas de
+  anulación en `Pago` y `anuladoEn` en `Comprobante`. La unicidad del comprobante por boleta pasa a
+  un índice parcial (solo el vigente), por lo que la relación `CompromisoPago.comprobante` ahora es
+  `comprobantes` (las dos pruebas de US-009 que la consultaban se adaptaron).
+- Un reenvío tardío de la pasarela sobre un pago anulado se ignora (`resolverConfirmacion`).
+- Nueva suite `tests/cobranza.test.js` (22 pruebas).
+
+## Libreta de notas por competencias (US-020) — 2026-11-06
+
+- Alumno y apoderado consultan la libreta bimestral y la anual en `Mis evaluaciones`, con el formato
+  del informe de progreso. La misma hoja se ve en pantalla y se imprime o guarda como PDF, sin el
+  menú de SAGE. El alumno también tiene el acceso desde el portal.
+- Nuevas rutas `GET /libretas` y `GET /libretas/:id`, solo para el alumno y su apoderado. Incluyen
+  años anteriores y matrículas inactivas.
+- La libreta anual muestra cada bimestre publicado. La calificación anual y la final del área
+  aparecen al publicar todos los bimestres.
+- Corregido: la vista por bimestre mostraba un consolidado de todos los bimestres y no el logro de
+  ese periodo.
+- `GET /calificaciones` se cierra a alumnos y apoderados, porque devolvía entidades completas, con
+  el DNI del docente incluido. Las pruebas CAL-03 y CAL-07 cambian en consecuencia.
+- `consolidar` pasa a `domain/consolidacion.js`. Nuevas variables `INSTITUCION_*`.
+- Nueva suite `libretas` (LIB-01 a LIB-29).
+
+## Evidencia pedagógica y publicación de libretas (US-019) — 2026-11-06
+
+- El docente registra evidencia por nota desde Calificar alumno: título, descripción y hasta tres
+  archivos PDF, JPG o PNG. Queda ligada al alumno, curso y competencia, y conserva el nivel con que
+  se registró. El modal sigue abierto tras guardar para continuar con la evidencia.
+- Nuevos modelos `EvidenciaCalificacion`, `ArchivoEvidenciaCalificacion` y `PublicacionSeccion`.
+  Los archivos van a `EVIDENCIAS_DIR` y requieren `multer`. La migración conserva lo ya publicado.
+- La libreta la publica el administrador, por sección o de forma masiva, solo con nota y evidencia
+  en todas las competencias. La ruta del docente deja de existir.
+- Con la sección publicada, notas y evidencia quedan en solo lectura para el docente. El
+  administrador corrige por API con motivo obligatorio.
+- Tras reasignar un curso, el docente nuevo ve las notas del anterior y las actualiza sin duplicarlas.
+- Corregidos: la auditoría de `EvidenciaPedagogica` escribía columnas inexistentes, y
+  `/calificaciones-competencias` fallaba con 500 en toda escritura por una transacción no exportada.
+- Nuevas suites `evidencias-calificacion` (EVC-01 a EVC-20) y `publicacion-libretas` (PUB-01 a PUB-24).
+
+## Calificación por alumno — 2026-11-05
+
+- El docente elige un salón, ve a sus alumnos y califica todas las competencias de cada uno en una
+  sola vista. Los salones salen de sus asignaciones, así que ya no depende de tener sesiones.
+- `GET /secciones`, `GET /secciones/:id/alumnos`, `GET` y `PUT /matriculas/:id/calificaciones`.
+- Se retiran `GET /calificaciones/contexto` y `POST /calificaciones/competencias/bulk`.
+- Al sobrescribir una nota, la auditoría conserva el nivel anterior.
+- Nueva suite `tests/calificaciones-alumno.test.js` (CAA-01 a CAA-13).
+
+## Log de errores (US-004) — 2026-11-05
+
+- `GET /errores` con filtros (severidad, código, usuario, rango de fechas) y paginación 10/25/50.
+  Lee `app.log` y sus copias rotadas; sin cambios de esquema ni migraciones.
+- Permiso `errores.consultar`, hoy asignado al administrador, y middleware `requirePermiso`.
+- Pantalla **Log de errores**, que el menú muestra según el permiso.
+- `errorHandler` registra el módulo de la ruta que falló en lugar del valor fijo `http`.
+- Nueva suite `tests/errores.test.js` (ERR-01 a ERR-08).
+
 ## Auditoría de transacciones críticas (US-003) — 2026-10-23
 
 - `registrarTransaccionCritica(db, datos)` en `auditoria.service.js`: los módulos de notas y pagos

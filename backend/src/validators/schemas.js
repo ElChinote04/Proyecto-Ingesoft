@@ -1,12 +1,18 @@
+
 import { z } from 'zod';
 import { AppError } from '../errors/AppError.js';
+
 export const loginSchema = z
   .object({
     identificador: z.string().trim().min(1, 'Ingresa tu usuario o correo.').max(200).toLowerCase(),
     contrasena: z.string().min(1, 'Ingresa tu contraseña.').max(72),
   })
   .strict();
-export const idSchema = z.object({ id: z.coerce.number().int().positive().max(2147483647) });
+
+export const idSchema = z.object({
+  id: z.coerce.number().int().positive().max(2147483647),
+});
+
 export const asistenciaSchema = z
   .object({
     asistencias: z
@@ -23,31 +29,37 @@ export const asistenciaSchema = z
       .max(500),
   })
   .strict();
+
 export function validate(schema, source = 'body') {
   return (req, _res, next) => {
     const result = schema.safeParse(req[source]);
-    if (!result.success)
+
+    if (!result.success) {
       throw new AppError(
         400,
         'VALIDATION_ERROR',
         'Los datos enviados no son válidos.',
-        result.error.issues.map((i) => ({ campo: i.path.join('.'), mensaje: i.message })),
+        result.error.issues.map((i) => ({
+          campo: i.path.join('.'),
+          mensaje: i.message,
+        })),
       );
-    req.validated = { ...req.validated, [source]: result.data };
+    }
+
+    req.validated = {
+      ...req.validated,
+      [source]: result.data,
+    };
+
     next();
   };
 }
 
-
-/* ============================================================
-   REPORTE DE ASISTENCIA ESTUDIANTIL
-   ============================================================ */
-
-// Validar fechas con formato YYYY-MM-DD
-const fechaReporteSchema = z.string()
+const fechaReporteSchema = z
+  .string()
   .regex(
     /^\d{4}-\d{2}-\d{2}$/,
-    'La fecha debe tener el formato YYYY-MM-DD.'
+    'La fecha debe tener el formato YYYY-MM-DD.',
   )
   .refine((valor) => {
     const fecha = new Date(`${valor}T00:00:00.000Z`);
@@ -58,25 +70,37 @@ const fechaReporteSchema = z.string()
     );
   }, 'La fecha indicada no existe.');
 
-// Validar filtros del reporte estudiantil
-export const reporteAsistenciaSchema = z.object({
-  fechaInicio: fechaReporteSchema,
-  fechaFin: fechaReporteSchema,
+const idFiltroSchema = z.coerce
+  .number()
+  .int()
+  .positive()
+  .max(2147483647);
 
-  seccionId: z.coerce.number()
-    .int()
-    .positive()
-    .max(2147483647),
-})
-.strict()
-.superRefine((datos, ctx) => {
-
-  if (datos.fechaInicio > datos.fechaFin) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['fechaFin'],
-      message: 'La fecha final no puede ser anterior a la inicial.',
-    });
-  }
-
-});
+export const reporteAsistenciaSchema = z
+  .object({
+    fechaInicio: fechaReporteSchema,
+    fechaFin: fechaReporteSchema,
+    seccionId: idFiltroSchema,
+    alumnoId: z
+      .string()
+      .regex(/^[1-9]\d*$/, 'El alumnoId debe ser un entero positivo.')
+      .transform(Number)
+      .pipe(z.number().int().positive().max(2147483647))
+      .optional(),
+    cursoId: z
+      .string()
+      .regex(/^[1-9]\d*$/, 'El cursoId debe ser un entero positivo.')
+      .transform(Number)
+      .pipe(z.number().int().positive().max(2147483647))
+      .optional(),
+  })
+  .strict()
+  .superRefine((datos, ctx) => {
+    if (datos.fechaInicio > datos.fechaFin) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['fechaFin'],
+        message: 'La fecha final no puede ser anterior a la inicial.',
+      });
+    }
+  });

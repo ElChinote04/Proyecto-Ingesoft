@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import TablaDatos from './TablaDatos';
 import { Loading, ResourceError } from './Feedback';
 import { useResource } from '../hooks/useResource';
@@ -13,25 +13,78 @@ const RESULTADOS = {
 const ETIQUETAS_RESULTADO = { ...RESULTADOS, EXITOSO: RESULTADOS.EXITO };
 const SIN_FILTROS = { tipoEvento: '', resultado: '', desde: '', hasta: '' };
 
-const mostrarValor = (valor) => (valor == null ? '—' : JSON.stringify(valor));
+const ETIQUETAS_CAMPO = {
+  apoderadoId: 'Apoderado',
+  estudianteId: 'Estudiante',
+  competenciaId: 'Competencia',
+  nivelLogro: 'Nivel de logro',
+  conclusionDescriptiva: 'Conclusión descriptiva',
+};
+const etiquetaCampo = (campo) => {
+  if (ETIQUETAS_CAMPO[campo]) return ETIQUETAS_CAMPO[campo];
+  const texto = campo.replace(/([A-Z])/g, ' $1').toLowerCase();
+  return texto[0].toUpperCase() + texto.slice(1);
+};
+const esObjeto = (valor) => valor !== null && typeof valor === 'object';
+// Algunos eventos guardan un valor suelto, por ejemplo una condición de asistencia.
+const comoCampos = (valor) => (esObjeto(valor) ? valor : valor == null ? {} : { valor });
+
+function mostrarValor(valor, campo, nombres) {
+  if (valor == null) return '—';
+  if (typeof valor === 'boolean') return valor ? 'Sí' : 'No';
+  if (Array.isArray(valor) && !valor.some(esObjeto)) return valor.join(', ');
+  if (esObjeto(valor)) return <ListaCampos datos={valor} nombres={nombres} />;
+  if (Object.hasOwn(nombres, campo)) return nombres[campo][valor] ?? `#${valor}`;
+  return String(valor);
+}
+
+// Con "anterior" muestra lo que cambió como "B → A"; sin él, solo los datos.
+function ListaCampos({ datos, anterior, nombres }) {
+  const campos = [...new Set([...Object.keys(anterior ?? {}), ...Object.keys(datos)])];
+  return (
+    <dl className="auditoria-campos">
+      {campos.map((campo) => {
+        const cambio = anterior && JSON.stringify(anterior[campo]) !== JSON.stringify(datos[campo]);
+        return (
+          <Fragment key={campo}>
+            <dt>{etiquetaCampo(campo)}</dt>
+            <dd>
+              {cambio && (
+                <>
+                  {mostrarValor(anterior[campo], campo, nombres)}
+                  {' → '}
+                </>
+              )}
+              {mostrarValor(datos[campo], campo, nombres)}
+            </dd>
+          </Fragment>
+        );
+      })}
+    </dl>
+  );
+}
 
 // Los cambios muestran el valor anterior y el nuevo; el resto, su detalle. El módulo de notas los
 // guarda como valorAnterior/valorNuevo y el resto del sistema como anterior/nuevo.
-function DetalleEvento({ detalle }) {
+function DetalleEvento({ detalle, nota, nombres }) {
   const anterior = detalle?.anterior ?? detalle?.valorAnterior;
   const nuevo = detalle?.nuevo ?? detalle?.valorNuevo;
   if (anterior !== undefined || nuevo !== undefined)
     return (
       <div className="auditoria-cambio">
-        <span>Antes: {mostrarValor(anterior)}</span>
-        <span>Después: {mostrarValor(nuevo)}</span>
+        <ListaCampos
+          datos={{ ...nota, ...comoCampos(nuevo) }}
+          anterior={anterior == null ? undefined : { ...nota, ...comoCampos(anterior) }}
+          nombres={nombres}
+        />
         {detalle.motivo && <span>Motivo: {detalle.motivo}</span>}
       </div>
     );
+  if (!esObjeto(detalle) || Object.keys(detalle).length === 0) return '—';
   return (
     <details>
       <summary>Ver detalle</summary>
-      <pre>{JSON.stringify(detalle, null, 2)}</pre>
+      <ListaCampos datos={detalle} nombres={nombres} />
     </details>
   );
 }
@@ -117,7 +170,12 @@ export default function ConsultaAuditoria() {
                   <span key="resultado" className={`badge ${color}`}>
                     {etiqueta}
                   </span>,
-                  <DetalleEvento key="detalle" detalle={evento.detalle} />,
+                  <DetalleEvento
+                    key="detalle"
+                    detalle={evento.detalle}
+                    nota={evento.nota}
+                    nombres={datos.nombres}
+                  />,
                 ],
               };
             })}

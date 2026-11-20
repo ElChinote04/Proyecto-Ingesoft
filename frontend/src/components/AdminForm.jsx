@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { Feedback } from './Feedback';
+import { normalizeUserField, userFieldRules } from '../utils/userValidation.js';
 
-export function Field({ label, name, type = 'text', required = true, ...props }) {
+export function Field({
+  label,
+  name,
+  type = 'text',
+  required = true,
+  validationMessage,
+  ...props
+}) {
   return (
     <label className="field">
       <span>
@@ -13,7 +21,16 @@ export function Field({ label, name, type = 'text', required = true, ...props })
           </span>
         )}
       </span>
-      <input name={name} type={type} required={required} {...props} />
+      <input
+        name={name}
+        type={type}
+        required={required}
+        onInvalid={(event) => {
+          if (validationMessage) event.target.setCustomValidity(validationMessage);
+        }}
+        onInput={(event) => event.target.setCustomValidity('')}
+        {...props}
+      />
     </label>
   );
 }
@@ -45,7 +62,37 @@ export function Select({ label, name, items, ...props }) {
     </label>
   );
 }
-export function PersonFields() {
+export function UserField({ name, ...props }) {
+  const rule = userFieldRules[name];
+  return (
+    <Field
+      name={name}
+      maxLength={rule.maxLength}
+      pattern={name === 'identificador' ? undefined : rule.pattern.source}
+      title={rule.message}
+      validationMessage={rule.message}
+      onBlur={(event) => {
+        event.target.value = normalizeUserField(name, event.target.value);
+        event.target.setCustomValidity('');
+      }}
+      {...props}
+    />
+  );
+}
+export function PersonFields({ userAccount = false }) {
+  if (userAccount)
+    return (
+      <>
+        <UserField
+          label="DNI (exactamente 8 dígitos)"
+          name="numeroDocumento"
+          inputMode="numeric"
+          minLength={8}
+        />
+        <UserField label="Nombres" name="nombres" autoComplete="given-name" />
+        <UserField label="Apellidos" name="apellidos" autoComplete="family-name" />
+      </>
+    );
   return (
     <>
       <Field label="Documento de identidad" name="numeroDocumento" maxLength={30} />

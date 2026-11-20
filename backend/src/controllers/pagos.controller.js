@@ -57,3 +57,41 @@ export const simularResultado = async (req, res) =>
       req.requestId,
     ),
   });
+
+/** US-009: el comprobante se entrega como archivo PDF, no como JSON. */
+export const descargarComprobante = async (req, res) => {
+  const { pdf, nombreArchivo } = await service.obtenerComprobante(
+    req.validated.params.id,
+    req.user,
+  );
+  res
+    .status(200)
+    .set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${nombreArchivo}"`,
+      'Content-Length': pdf.length,
+      'Cache-Control': 'private, no-store',
+    })
+    .send(pdf);
+};
+
+export const anularPago = async (req, res) =>
+  res.json({
+    data: await service.anularPago(
+      req.validated.params.id,
+      req.validated.body,
+      req.user,
+      req.requestId,
+    ),
+  });
+
+/** US-010: fraccionar una boleta pendiente en cuotas. */
+export const fraccionarBoleta = async (req, res) =>
+  res.status(201).json({
+    data: await service.fraccionarBoleta(
+      req.validated.params.id,
+      req.validated.body,
+      req.user,
+      req.requestId,
+    ),
+  });

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import * as repository from '../repositories/pagos.repository.js';
 import { pasarela, RESULTADO } from '../integrations/pasarelaPagos.js';
 import {
+  aCentimos,
   construirCronograma,
   estadoVisible,
   inicioDelDia,
@@ -10,6 +11,9 @@ import {
 import { AppError } from '../errors/AppError.js';
 import { logger } from '../logging/logger.js';
 import { env } from '../config/env.js';
+import { registrarTransaccionCritica } from './auditoria.service.js';
+import { generarComprobantePdf, numeroComprobante } from '../domain/comprobante.js';
+import { construirFracciones } from '../domain/fraccionamiento.js';
 
 const fail = (status, code, message) => {
   throw new AppError(status, code, message);
@@ -102,7 +106,27 @@ const boletaResumenDto = (b) => ({
   fechaVencimiento: b.fechaVencimiento.toISOString().slice(0, 10),
   estado: estadoVisible(b),
   pagadaEn: b.pagadaEn?.toISOString() ?? null,
+  // US-009: número del comprobante vigente de una boleta pagada, para ofrecer su descarga.
+  comprobante: b.comprobantes?.[0] ? numeroComprobante(b.comprobantes[0]) : null,
+  ...fraccionamientoDto(b),
 });
+
+/**
+ * US-010: una fracción indica de qué boleta viene y qué parte es; la boleta
+ * fraccionada indica cuánto se lleva pagado del total (RF139).
+ */
+function fraccionamientoDto(b) {
+  const fracciones = b.fracciones ?? [];
+  const pagado = fracciones
+    .filter((f) => f.estado === 'PAGADA')
+    .reduce((suma, f) => suma + aCentimos(String(f.monto)), 0);
+  return {
+    boletaOrigenId: b.boletaOrigenId ?? null,
+    numeroFraccion: b.numeroFraccion ?? 0,
+    totalFracciones: b.boletaOrigen?._count.fracciones ?? fracciones.length,
+    montoPagado: fracciones.length ? (pagado / 100).toFixed(2) : null,
+  };
+}
 
 /**
  * pagoEnCursoId permite a la pantalla ofrecer «retomar o cancelar» en lugar de
@@ -115,6 +139,10 @@ const boletaDetalleDto = (b, actor) => ({
     (b.pagos ?? []).find(
       (p) => actor?.roles.includes('ADMINISTRADOR') || p.iniciadoPorId === actor?.id,
     )?.id ?? null,
+  // US-013: solo el administrador puede anular el pago que dejó la boleta pagada.
+  ...(actor?.roles.includes('ADMINISTRADOR') && {
+    pagoConfirmadoId: b.comprobantes?.[0]?.pagoId ?? null,
+  }),
   estudiante: {
     id: b.planPago.matricula.estudianteId,
     nombres: b.planPago.matricula.estudiante.persona.nombres,
@@ -181,6 +209,12 @@ export async function iniciarPago({ compromisoPagoId }, actor, requestId) {
   if (boleta.estado === 'PAGADA')
     fail(409, 'BOLETA_YA_PAGADA', 'Esta boleta ya figura como pagada.');
   if (boleta.estado === 'ANULADA') fail(409, 'BOLETA_ANULADA', 'Esta boleta fue anulada.');
+  if (boleta.estado === 'PARCIAL')
+    fail(
+      409,
+      'BOLETA_FRACCIONADA',
+      'Esta boleta se pagará en cuotas: paga cada una de sus partes por separado.',
+    );
 
   const enCurso = await repository.buscarPagoEnCurso(compromisoPagoId);
   if (enCurso)
@@ -297,13 +331,30 @@ export async function confirmarDesdeNotificacion({ referencia }, requestId) {
         db,
       );
       if (!cambiados) return false;
+      const { boletaOrigenId } = pago.compromisoPago;
+      if (boletaOrigenId) await repository.bloquearBoleta(boletaOrigenId, db);
       await repository.marcarBoletaPagada(pago.compromisoPagoId, ahora, db);
+      // US-010: la boleta fraccionada queda pagada cuando se paga su última
+      // parte; hasta entonces sigue PARCIAL (RF139).
+      if (boletaOrigenId && !(await repository.contarFraccionesSinPagar(boletaOrigenId, db)))
+        await repository.marcarBoletaPagada(boletaOrigenId, ahora, db);
+      // US-009: el comprobante nace en la misma transacción que la confirmación,
+      // así no puede existir una boleta pagada sin comprobante ni al revés.
+      const comprobante = await repository.crearComprobante(
+        { pagoId: pago.id, compromisoPagoId: pago.compromisoPagoId, emitidoEn: ahora },
+        db,
+      );
       await repository.audit(
         db,
         pago.iniciadoPorId,
         'PAGO_CONFIRMADO',
         pago.id,
-        { compromisoPagoId: pago.compromisoPagoId, referencia, monto: dinero(pago.monto) },
+        {
+          compromisoPagoId: pago.compromisoPagoId,
+          referencia,
+          monto: dinero(pago.monto),
+          comprobante: numeroComprobante(comprobante),
+        },
         { requestId, entidad: 'Pago' },
       );
       return true;
@@ -419,6 +470,120 @@ export async function cancelarPago(id, actor, requestId) {
   return { id: pago.id, estado: 'CANCELADO' };
 }
 
+// ------------------------------------------------------------------ US-010
+/**
+ * Pago fraccionado (RF138–RF140). El administrador divide una boleta pendiente
+ * en cuotas; cada cuota es una boleta que el apoderado paga por la pasarela
+ * como cualquier otra, con su propio comprobante. La original pasa a PARCIAL
+ * y deja de poder pagarse entera, para que el monto nunca se cobre dos veces.
+ */
+export async function fraccionarBoleta(compromisoPagoId, datos, actor, requestId) {
+  const boleta = await repository.buscarBoleta(compromisoPagoId);
+  if (!boleta) fail(404, 'REFERENCE_NOT_FOUND', 'La boleta no existe.');
+  if (boleta.boletaOrigenId)
+    fail(409, 'BOLETA_ES_FRACCION', 'Esta boleta ya es una cuota de otra; no puede dividirse más.');
+  if (boleta.estado !== 'PENDIENTE')
+    fail(409, 'BOLETA_NO_PENDIENTE', 'Solo se puede fraccionar una boleta pendiente de pago.');
+  if (boleta.pagos.length)
+    fail(
+      409,
+      'PAGO_EN_CURSO',
+      'Hay un pago en proceso para esta boleta. Espera a que termine antes de fraccionarla.',
+    );
+
+  const fracciones = construirFracciones({
+    montoTotal: String(boleta.monto),
+    numeroCuotas: datos.numeroCuotas,
+    montoCuota: datos.montoCuota,
+    fechaPrimerVencimiento: new Date(`${datos.fechaPrimerVencimiento}T00:00:00Z`),
+  });
+
+  const creadas = await repository.transaction(async (db) => {
+    // Condicional al estado: si otra solicitud la fraccionó o un pago la cerró
+    // entretanto, esta no hace nada.
+    if (!(await repository.marcarBoletaParcial(boleta.id, db)))
+      fail(409, 'BOLETA_NO_PENDIENTE', 'La boleta cambió mientras la fraccionabas. Recarga.');
+    // Un pago iniciado justo antes del cambio de estado se habría colado.
+    if (await repository.buscarPagoEnCurso(boleta.id, db))
+      fail(409, 'PAGO_EN_CURSO', 'Hay un pago en proceso para esta boleta.');
+    const nuevas = await repository.crearFracciones(boleta, fracciones, db);
+    await repository.audit(
+      db,
+      actor.id,
+      'BOLETA_FRACCIONADA',
+      boleta.id,
+      {
+        montoTotal: dinero(boleta.monto),
+        numeroCuotas: datos.numeroCuotas,
+        cuotas: fracciones.map((f) => ({ monto: f.monto, vence: f.fechaVencimiento })),
+      },
+      { requestId, entidad: 'CompromisoPago' },
+    );
+    return nuevas;
+  });
+
+  logger.info('BOLETA_FRACCIONADA', {
+    module: 'pagos',
+    requestId,
+    userId: actor.id,
+    entidadId: boleta.id,
+  });
+  return {
+    id: boleta.id,
+    estado: 'PARCIAL',
+    montoTotal: dinero(boleta.monto),
+    fracciones: creadas
+      .sort((a, b) => a.numeroFraccion - b.numeroFraccion)
+      .map((f) => ({
+        id: f.id,
+        numeroFraccion: f.numeroFraccion,
+        monto: dinero(f.monto),
+        fechaVencimiento: f.fechaVencimiento.toISOString().slice(0, 10),
+      })),
+  };
+}
+
+// ------------------------------------------------------------------ US-009
+/**
+ * Comprobante en PDF de una boleta pagada. Lo descarga el apoderado a cargo
+ * del estudiante o el administrador; nadie más, aunque conozca el número.
+ */
+export async function obtenerComprobante(compromisoPagoId, actor) {
+  const boleta = await repository.buscarBoleta(compromisoPagoId);
+  if (!boleta) fail(404, 'REFERENCE_NOT_FOUND', 'La boleta no existe.');
+  if (!actor.roles.includes('ADMINISTRADOR')) {
+    const apoderado = await repository.buscarApoderadoDeUsuario(actor.id);
+    const aCargo = apoderado?.estudiantes.some(
+      (v) => v.estudianteId === boleta.planPago.matricula.estudianteId,
+    );
+    if (!aCargo)
+      fail(
+        403,
+        'FORBIDDEN',
+        'Solo puedes descargar los comprobantes de los estudiantes a tu cargo.',
+      );
+  }
+  if (boleta.fracciones.length)
+    fail(
+      409,
+      'BOLETA_FRACCIONADA',
+      'Esta boleta se pagó en cuotas: descarga el comprobante de cada cuota.',
+    );
+  const comprobante = await repository.buscarComprobanteDeBoleta(compromisoPagoId);
+  if (!comprobante)
+    fail(
+      409,
+      'BOLETA_NO_PAGADA',
+      'Esta boleta todavía no está pagada, así que aún no tiene comprobante.',
+    );
+  const numero = numeroComprobante(comprobante);
+  return {
+    numero,
+    nombreArchivo: `comprobante-${numero}.pdf`,
+    pdf: await generarComprobantePdf(comprobante),
+  };
+}
+
 export { RESULTADO };
 
 /** Ver pagos.controller.simularResultado. No se expone en producción. */
@@ -436,4 +601,73 @@ export async function simularResultadoPasarela(pagoId, resultado, actor, request
   });
   const aplicado = await confirmarDesdeNotificacion({ referencia: pago.referencia }, requestId);
   return { pagoId, resultadoSimulado: resultado, ...aplicado };
+}
+
+// ------------------------------------------------------------------ US-013
+/**
+ * Anula un pago confirmado que se registró por error. Nada se borra: el pago
+ * queda ANULADO con quién, cuándo y por qué; su comprobante queda anulado y la
+ * boleta vuelve a PENDIENTE (o MOROSA si ya venció), de modo que puede cobrarse
+ * de nuevo. Así se corrige un pago: se anula el equivocado y se registra el
+ * correcto. La devolución del dinero, si corresponde, se gestiona en la pasarela.
+ */
+export async function anularPago(id, { motivo }, actor, requestId) {
+  const pago = await repository.buscarPago(id);
+  if (!pago) fail(404, 'REFERENCE_NOT_FOUND', 'El pago no existe.');
+  if (pago.estado === 'ANULADO') fail(409, 'PAGO_YA_ANULADO', 'Este pago ya fue anulado.');
+  if (pago.estado !== 'CONFIRMADO')
+    fail(409, 'PAGO_NO_ANULABLE', 'Solo se puede anular un pago confirmado por la pasarela.');
+
+  const ahora = new Date();
+  const anulado = await repository.transaction(async (db) => {
+    // Condicional al estado de partida: si dos administradores anulan a la vez,
+    // solo uno lo aplica y el otro recibe el conflicto.
+    const cambiados = await repository.cerrarPago(
+      id,
+      ['CONFIRMADO'],
+      { estado: 'ANULADO', anuladoEn: ahora, anuladoPorId: actor.id, motivoAnulacion: motivo },
+      db,
+    );
+    if (!cambiados) return false;
+    const comprobante = await repository.buscarComprobanteDePago(id, db);
+    await repository.anularComprobanteDePago(id, ahora, db);
+    // US-010: si era la última cuota pagada de una boleta fraccionada, la
+    // original deja de estar pagada y vuelve a PARCIAL.
+    const { boletaOrigenId } = pago.compromisoPago;
+    if (boletaOrigenId) {
+      await repository.bloquearBoleta(boletaOrigenId, db);
+      await repository.reabrirBoletaFraccionada(boletaOrigenId, db);
+    }
+    await repository.reabrirBoleta(pago.compromisoPagoId, db);
+    await registrarTransaccionCritica(db, {
+      actorId: actor.id,
+      evento: 'PAGO_ANULADO',
+      entidad: 'Pago',
+      entidadId: id,
+      anterior: {
+        estadoPago: 'CONFIRMADO',
+        estadoBoleta: 'PAGADA',
+        comprobante: comprobante ? numeroComprobante(comprobante) : null,
+      },
+      nuevo: { estadoPago: 'ANULADO', estadoBoleta: 'PENDIENTE', comprobante: null },
+      motivo,
+      contexto: {
+        compromisoPagoId: pago.compromisoPagoId,
+        referencia: pago.referencia,
+        monto: dinero(pago.monto),
+      },
+      requestId,
+    });
+    return true;
+  });
+  if (!anulado) fail(409, 'PAGO_YA_ANULADO', 'Este pago ya fue anulado.');
+
+  logger.info('PAGO_ANULADO', { module: 'pagos', requestId, userId: actor.id, entidadId: id });
+  const boleta = await repository.buscarBoleta(pago.compromisoPagoId);
+  return {
+    id,
+    estado: 'ANULADO',
+    anuladoEn: ahora.toISOString(),
+    boleta: boletaResumenDto(boleta),
+  };
 }

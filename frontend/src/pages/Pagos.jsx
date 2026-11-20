@@ -2,55 +2,36 @@ import { useEffect, useRef, useState } from 'react';
 import AppLayout from '../layouts/AppLayout';
 import { Feedback, Loading, ResourceError } from '../components/Feedback';
 import TablaDatos from '../components/TablaDatos';
+import DescargarComprobante from '../components/DescargarComprobante';
+import AnularPago from '../components/AnularPago';
+import FraccionarBoleta from '../components/FraccionarBoleta';
+import AvisosVencimiento from '../components/AvisosVencimiento';
+import MorosidadPagos from '../components/MorosidadPagos';
+import ReportePagos from '../components/ReportePagos';
 import { api } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useResource } from '../hooks/useResource';
+import {
+  conceptoDe,
+  fechaCorta,
+  fechaDeInstante,
+  nombreDe,
+  periodoLargo,
+  soles,
+} from '../utils/pagos';
 
 // MOROSA no es un estado almacenado: el servidor lo deriva de la fecha de
 // vencimiento al consultar. Aquí solo se traduce a una etiqueta.
 const ESTADOS = {
   PENDIENTE: { etiqueta: 'Pendiente', clase: 'warning' },
   MOROSA: { etiqueta: 'Morosa', clase: 'danger' },
+  // US-010: boleta fraccionada cuyo total todavía no se completa.
+  PARCIAL: { etiqueta: 'Parcial', clase: 'info' },
   PAGADA: { etiqueta: 'Pagada', clase: 'success' },
   ANULADA: { etiqueta: 'Anulada', clase: 'info' },
 };
 const PAGABLES = ['PENDIENTE', 'MOROSA'];
 const TOPE_RESUMEN = 100;
-
-const soles = (monto) =>
-  new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(monto));
-
-const fechaCorta = (iso) =>
-  new Date(`${iso}T12:00:00`).toLocaleDateString('es-PE', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-
-// pagadaEn es un instante UTC: se muestra en la hora de Lima para que un pago
-// hecho de noche no aparezca con la fecha del día siguiente.
-const fechaDeInstante = (iso) =>
-  new Date(iso).toLocaleDateString('es-PE', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'America/Lima',
-  });
-
-// El concepto guardado ya lleva el periodo («Pensión 2026-10»), que la tabla
-// muestra en su propia columna.
-const conceptoDe = (boleta) =>
-  `${boleta.concepto.replace(` ${boleta.periodo}`, '')} · cuota ${boleta.numeroCuota}`;
-
-function periodoLargo(periodo) {
-  const [anio, mes] = periodo.split('-');
-  const nombre = new Date(Number(anio), Number(mes) - 1, 1).toLocaleDateString('es-PE', {
-    month: 'long',
-  });
-  return `${nombre.charAt(0).toUpperCase()}${nombre.slice(1)} ${anio}`;
-}
-
-const nombreDe = (estudiante) => `${estudiante.nombres} ${estudiante.apellidos}`;
 
 /**
  * US-007B pide mostrar alumno, concepto, monto, vencimiento y estado antes de
@@ -155,18 +136,24 @@ function Resumen({ boletas, parcial, administrador }) {
   );
 }
 
-export default function Pagos() {
+function Boletas() {
   const { user } = useAuth();
   const [estudianteId, setEstudianteId] = useState('');
   const [estado, setEstado] = useState('');
   const [pagina, setPagina] = useState(1);
   const [limite, setLimite] = useState(10);
   const [porPagar, setPorPagar] = useState(null);
+  const [porAnular, setPorAnular] = useState(null);
+  const [anulada, setAnulada] = useState(null);
+  const [porFraccionar, setPorFraccionar] = useState(null);
+  const [fraccionada, setFraccionada] = useState(null);
   const [iniciando, setIniciando] = useState(false);
   const [error, setError] = useState('');
   // El administrador consulta los cronogramas emitidos (US-006) sin poder
   // pagarlos: el pago solo lo inicia el apoderado a cargo del estudiante.
   const puedePagar = user.roles.includes('APODERADO');
+  // US-013: solo el administrador anula un pago confirmado.
+  const puedeAnular = user.roles.includes('ADMINISTRADOR');
 
   // Dos consultas distintas a propósito: la tabla pagina en el servidor y el
   // resumen necesita el total del año, no la página que se esté viendo.
@@ -231,19 +218,52 @@ export default function Pagos() {
     setPagina(1);
   }
 
+  function terminarAnulacion() {
+    setAnulada(porAnular);
+    setPorAnular(null);
+    resumen.retry();
+    listado.retry();
+  }
+
   return (
-    <AppLayout section="Pagos" step="Pagos y boletas">
-      <div className="page-heading portal-heading">
-        <div>
-          <h1>Pagos y boletas</h1>
-          <p className="muted">
-            {puedePagar
-              ? 'Consulta el cronograma de pensiones de tus estudiantes y paga en línea.'
-              : 'Consulta los cronogramas de pensiones emitidos y el estado de cada boleta.'}
-          </p>
-        </div>
-        {puedePagar && <span className="badge success">Pago seguro</span>}
-      </div>
+    <>
+      {puedePagar && <AvisosVencimiento enlazarPagos={false} />}
+
+      {anulada && (
+        <Feedback intent="success" title="Pago anulado">
+          El pago de {conceptoDe(anulada)} de {nombreDe(anulada.estudiante)} quedó anulado y
+          registrado en la auditoría. La boleta vuelve a estar pendiente de pago.
+        </Feedback>
+      )}
+
+      {fraccionada && (
+        <Feedback intent="success" title="Boleta dividida en cuotas">
+          La boleta de {nombreDe(fraccionada.estudiante)} quedó dividida en cuotas. El apoderado ya
+          puede pagarlas por separado.
+        </Feedback>
+      )}
+
+      {porFraccionar && (
+        <FraccionarBoleta
+          boleta={porFraccionar}
+          descripcion={`${conceptoDe(porFraccionar)} de ${nombreDe(porFraccionar.estudiante)}`}
+          onClose={() => setPorFraccionar(null)}
+          onSaved={() => {
+            setFraccionada(porFraccionar);
+            setPorFraccionar(null);
+            resumen.retry();
+            listado.retry();
+          }}
+        />
+      )}
+
+      {porAnular && (
+        <AnularPago
+          boleta={porAnular}
+          onAnulado={terminarAnulacion}
+          onClose={() => setPorAnular(null)}
+        />
+      )}
 
       {porPagar && (
         <ConfirmarPago
@@ -337,9 +357,38 @@ export default function Pagos() {
                         <span key="estado" className={`badge ${estilo.clase}`}>
                           {estilo.etiqueta}
                         </span>,
-                        boleta.pagadaEn ? (
-                          <span key="pagada" className="muted">
-                            Pagada el {fechaDeInstante(boleta.pagadaEn)}
+                        boleta.estado === 'PARCIAL' ? (
+                          // US-010: se paga por cuotas; aquí solo se muestra el avance.
+                          <span key="parcial" className="muted">
+                            En cuotas · pagado {soles(boleta.montoPagado ?? 0)} de{' '}
+                            {soles(boleta.monto)}
+                          </span>
+                        ) : boleta.pagadaEn && boleta.montoPagado !== null ? (
+                          <span key="pagada-en-cuotas" className="muted">
+                            Pagada en cuotas el {fechaDeInstante(boleta.pagadaEn)}
+                          </span>
+                        ) : boleta.pagadaEn ? (
+                          <span key="pagada" className="boleta-pagada">
+                            <span className="muted">
+                              Pagada el {fechaDeInstante(boleta.pagadaEn)}
+                            </span>
+                            {boleta.comprobante && (
+                              <DescargarComprobante
+                                boletaId={boleta.id}
+                                numero={boleta.comprobante}
+                              />
+                            )}
+                            {puedeAnular && boleta.pagoConfirmadoId && (
+                              <button
+                                className="danger-button"
+                                onClick={() => {
+                                  setAnulada(null);
+                                  setPorAnular(boleta);
+                                }}
+                              >
+                                Anular pago
+                              </button>
+                            )}
                           </span>
                         ) : PAGABLES.includes(boleta.estado) && boleta.pagoEnCursoId ? (
                           // Un intento abierto bloquea un pago nuevo (409); se
@@ -354,6 +403,18 @@ export default function Pagos() {
                         ) : PAGABLES.includes(boleta.estado) && puedePagar ? (
                           <button key="pagar" onClick={() => abrirPago(boleta)}>
                             Pagar
+                          </button>
+                        ) : PAGABLES.includes(boleta.estado) && !boleta.boletaOrigenId ? (
+                          // US-010: el administrador divide la boleta en cuotas.
+                          <button
+                            key="fraccionar"
+                            className="secondary"
+                            onClick={() => {
+                              setFraccionada(null);
+                              setPorFraccionar(boleta);
+                            }}
+                          >
+                            Pagar en cuotas
                           </button>
                         ) : (
                           <span key="sin-accion" className="muted">
@@ -407,6 +468,64 @@ export default function Pagos() {
           )}
         </>
       )}
+    </>
+  );
+}
+
+const VISTAS = {
+  boletas: 'Boletas',
+  morosos: 'Morosidad',
+  reporte: 'Reporte de pagos',
+};
+
+/** US-008 y US-012: vistas de cobranza del administrador, con sus catálogos para filtrar. */
+function Cobranza({ vista }) {
+  const catalogos = useResource('/admin/catalogos');
+  if (catalogos.loading) return <Loading>Cargando filtros…</Loading>;
+  if (catalogos.error) return <ResourceError {...catalogos} />;
+  return vista === 'morosos' ? (
+    <MorosidadPagos catalogos={catalogos.data} />
+  ) : (
+    <ReportePagos catalogos={catalogos.data} />
+  );
+}
+
+export default function Pagos({ vista = 'boletas' }) {
+  const { user } = useAuth();
+  const puedePagar = user.roles.includes('APODERADO');
+  const administrador = user.roles.includes('ADMINISTRADOR');
+  // Morosidad y reporte son vistas de la administración; el apoderado ve sus boletas.
+  const actual = administrador && VISTAS[vista] ? vista : 'boletas';
+  return (
+    <AppLayout section="Pagos" step={actual === 'boletas' ? 'Pagos y boletas' : VISTAS[actual]}>
+      <div className="page-heading portal-heading">
+        <div>
+          <h1>Pagos y boletas</h1>
+          <p className="muted">
+            {puedePagar
+              ? 'Consulta el cronograma de pensiones de tus estudiantes y paga en línea.'
+              : 'Consulta los cronogramas de pensiones emitidos, la morosidad y lo recaudado.'}
+          </p>
+        </div>
+        {puedePagar && <span className="badge success">Pago seguro</span>}
+      </div>
+
+      {administrador && (
+        <nav className="pagos-pestanas" aria-label="Vistas de pagos">
+          {Object.entries(VISTAS).map(([clave, etiqueta]) => (
+            <a
+              key={clave}
+              href={clave === 'boletas' ? '#/pagos' : `#/pagos/${clave}`}
+              className={clave === actual ? 'pestana activa' : 'pestana'}
+              aria-current={clave === actual ? 'page' : undefined}
+            >
+              {etiqueta}
+            </a>
+          ))}
+        </nav>
+      )}
+
+      {actual === 'boletas' ? <Boletas /> : <Cobranza vista={actual} />}
     </AppLayout>
   );
 }

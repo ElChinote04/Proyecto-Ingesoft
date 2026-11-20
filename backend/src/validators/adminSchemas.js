@@ -1,19 +1,38 @@
 import { z } from 'zod';
+import { normalizeUserField, userFieldRules, userRoles } from './usuario.reglas.js';
 import { planPagoSchema } from './pagos.schemas.js';
+import { motivoCorreccion } from './calificacion.schemas.js';
 const id = z.number().int().positive().max(2147483647);
 const text = (label, max = 100) => z.string().trim().min(1, `Ingresa ${label}.`).max(max);
 const password = z
   .string()
   .min(10, 'Usa al menos 10 caracteres.')
   .refine((v) => Buffer.byteLength(v, 'utf8') <= 72, 'La contraseña no puede superar 72 bytes.');
-export const roleNames = ['ADMINISTRADOR', 'DOCENTE', 'ALUMNO', 'APODERADO'];
+export const roleNames = userRoles;
 const person = {
   numeroDocumento: text('el documento', 30).toUpperCase(),
   nombres: text('los nombres'),
   apellidos: text('los apellidos'),
 };
+const userField = (name) => {
+  const rule = userFieldRules[name];
+  return z
+    .string()
+    .transform((value) => normalizeUserField(name, value))
+    .pipe(
+      z
+        .string()
+        .max(rule.maxLength, `No superes ${rule.maxLength} caracteres en este campo.`)
+        .regex(rule.pattern, rule.message),
+    );
+};
+const userPerson = {
+  numeroDocumento: userField('numeroDocumento'),
+  nombres: userField('nombres'),
+  apellidos: userField('apellidos'),
+};
 const account = {
-  identificador: text('el usuario o correo', 200).toLowerCase(),
+  identificador: userField('identificador'),
   roles: z
     .array(z.enum(roleNames))
     .min(1, 'Selecciona al menos un rol.')
@@ -21,19 +40,21 @@ const account = {
     .refine((v) => new Set(v).size === v.length, 'No repitas roles.'),
   activo: z.boolean().default(true),
 };
-export const createUserSchema = z.object({ ...person, ...account, contrasena: password }).strict();
+export const createUserSchema = z
+  .object({ ...userPerson, ...account, contrasena: password })
+  .strict();
 export const editUserSchema = z
   .object({ ...account, activo: z.boolean(), contrasena: password.optional() })
   .strict();
 export const setupSchema = z
   .object({
     ...person,
-    identificador: account.identificador,
+    identificador: text('el usuario o correo', 200).toLowerCase(),
     contrasena: password,
     claveInstalacion: z.string().min(1).max(200).optional(),
   })
   .strict();
-export const studentSchema = z.object(person).strict();
+export const studentSchema = z.object(userPerson).strict();
 export const enrollmentSchema = z
   .object({ estudianteId: id, seccionId: id, planPago: planPagoSchema.optional() })
   .strict();
@@ -101,6 +122,7 @@ export const updateCalificacionSchema = z
   .object({
     conclusionDescriptiva: z.string().trim().max(500).optional(),
     competencias: z.array(calificacionCompetenciaInput).min(1).optional(),
+    motivo: motivoCorreccion.optional(),
   })
   .strict()
   .refine((value) => value.conclusionDescriptiva !== undefined || value.competencias !== undefined, {
@@ -168,7 +190,7 @@ export const createCalificacionCompetenciaSchema = z
   .object({ calificacionId: id, competenciaId: id, nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional() })
   .strict();
 export const updateCalificacionCompetenciaSchema = z
-  .object({ nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional() })
+  .object({ nivelLogro: z.enum(['AD', 'A', 'B', 'C']), conclusionDescriptiva: z.string().trim().max(500).optional(), motivo: motivoCorreccion.optional() })
   .strict();
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Usa una hora válida HH:mm.');
 export const blockSchema = z

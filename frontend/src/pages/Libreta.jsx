@@ -1,132 +1,212 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import AppLayout from '../layouts/AppLayout';
+import DocumentoLibreta from '../components/DocumentoLibreta';
 import { Feedback, Loading, ResourceError } from '../components/Feedback';
 import { useResource } from '../hooks/useResource';
 
-const periods = [
-  { id: 1, label: 'I Bimestre' },
-  { id: 2, label: 'II Bimestre' },
-  { id: 3, label: 'III Bimestre' },
-  { id: 4, label: 'IV Bimestre' },
+const TIPOS = [
+  { id: 'BIMESTRAL', etiqueta: 'Bimestral' },
+  { id: 'ANUAL', etiqueta: 'Anual' },
 ];
-const progressByLevel = {
-  AD: 'Desempeño destacado',
-  A: 'Buen desempeño',
-  B: 'Requiere refuerzo',
-  C: 'Desempeño insuficiente',
-};
 
-function Achievement({ value }) {
-  return <span className={`achievement achievement-${value.toLowerCase()}`}>{value}</span>;
+function nombreDelArchivo({ matricula, estudiante }) {
+  const apellidos = estudiante.apellidosNombres
+    .split(',')[0]
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '-');
+  return `Libreta-${matricula.anioAcademico}-${apellidos}`;
 }
 
-export default function Evaluaciones() {
-  const students = useResource('/portal/estudiantes');
-  const bimesters = useResource('/bimestres');
-  const [selectedId, setSelectedId] = useState(null);
-  const [periodId, setPeriodId] = useState('');
-  const selectedPeriodId = periodId || bimesters.data?.[0]?.id || periods[0].id;
-  const availablePeriods = bimesters.data?.length ? bimesters.data : periods;
-  const student =
-    students.data?.find((item) => item.id === selectedId) ?? students.data?.[0];
-  const enrollment = student?.matriculas?.[0];
-  const grades = useResource(student ? `/calificaciones?estudianteId=${student.id}` : '/calificaciones?estudianteId=0');
-  const evaluations = useMemo(
-    () => (grades.data ?? [])
-      .filter((grade) => Number(grade.bimestreId) === Number(selectedPeriodId))
-      .flatMap((grade) => (grade.competencias ?? []).map((item) => ({
-        curso: grade.asignacion?.curso?.nombre ?? 'Curso',
-        competencia: item.competencia?.nombre ?? 'Competencia',
-        logro: item.nivelLogro,
-        progreso: progressByLevel[item.nivelLogro] ?? 'Sin progreso',
-      }))),
-    [grades.data, selectedPeriodId],
-  );
+// El navegador propone el título de la pestaña como nombre del PDF.
+function useTituloAlImprimir(titulo) {
+  useEffect(() => {
+    if (!titulo) return undefined;
+    let tituloPantalla = document.title;
+    const antes = () => {
+      tituloPantalla = document.title;
+      document.title = titulo;
+    };
+    const despues = () => {
+      document.title = tituloPantalla;
+    };
+    window.addEventListener('beforeprint', antes);
+    window.addEventListener('afterprint', despues);
+    return () => {
+      window.removeEventListener('beforeprint', antes);
+      window.removeEventListener('afterprint', despues);
+    };
+  }, [titulo]);
+}
 
-  if (students.loading || bimesters.loading)
+function AvisoDeLibreta({ esAnual, totalPeriodos, totalPublicados, periodo }) {
+  if (!esAnual && !periodo?.publicado)
     return (
-      <AppLayout section="Mis evaluaciones" step="Libreta">
-        <Loading>Cargando libreta…</Loading>
-      </AppLayout>
+      <Feedback intent="info" title="Bimestre no publicado">
+        La libreta de este bimestre todavía no fue publicada.
+      </Feedback>
     );
-  if (students.error || bimesters.error)
+  if (esAnual && !totalPublicados)
     return (
-      <AppLayout section="Mis evaluaciones" step="Libreta">
-        <ResourceError error={students.error || bimesters.error} retry={() => { students.retry(); bimesters.retry(); }} />
-      </AppLayout>
+      <Feedback intent="info" title="Todavía no hay bimestres publicados">
+        El informe anual se muestra desde que se publica el primer bimestre.
+      </Feedback>
     );
+  if (esAnual && totalPublicados < totalPeriodos)
+    return (
+      <Feedback intent="info" title="Informe en progreso">
+        {totalPublicados} de {totalPeriodos} bimestres publicados. Las calificaciones anuales
+        aparecen al publicar el último.
+      </Feedback>
+    );
+  return null;
+}
+
+function ConsultaLibreta({ matriculaId, controles }) {
+  const libreta = useResource(`/libretas/${matriculaId}`);
+  const [tipo, setTipo] = useState('BIMESTRAL');
+  const [periodoId, setPeriodoId] = useState(null);
+  useTituloAlImprimir(libreta.data ? nombreDelArchivo(libreta.data) : null);
+
+  if (libreta.loading || libreta.error)
+    return (
+      <>
+        <div className="libreta-controles">{controles}</div>
+        {libreta.loading ? <Loading>Cargando libreta…</Loading> : <ResourceError {...libreta} />}
+      </>
+    );
+
+  const { periodos } = libreta.data;
+  const publicados = periodos.filter(({ publicado }) => publicado);
+  const periodo =
+    periodos.find(({ id }) => id === periodoId) ?? publicados.at(-1) ?? periodos[0] ?? null;
+  const esAnual = tipo === 'ANUAL';
+  const hayDocumento = esAnual ? publicados.length > 0 : Boolean(periodo?.publicado);
 
   return (
-    <AppLayout
-      section="Mis evaluaciones"
-      step="Libreta"
-      anioAcademico={enrollment?.anioAcademico}
-    >
-      <div className="page-heading">
-        <h1>Libreta de notas · {availablePeriods.find((period) => Number(period.id) === Number(selectedPeriodId))?.nombre || availablePeriods.find((period) => Number(period.id) === Number(selectedPeriodId))?.label}</h1>
-        <p className="muted">
-          Resultados publicados para {student?.nombre ?? 'el estudiante'}
-          {enrollment?.seccion ? ` · ${enrollment.seccion}.` : '.'}
-        </p>
+    <>
+      <div className="libreta-controles">
+        {controles}
+        <fieldset className="libreta-tipo">
+          <legend>Tipo de libreta</legend>
+          <div>
+            {TIPOS.map(({ id, etiqueta }) => (
+              <label key={id}>
+                <input
+                  type="radio"
+                  name="tipo-libreta"
+                  value={id}
+                  checked={tipo === id}
+                  onChange={() => setTipo(id)}
+                />
+                {etiqueta}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {!esAnual && periodo && (
+          <label className="field">
+            Bimestre
+            <select
+              value={periodo.id}
+              onChange={(event) => setPeriodoId(Number(event.target.value))}
+            >
+              {periodos.map(({ id, nombre, publicado }) => (
+                <option key={id} value={id}>
+                  {publicado ? nombre : `${nombre} (no publicado)`}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button type="button" disabled={!hayDocumento} onClick={() => window.print()}>
+          Imprimir o guardar PDF
+        </button>
       </div>
-      {student && <label className="field evaluations-selector">Bimestre<select value={selectedPeriodId} onChange={(event) => setPeriodId(Number(event.target.value))}>{availablePeriods.map((period) => <option key={period.id} value={period.id}>{period.nombre || period.label}</option>)}</select></label>}
-      {grades.loading && <Loading>Cargando resultados…</Loading>}
-      {grades.error && <ResourceError {...grades} />}
-      {students.data?.length > 1 && (
-        <label className="field evaluations-selector">
+      <div className="libreta-avisos">
+        <AvisoDeLibreta
+          esAnual={esAnual}
+          totalPeriodos={periodos.length}
+          totalPublicados={publicados.length}
+          periodo={periodo}
+        />
+      </div>
+      {hayDocumento && (
+        <DocumentoLibreta libreta={libreta.data} periodo={esAnual ? null : periodo} />
+      )}
+    </>
+  );
+}
+
+export default function Libreta() {
+  const estudiantes = useResource('/libretas');
+  const [estudianteId, setEstudianteId] = useState(null);
+  const [matriculaId, setMatriculaId] = useState(null);
+  const lista = estudiantes.data ?? [];
+  const estudiante = lista.find(({ id }) => id === estudianteId) ?? lista[0];
+  const matriculas = estudiante?.matriculas ?? [];
+  const matricula =
+    matriculas.find(({ id }) => id === matriculaId) ??
+    matriculas.find(({ activa }) => activa) ??
+    matriculas[0];
+
+  const controles = (
+    <>
+      {lista.length > 1 && (
+        <label className="field">
           Consultar estudiante
           <select
-            value={student.id}
-            onChange={(event) => setSelectedId(Number(event.target.value))}
+            value={estudiante.id}
+            onChange={(event) => {
+              setEstudianteId(Number(event.target.value));
+              setMatriculaId(null);
+            }}
           >
-            {students.data.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.nombre}
+            {lista.map(({ id, nombre }) => (
+              <option key={id} value={id}>
+                {nombre}
               </option>
             ))}
           </select>
         </label>
       )}
-      {!student ? (
+      {matriculas.length > 1 && (
+        <label className="field">
+          Año académico
+          <select
+            value={matricula.id}
+            onChange={(event) => setMatriculaId(Number(event.target.value))}
+          >
+            {matriculas.map(({ id, anioAcademico, activa }) => (
+              <option key={id} value={id}>
+                {activa ? anioAcademico : `${anioAcademico} (matrícula inactiva)`}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </>
+  );
+
+  return (
+    <AppLayout section="Mis evaluaciones" step="Libreta" anioAcademico={matricula?.anioAcademico}>
+      <div className="page-heading">
+        <h1>Libreta de notas</h1>
+        <p className="muted">
+          {matricula
+            ? `${estudiante.nombre} · ${matricula.seccion}. Información visible únicamente para el alumno y su apoderado.`
+            : 'Información visible únicamente para el alumno y su apoderado.'}
+        </p>
+      </div>
+      {estudiantes.loading && <Loading>Cargando libreta…</Loading>}
+      {estudiantes.error && <ResourceError {...estudiantes} />}
+      {estudiantes.data && !matricula && (
         <Feedback intent="info" title="Libreta no disponible">
-          Todavía no hay una matrícula activa asociada a este perfil.
+          Todavía no hay una matrícula asociada a este perfil.
         </Feedback>
-      ) : (
-        <>
-          <div className="published-notice" role="status">
-            <span>Información visible únicamente para el alumno y su apoderado.</span>
-            <span className={evaluations.length ? 'published-badge' : 'published-badge unpublished-badge'}>{evaluations.length ? 'Publicado' : 'No publicado'}</span>
-          </div>
-          {!evaluations.length && !grades.loading && <Feedback intent="info" title="Bimestre no publicado">El docente todavía no ha registrado calificaciones para este bimestre.</Feedback>}
-          <div className="table-card evaluations-card">
-            <table>
-              <caption className="sr-only">Resultados de la libreta de notas</caption>
-              <thead>
-                <tr>
-                  <th>Curso</th>
-                  <th>Competencia</th>
-                  <th>Logro</th>
-                  <th>Progreso</th>
-                </tr>
-              </thead>
-              <tbody>
-                {evaluations.map((evaluation, index) => (
-                  <tr key={`${evaluation.curso}-${evaluation.competencia}-${index}`}>
-                    <td>{evaluation.curso}</td>
-                    <td className="muted">{evaluation.competencia}</td>
-                    <td>
-                      <Achievement value={evaluation.logro} />
-                    </td>
-                    <td className="progress-copy">{evaluation.progreso}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <button type="button" onClick={() => window.print()}>
-            Descargar libreta PDF
-          </button>
-        </>
+      )}
+      {matricula && (
+        <ConsultaLibreta key={matricula.id} matriculaId={matricula.id} controles={controles} />
       )}
     </AppLayout>
   );

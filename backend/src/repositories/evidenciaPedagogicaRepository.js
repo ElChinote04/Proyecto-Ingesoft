@@ -28,11 +28,13 @@ export const auditEvidenciaPedagogica = (db, { usuarioId, tipoEvento, evidenciaI
     data: {
       usuarioId,
       tipoEvento,
-      resultado: 'EXITOSO',
-      tipoEntidad: 'EvidenciaPedagogica',
-      idEntidad: String(evidenciaId),
-      valorAnterior: valorAnterior ? JSON.stringify(valorAnterior) : null,
-      valorNuevo: valorNuevo ? JSON.stringify(valorNuevo) : null,
-      observacion: requestId ? `requestId=${requestId}` : null,
+      resultado: 'EXITO',
+      entidad: 'EvidenciaPedagogica',
+      entidadId: evidenciaId,
+      requestId,
+      // Pasa por JSON porque las fechas de la evidencia son Date y el campo guarda JSON.
+      detalle: JSON.parse(
+        JSON.stringify({ valorAnterior: valorAnterior ?? null, valorNuevo: valorNuevo ?? null }),
+      ),
     },
   });

@@ -28,7 +28,7 @@ export async function errorHandler(error, req, res, _next) {
   }
   // Nunca registrar body, cookies, URL de BD ni el mensaje libre de un driver.
   logger.log(status >= 500 ? 'error' : 'warn', known?.message ?? 'Error interno de aplicación', {
-    module: 'http',
+    module: req.originalUrl.match(/^\/api\/v1\/([\w-]{1,60})/)?.[1] ?? 'http',
     requestId: req.requestId,
     userId: req.user?.id,
     code: known?.code ?? 'INTERNAL_ERROR',

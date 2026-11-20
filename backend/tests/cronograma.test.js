@@ -11,6 +11,7 @@ import {
   resolverConfirmacion,
   ultimoDiaDelMes,
 } from '../src/domain/cronograma.js';
+import { construirFracciones } from '../src/domain/fraccionamiento.js';
 
 test('aCentimos no arrastra el error de coma flotante', () => {
   assert.equal(aCentimos('350.00'), 35000);
@@ -131,4 +132,69 @@ test('US-007B: un pago no confirmado no cambia el estado de la boleta', () => {
   // pasarela es la fuente de verdad sobre el dinero.
   assert.equal(resolverConfirmacion({ estado: 'RECHAZADO' }, 'PAGADO').accion, 'CONFIRMAR');
   assert.equal(resolverConfirmacion({ estado: 'RECHAZADO' }, 'RECHAZADO').accion, 'IGNORAR');
+});
+
+test('US-010: las fracciones suman exactamente el total y vencen una por mes', () => {
+  const fracciones = construirFracciones({
+    montoTotal: '350.00',
+    numeroCuotas: 3,
+    montoCuota: '116.67',
+    fechaPrimerVencimiento: new Date('2026-01-31T00:00:00Z'),
+  });
+  assert.deepEqual(
+    fracciones.map((f) => f.monto),
+    ['116.67', '116.67', '116.66'],
+  );
+  const suma = fracciones.reduce((total, f) => total + aCentimos(f.monto), 0);
+  assert.equal(suma, 35000, 'RF140: la suma no excede ni se queda corta del total');
+  // 31 de enero → 28 de febrero → 31 de marzo: el día se recorta solo cuando no existe.
+  assert.deepEqual(
+    fracciones.map((f) => f.fechaVencimiento.toISOString().slice(0, 10)),
+    ['2026-01-31', '2026-02-28', '2026-03-31'],
+  );
+  assert.deepEqual(
+    fracciones.map((f) => f.numeroFraccion),
+    [1, 2, 3],
+  );
+});
+
+test('US-010: se rechazan fracciones que exceden o no cubren el total', () => {
+  const base = { montoTotal: '300.00', fechaPrimerVencimiento: new Date('2026-05-10T00:00:00Z') };
+  assert.throws(
+    () => construirFracciones({ ...base, numeroCuotas: 3, montoCuota: '150.00' }),
+    (e) => e.code === 'FRACCIONES_EXCEDEN_TOTAL',
+  );
+  assert.throws(
+    () => construirFracciones({ ...base, numeroCuotas: 2, montoCuota: '100.00' }),
+    (e) => e.code === 'FRACCIONES_NO_CUBREN_TOTAL',
+  );
+  assert.throws(
+    () => construirFracciones({ ...base, numeroCuotas: 1, montoCuota: '300.00' }),
+    (e) => e.code === 'CUOTAS_INVALIDAS',
+  );
+  assert.throws(
+    () => construirFracciones({ ...base, numeroCuotas: 7, montoCuota: '50.00' }),
+    (e) => e.code === 'CUOTAS_INVALIDAS',
+  );
+  // Montos iguales y exactos también son válidos.
+  assert.equal(construirFracciones({ ...base, numeroCuotas: 2, montoCuota: '150.00' }).length, 2);
+});
+
+// ------------------------------------------------------------------- US-012
+const boletaDeReporte = (id, estado, monto, vence, periodo) => ({
+  id,
+  estado,
+  monto,
+  periodo,
+  concepto: `Pensión ${periodo}`,
+  numeroCuota: 1,
+  numeroFraccion: 0,
+  fechaVencimiento: new Date(`${vence}T00:00:00Z`),
+  pagadaEn: estado === 'PAGADA' ? new Date('2026-03-05T15:00:00Z') : null,
+  planPago: {
+    matricula: {
+      estudiante: { persona: { nombres: 'Ana', apellidos: 'Pérez' } },
+      seccion: { nombre: 'A', grado: { nombre: 'Primero' } },
+    },
+  },
 });

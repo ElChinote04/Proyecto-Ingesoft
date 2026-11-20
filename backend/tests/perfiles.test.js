@@ -17,11 +17,12 @@ let cuentaDocente, cuentaAlumno, cuentaApoderado, estudiante, otroEstudiante;
 let anio, grado, seccion, otraSeccion, curso, aula, bloque;
 const alta = async (ruta, datos) =>
   (await admin.post(`${base}/admin/${ruta}`).send(datos).expect(201)).body.data;
+let documentoCuenta = 10000000;
 async function crearCuenta(identificador, roles, agente) {
   const cuenta = await alta('usuarios', {
     identificador,
-    numeroDocumento: identificador,
-    nombres: identificador,
+    numeroDocumento: String(++documentoCuenta),
+    nombres: 'Usuario',
     apellidos: 'Prueba',
     contrasena: claveInicial,
     roles,
@@ -47,26 +48,30 @@ before(async () => {
   await request(app)
     .post(`${base}/instalacion`)
     .send({
-      numeroDocumento: 'ADMIN-PERFILES',
+      numeroDocumento: '90000000',
       nombres: 'Administrador',
       apellidos: 'Prueba',
-      identificador: 'admin-perfiles',
+      identificador: 'admin-perfiles@prueba.local',
       contrasena: clavePersonal,
       claveInstalacion: env.INITIAL_SETUP_KEY,
     })
     .expect(201);
   await admin
     .post(`${base}/auth/login`)
-    .send({ identificador: 'admin-perfiles', contrasena: clavePersonal })
+    .send({ identificador: 'admin-perfiles@prueba.local', contrasena: clavePersonal })
     .expect(200);
-  cuentaDocente = await crearCuenta('docente-perfiles', ['DOCENTE', 'APODERADO'], docente);
-  cuentaAlumno = await crearCuenta('alumno-perfiles', ['ALUMNO'], alumno);
-  cuentaApoderado = await crearCuenta('apoderado-perfiles', ['APODERADO'], apoderado);
+  cuentaDocente = await crearCuenta(
+    'docente-perfiles@prueba.local',
+    ['DOCENTE', 'APODERADO'],
+    docente,
+  );
+  cuentaAlumno = await crearCuenta('alumno-perfiles@prueba.local', ['ALUMNO'], alumno);
+  cuentaApoderado = await crearCuenta('apoderado-perfiles@prueba.local', ['APODERADO'], apoderado);
   estudiante = (await admin.get(`${base}/admin/estudiantes`)).body.data.find(
     (item) => item.personaId === cuentaAlumno.personaId,
   );
   otroEstudiante = await alta('estudiantes', {
-    numeroDocumento: 'EST-AJENO',
+    numeroDocumento: '20000001',
     nombres: 'Otro',
     apellidos: 'Estudiante',
   });
