@@ -3,7 +3,7 @@
 ## Pago en cuotas (US-010) — 2026-11-06
 
 - `POST /compromisos-pago/:id/fracciones` (administrador) con `{ numeroCuotas, montoCuota,
-  fechaPrimerVencimiento }` divide una boleta pendiente en 2 a 6 cuotas que vencen una por mes. La
+fechaPrimerVencimiento }` divide una boleta pendiente en 2 a 6 cuotas que vencen una por mes. La
   última cuota se ajusta para que la suma sea exactamente el total (RF140): 400
   `FRACCIONES_EXCEDEN_TOTAL` o `FRACCIONES_NO_CUBREN_TOTAL` si no cuadra. Se audita como
   `BOLETA_FRACCIONADA`.
@@ -38,6 +38,47 @@
   `comprobantes` (las dos pruebas de US-009 que la consultaban se adaptaron).
 - Un reenvío tardío de la pasarela sobre un pago anulado se ignora (`resolverConfirmacion`).
 - Nueva suite `tests/cobranza.test.js` (22 pruebas).
+
+## Libreta de notas por competencias (US-020) — 2026-11-06
+
+- Alumno y apoderado consultan la libreta bimestral y la anual en `Mis evaluaciones`, con el formato
+  del informe de progreso. La misma hoja se ve en pantalla y se imprime o guarda como PDF, sin el
+  menú de SAGE. El alumno también tiene el acceso desde el portal.
+- Nuevas rutas `GET /libretas` y `GET /libretas/:id`, solo para el alumno y su apoderado. Incluyen
+  años anteriores y matrículas inactivas.
+- La libreta anual muestra cada bimestre publicado. La calificación anual y la final del área
+  aparecen al publicar todos los bimestres.
+- Corregido: la vista por bimestre mostraba un consolidado de todos los bimestres y no el logro de
+  ese periodo.
+- `GET /calificaciones` se cierra a alumnos y apoderados, porque devolvía entidades completas, con
+  el DNI del docente incluido. Las pruebas CAL-03 y CAL-07 cambian en consecuencia.
+- `consolidar` pasa a `domain/consolidacion.js`. Nuevas variables `INSTITUCION_*`.
+- Nueva suite `libretas` (LIB-01 a LIB-29).
+
+## Evidencia pedagógica y publicación de libretas (US-019) — 2026-11-06
+
+- El docente registra evidencia por nota desde Calificar alumno: título, descripción y hasta tres
+  archivos PDF, JPG o PNG. Queda ligada al alumno, curso y competencia, y conserva el nivel con que
+  se registró. El modal sigue abierto tras guardar para continuar con la evidencia.
+- Nuevos modelos `EvidenciaCalificacion`, `ArchivoEvidenciaCalificacion` y `PublicacionSeccion`.
+  Los archivos van a `EVIDENCIAS_DIR` y requieren `multer`. La migración conserva lo ya publicado.
+- La libreta la publica el administrador, por sección o de forma masiva, solo con nota y evidencia
+  en todas las competencias. La ruta del docente deja de existir.
+- Con la sección publicada, notas y evidencia quedan en solo lectura para el docente. El
+  administrador corrige por API con motivo obligatorio.
+- Tras reasignar un curso, el docente nuevo ve las notas del anterior y las actualiza sin duplicarlas.
+- Corregidos: la auditoría de `EvidenciaPedagogica` escribía columnas inexistentes, y
+  `/calificaciones-competencias` fallaba con 500 en toda escritura por una transacción no exportada.
+- Nuevas suites `evidencias-calificacion` (EVC-01 a EVC-20) y `publicacion-libretas` (PUB-01 a PUB-24).
+
+## Calificación por alumno — 2026-11-05
+
+- El docente elige un salón, ve a sus alumnos y califica todas las competencias de cada uno en una
+  sola vista. Los salones salen de sus asignaciones, así que ya no depende de tener sesiones.
+- `GET /secciones`, `GET /secciones/:id/alumnos`, `GET` y `PUT /matriculas/:id/calificaciones`.
+- Se retiran `GET /calificaciones/contexto` y `POST /calificaciones/competencias/bulk`.
+- Al sobrescribir una nota, la auditoría conserva el nivel anterior.
+- Nueva suite `tests/calificaciones-alumno.test.js` (CAA-01 a CAA-13).
 
 ## Log de errores (US-004) — 2026-11-05
 

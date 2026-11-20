@@ -402,10 +402,10 @@ test('US-013: la anulación queda en la auditoría con valores anterior y nuevo 
   assert.ok(registro);
   assert.equal(registro.usuarioId, cuentaAdmin.id);
   assert.equal(registro.entidad, 'Pago');
-  assert.equal(registro.detalle.anterior.estadoPago, 'CONFIRMADO');
-  assert.equal(registro.detalle.anterior.estadoBoleta, 'PAGADA');
-  assert.match(registro.detalle.anterior.comprobante, /^B001-\d{8}$/);
-  assert.equal(registro.detalle.nuevo.estadoPago, 'ANULADO');
+  assert.equal(registro.detalle.valorAnterior.estadoPago, 'CONFIRMADO');
+  assert.equal(registro.detalle.valorAnterior.estadoBoleta, 'PAGADA');
+  assert.match(registro.detalle.valorAnterior.comprobante, /^B001-\d{8}$/);
+  assert.equal(registro.detalle.valorNuevo.estadoPago, 'ANULADO');
   assert.equal(registro.detalle.motivo, 'El pago se aplicó a la boleta equivocada.');
   const consulta = await admin.get(`${base}/admin/auditoria?tipoEvento=PAGO_ANULADO`).expect(200);
   assert.equal(consulta.body.data.registros[0].entidadId, pagoAnulado.id);
