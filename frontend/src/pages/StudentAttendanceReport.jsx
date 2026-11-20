@@ -11,6 +11,35 @@ import {
   ResourceError,
 } from '../components/Feedback';
 
+function IconoExportacion({ formato }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      {formato === 'excel' ? (
+        <>
+          <path d="M8 13h8M8 17h8M12 11v8" />
+        </>
+      ) : (
+        <>
+          <path d="M8 12h8M8 16h6" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 const estilos = {
   contenedor: {
     background: '#ffffff',
@@ -71,26 +100,6 @@ const estilos = {
     border: 'none',
     borderRadius: '8px',
     padding: '11px 20px',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  botonExcel: {
-    background: '#167347',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '11px 18px',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  botonPDF: {
-    background: '#c0392b',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '11px 18px',
     fontSize: '14px',
     fontWeight: 600,
     cursor: 'pointer',
@@ -1221,14 +1230,21 @@ export default function StudentAttendanceReport() {
             <button
               type="button"
               onClick={exportarExcel}
+              className="secondary"
               disabled={
                 Boolean(exportando) || cargando
               }
               style={{
-                ...estilos.botonExcel,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '11px 18px',
+                fontSize: '14px',
+                fontWeight: 600,
                 opacity: exportando ? 0.6 : 1,
               }}
             >
+              <IconoExportacion formato="excel" />
               {exportando === 'excel'
                 ? 'Exportando Excel...'
                 : 'Exportar Excel'}
@@ -1237,14 +1253,21 @@ export default function StudentAttendanceReport() {
             <button
               type="button"
               onClick={exportarPDF}
+              className="secondary"
               disabled={
                 Boolean(exportando) || cargando
               }
               style={{
-                ...estilos.botonPDF,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '11px 18px',
+                fontSize: '14px',
+                fontWeight: 600,
                 opacity: exportando ? 0.6 : 1,
               }}
             >
+              <IconoExportacion formato="pdf" />
               {exportando === 'pdf'
                 ? 'Exportando PDF...'
                 : 'Exportar PDF'}
