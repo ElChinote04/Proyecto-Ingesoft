@@ -58,7 +58,8 @@ export function armarLibreta({ cursos, notas, periodos }) {
     const numero = numeroDe.get(calificacion.bimestreId);
     areas.get(competencia.curso.id).competencias.get(competencia.id).logros[numero] = nivelLogro;
     const vigente = ultimaRegla.get(competencia.curso.id);
-    if (!vigente || numero >= vigente.numero)
+    // Lo publicado siempre tiene regla: se fija al publicar.
+    if (calificacion.regla && (!vigente || numero >= vigente.numero))
       ultimaRegla.set(competencia.curso.id, { numero, metodo: calificacion.regla.metodo });
   }
 
