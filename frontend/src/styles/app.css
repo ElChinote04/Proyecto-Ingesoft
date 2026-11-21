@@ -1225,6 +1225,7 @@ button.resumen-tarjeta.activa {
   color: var(--muted);
 }
 .timeline-scroll {
+  padding: 16px;
   max-height: 75vh;
   overflow: auto;
 }
