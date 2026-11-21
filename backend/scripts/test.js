@@ -33,6 +33,7 @@ try {
     'evidencias-pedagogicas',
     'errores',
     'cobranza',
+    'correo',
   ]) {
     const databaseName = `sage_run_${randomBytes(8).toString('hex')}_test`;
     const testUrl = new URL(template);

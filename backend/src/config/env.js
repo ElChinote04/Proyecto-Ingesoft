@@ -51,8 +51,9 @@ const schema = z.object({
   // US-011: con cuántos días de anticipación se avisa al apoderado de un vencimiento.
   PAGOS_DIAS_AVISO: z.coerce.number().int().min(1).max(30).default(5),
   // US-009: envío del comprobante por correo. 'simulado' no sale a la red (desarrollo y
-  // pruebas); 'smtp' envía de verdad con el servidor configurado abajo.
-  CORREO_PROVEEDOR: z.enum(['simulado', 'smtp']).default('simulado'),
+  // pruebas); 'brevo' envía con la API de Brevo y 'smtp' con el servidor indicado abajo.
+  CORREO_PROVEEDOR: z.enum(['simulado', 'brevo', 'smtp']).default('simulado'),
+  BREVO_API_KEY: vacioEsAusente(z.string().min(20).optional()),
   CORREO_REMITENTE: z.string().default('SAGE <no-responder@sage.local>'),
   SMTP_HOST: vacioEsAusente(z.string().optional()),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
@@ -74,6 +75,8 @@ if (env.NODE_ENV === 'production' && !env.FRONTEND_URL.startsWith('https://')) {
 }
 if (env.PAGOS_PROVEEDOR === 'stripe' && !env.STRIPE_SECRET_KEY)
   throw new Error('STRIPE_SECRET_KEY es obligatorio cuando PAGOS_PROVEEDOR=stripe');
+if (env.CORREO_PROVEEDOR === 'brevo' && !env.BREVO_API_KEY)
+  throw new Error('BREVO_API_KEY es obligatorio cuando CORREO_PROVEEDOR=brevo');
 if (env.CORREO_PROVEEDOR === 'smtp' && !env.SMTP_HOST)
   throw new Error('SMTP_HOST es obligatorio cuando CORREO_PROVEEDOR=smtp');
 if (env.NODE_ENV === 'production' && env.PAGOS_PROVEEDOR !== 'stripe')

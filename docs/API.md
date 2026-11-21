@@ -649,12 +649,15 @@ cuotas (cada cuota tiene su propio comprobante).
 Reenvía ese mismo PDF como adjunto a un correo. Cuerpo `{ "correo": "familia@correo.pe" }`; se
 guarda en minúsculas y sin espacios, y un correo inválido o un campo extra responde 400. Mismos
 permisos y errores que la descarga (403, 404, 409 `BOLETA_NO_PAGADA` / `BOLETA_FRACCIONADA`).
-Responde 200 con `{ comprobante, enviadoA, enviadoEn }`. Si el servidor de correo falla responde
+Responde 200 con `{ comprobante, enviadoA, enviadoEn, simulado }`; `simulado: true` indica que el servidor está en modo de prueba y no salió ningún correo. Si el servidor de correo falla responde
 502 `CORREO_NO_ENVIADO` sin cambiar nada, y se puede reintentar. Límite de 10 envíos cada 15
 minutos por usuario (429 `DEMASIADOS_CORREOS`). El destino lo escribe quien lo pide porque SAGE no
 guarda correos de contacto. El envío se configura con `CORREO_PROVEEDOR`: `simulado` (por
-defecto; no sale a la red y solo deja `CORREO_SIMULADO` en el log) o `smtp` con `SMTP_HOST`,
-`SMTP_PORT`, `SMTP_SECURE`, `SMTP_USUARIO`, `SMTP_CLAVE` y `CORREO_REMITENTE`.
+defecto; no sale a la red y solo deja `CORREO_SIMULADO` en el log), `brevo` (API transaccional de
+Brevo, con `BREVO_API_KEY` y un `CORREO_REMITENTE` validado en Brevo) o `smtp` con `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_SECURE`, `SMTP_USUARIO`, `SMTP_CLAVE` y `CORREO_REMITENTE`. Si Brevo rechaza el
+envío, el motivo (por ejemplo, un remitente sin validar) queda en el log como
+`CORREO_COMPROBANTE_FALLIDO`.
 
 ### POST /compromisos-pago/:id/fracciones (US-010)
 

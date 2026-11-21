@@ -624,6 +624,7 @@ test('US-009: el apoderado reenvía el comprobante en PDF por correo', async () 
   const respuesta = await enviarPorCorreo(apoderado, pagada.id, '  Familia@Correo.PE ').expect(200);
   assert.equal(respuesta.body.data.comprobante, numero);
   assert.equal(respuesta.body.data.enviadoA, 'familia@correo.pe');
+  assert.equal(respuesta.body.data.simulado, true, 'las pruebas no envían correos reales');
 
   assert.equal(correoSimulado.enviados.length, 1);
   const [mensaje] = correoSimulado.enviados;
