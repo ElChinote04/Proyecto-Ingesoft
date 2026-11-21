@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validate, idSchema } from '../validators/schemas.js';
-import { createCalificacionSchema, updateCalificacionSchema } from '../validators/adminSchemas.js';
 import {
   bajaConMotivoSchema,
   calificacionQuerySchema,
@@ -35,20 +34,8 @@ calificacionRouter.post(
   validate(publicacionSeccionParamsSchema, 'params'),
   publicacion.publicar,
 );
+// La letra ya no se escribe a mano: la calculan las evaluaciones (rutas /evaluaciones).
 calificacionRouter.get('/:id', validate(idSchema, 'params'), controller.detalle);
-calificacionRouter.post(
-  '/',
-  requireRole('DOCENTE'),
-  validate(createCalificacionSchema),
-  controller.crear,
-);
-calificacionRouter.put(
-  '/:id',
-  requireRole('ADMINISTRADOR'),
-  validate(idSchema, 'params'),
-  validate(updateCalificacionSchema),
-  controller.modificar,
-);
 calificacionRouter.delete(
   '/:id',
   requireRole('ADMINISTRADOR'),

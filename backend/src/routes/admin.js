@@ -5,7 +5,10 @@ import * as schemas from '../validators/adminSchemas.js';
 import * as controller from '../controllers/adminController.js';
 import * as auditoriaController from '../controllers/auditoria.controller.js';
 import { vinculoSchema } from '../validators/portal.schemas.js';
-import { consultaAuditoriaSchema } from '../validators/auditoria.schemas.js';
+import {
+  consultaAuditoriaSchema,
+  resumenAuditoriaSchema,
+} from '../validators/auditoria.schemas.js';
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole('ADMINISTRADOR'));
 adminRouter.get('/usuarios', controller.users);
@@ -25,6 +28,11 @@ adminRouter.post('/matriculas', validate(schemas.enrollmentSchema), controller.e
 adminRouter.get('/horarios', controller.schedule);
 adminRouter.post('/bloques', validate(schemas.blockSchema), controller.createBlock);
 adminRouter.post('/sesiones', validate(schemas.classSchema), controller.createClass);
+adminRouter.get(
+  '/auditoria/resumen',
+  validate(resumenAuditoriaSchema, 'query'),
+  auditoriaController.obtenerResumen,
+);
 adminRouter.get(
   '/auditoria',
   validate(consultaAuditoriaSchema, 'query'),

@@ -5,6 +5,7 @@ import {
   evaluarSeccion,
   ESTADOS_PUBLICACION,
 } from '../domain/publicacionSeccion.js';
+import { metodoRegla } from '../domain/consolidacion.js';
 import { AppError } from '../errors/AppError.js';
 
 const fail = (status, code, message, details) => {
@@ -29,7 +30,7 @@ export async function comprobarSinPublicar({ bimestreId, seccionId }, db) {
     fail(
       409,
       'TERM_PUBLISHED',
-      'La libreta de este salón ya fue publicada: las notas y la evidencia están en modo consulta.',
+      'La libreta de este salón ya fue publicada: las evaluaciones y notas están en modo consulta.',
     );
 }
 
@@ -57,24 +58,50 @@ async function exigirBimestre(id, db) {
   return bimestre;
 }
 
+// Vienen por versión descendente: la primera de cada grado y curso es la vigente.
+function reglasPorClave(reglas) {
+  const vigentes = new Map();
+  for (const regla of reglas) {
+    const clave = `${regla.gradoId}:${regla.cursoId}`;
+    if (!vigentes.has(clave))
+      vigentes.set(clave, {
+        ...metodoRegla(regla.metodo),
+        id: regla.id,
+        gradoId: regla.gradoId,
+        cursoId: regla.cursoId,
+      });
+  }
+  return vigentes;
+}
+
 async function evaluarSecciones(secciones, bimestreId, db) {
-  const [notas, reglas] = await Promise.all([
-    repository.listNotasConEvidencias(
-      { bimestreId, seccionIds: secciones.map(({ id }) => id) },
-      db,
-    ),
+  const seccionIds = secciones.map(({ id }) => id);
+  const [evaluaciones, letras, reglas] = await Promise.all([
+    repository.listEvaluacionesConResultados({ bimestreId, seccionIds }, db),
+    repository.listLetras({ bimestreId, seccionIds }, db),
     repository.listReglasVigentes([...new Set(secciones.map(({ gradoId }) => gradoId))], db),
   ]);
-  const evidenciasPorNota = new Map();
-  for (const { competenciaId, calificacion, _count } of notas) {
-    const clave = `${calificacion.matriculaId}:${competenciaId}`;
-    evidenciasPorNota.set(clave, Math.max(evidenciasPorNota.get(clave) ?? 0, _count.evidencias));
-  }
-  const reglasVigentes = new Set(reglas.map(({ gradoId, cursoId }) => `${gradoId}:${cursoId}`));
-  return secciones.map((seccion) => ({
-    seccion,
-    ...evaluarSeccion({ seccion, evidenciasPorNota, reglasVigentes }),
-  }));
+  const conLetra = new Set(
+    letras.map(({ competenciaId, calificacion }) => `${calificacion.matriculaId}:${competenciaId}`),
+  );
+  const reglasVigentes = reglasPorClave(reglas);
+  return secciones.map((seccion) => {
+    const evaluacionesPorCompetencia = new Map();
+    for (const evaluacion of evaluaciones.filter((item) => item.seccionId === seccion.id)) {
+      const lista = evaluacionesPorCompetencia.get(evaluacion.competenciaId) ?? [];
+      lista.push({
+        resultados: new Map(
+          evaluacion.resultados.map((item) => [item.matriculaId, item.condicion]),
+        ),
+      });
+      evaluacionesPorCompetencia.set(evaluacion.competenciaId, lista);
+    }
+    return {
+      seccion,
+      reglasVigentes,
+      ...evaluarSeccion({ seccion, evaluacionesPorCompetencia, letras: conLetra, reglasVigentes }),
+    };
+  });
 }
 
 export async function obtenerEstadoPublicacion(bimestreId, { pagina, limite }) {
@@ -124,7 +151,7 @@ async function publicarEnTransaccion({ bimestre, seccionId, actor, requestId, co
       fail(400, 'INVALID_TERM_CONTEXT', 'La sección no corresponde al año académico del bimestre.');
     if (await estaPublicada({ bimestreId: bimestre.id, seccionId }, db))
       return { publicado: true, yaPublicado: true };
-    const [{ totalEsperado, totalCompleto, pendientes }] = await evaluarSecciones(
+    const [{ totalEsperado, totalCompleto, pendientes, reglasVigentes }] = await evaluarSecciones(
       [seccion],
       bimestre.id,
       db,
@@ -135,9 +162,18 @@ async function publicarEnTransaccion({ bimestre, seccionId, actor, requestId, co
       fail(
         409,
         'PUBLICATION_INCOMPLETE',
-        'Faltan notas o evidencias por registrar en esta sección.',
+        'Faltan evaluaciones, notas o reglas de consolidación en esta sección.',
         { totalEsperado, totalCompleto },
       );
+    for (const regla of reglasVigentes.values())
+      if (
+        regla.gradoId === seccion.gradoId &&
+        seccion.asignaciones.some(({ curso }) => curso.id === regla.cursoId)
+      )
+        await repository.asignarRegla(
+          { bimestreId: bimestre.id, seccionId, cursoId: regla.cursoId, reglaId: regla.id },
+          db,
+        );
     const publicacion = await repository.createPublicacion(
       { bimestreId: bimestre.id, seccionId, publicadoPorId: actor.id },
       db,

@@ -35,3 +35,14 @@ export const requireRole = (role) => (req, _res, next) => {
     );
   next();
 };
+export const requireAlgunRol =
+  (...roles) =>
+  (req, _res, next) => {
+    if (!req.user?.roles.some((rol) => roles.includes(rol)))
+      throw new AppError(
+        403,
+        'FORBIDDEN',
+        'Tu usuario no tiene permiso para realizar esta operación.',
+      );
+    next();
+  };
