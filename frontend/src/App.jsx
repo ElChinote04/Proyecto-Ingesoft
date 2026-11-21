@@ -16,6 +16,9 @@ import ResultadoPago from './pages/ResultadoPago';
 import CambiarContrasena from './pages/CambiarContrasena';
 import Gestion from './pages/ReglasConsolidacion';
 import Libreta from './pages/Libreta';
+import PlanTrabajo from './pages/PlanTrabajo';
+import ActividadesClase from './pages/ActividadesClase';
+import RevisionPlanes from './pages/RevisionPlanes';
 import LogErrores from './pages/LogErrores';
 import TeacherStudentAttendanceReport from './pages/TeacherStudentAttendanceReport';
 import './styles/app.css';
@@ -114,6 +117,22 @@ function Screens() {
     return <Gestion />;
   }
 
+  // Plan de trabajo semanal: separado de las calificaciones (no las lee ni las escribe).
+  if (route === '/gestion/planes' && user.roles.includes('ADMINISTRADOR')) {
+    return <RevisionPlanes />;
+  }
+
+  if (route === '/plan-trabajo' && user.roles.includes('DOCENTE')) {
+    return <PlanTrabajo />;
+  }
+
+  if (
+    route === '/actividades' &&
+    user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol))
+  ) {
+    return <ActividadesClase key={perfiles} />;
+  }
+
   if (
     route === '/evaluaciones' &&
     user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol))
@@ -121,11 +140,14 @@ function Screens() {
     return <Libreta key={perfiles} />;
   }
 
+  // Auditoría y errores reciben filtros por enlace (#/errores?requestId=...); no cambian la pantalla.
+  const ruta = route.split('?')[0];
+
   if (
-    route === '/errores' &&
+    ruta === '/errores' &&
     user.permisos.includes('errores.consultar')
   ) {
-    return <LogErrores />;
+    return <LogErrores key={route} />;
   }
 
   if (
@@ -138,14 +160,14 @@ function Screens() {
   if (
     user.roles.includes('ADMINISTRADOR') &&
     (
-      route.startsWith('/admin') ||
+      ruta.startsWith('/admin') ||
       !user.roles.includes('DOCENTE')
     )
   ) {
     return (
       <Admin
         key={route}
-        page={route.split('/')[2] || 'inicio'}
+        page={ruta.split('/')[2] || 'inicio'}
       />
     );
   }

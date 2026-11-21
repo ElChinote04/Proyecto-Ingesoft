@@ -26,9 +26,11 @@ try {
     'auditoria',
     'calificaciones-permisos',
     'calificaciones-alumno',
-    'evidencias-calificacion',
     'publicacion-libretas',
     'libretas',
+    'evaluaciones-modelo',
+    'evaluaciones',
+    'evidencias-pedagogicas',
     'errores',
     'cobranza',
   ]) {

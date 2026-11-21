@@ -14,13 +14,3 @@ export const consultar = async (req, res) =>
       req.user,
     ),
   });
-
-export const guardar = async (req, res) =>
-  res.json({
-    data: await service.guardarCalificaciones(
-      req.validated.params.id,
-      req.validated.body,
-      req.user,
-      req.requestId,
-    ),
-  });

@@ -1,4 +1,5 @@
 import { VincularApoderado, AdministrarAnio } from '../components/AdministrarPerfiles';
+import FechasBimestres from '../components/FechasBimestres';
 import GestionBloques from '../components/GestionBloques';
 import AsignacionForm from '../components/AsignacionForm';
 import MatrizHorarios from '../components/MatrizHorarios';
@@ -391,6 +392,7 @@ function Catalogs() {
             ))}
           </div>
           <AdministrarAnio anios={c.anios} onSaved={resource.retry} />
+          <FechasBimestres />
         </>
       )}
     </Data>

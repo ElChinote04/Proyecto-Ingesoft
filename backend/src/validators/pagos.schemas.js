@@ -66,3 +66,10 @@ export const anulacionSchema = z
       .max(300),
   })
   .strict();
+
+/** US-009: reenvío del comprobante a un correo indicado por quien lo solicita. */
+export const envioComprobanteSchema = z
+  .object({
+    correo: z.string().trim().toLowerCase().max(254).pipe(z.email('El correo no es válido.')),
+  })
+  .strict();

@@ -2,6 +2,35 @@
 import { useState } from 'react';
 import { api } from '../api/client';
 
+function IconoExportacion({ formato }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      {formato === 'excel' ? (
+        <>
+          <path d="M8 13h8M8 17h8M12 11v8" />
+        </>
+      ) : (
+        <>
+          <path d="M8 12h8M8 16h6" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 const estilos = {
   contenedor: {
     background: '#ffffff',
@@ -58,16 +87,6 @@ const estilos = {
     background: '#551c9d',
     color: '#ffffff',
     border: 'none',
-    borderRadius: '8px',
-    padding: '11px 20px',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  botonSecundario: {
-    background: '#ffffff',
-    color: '#551c9d',
-    border: '1px solid #551c9d',
     borderRadius: '8px',
     padding: '11px 20px',
     fontSize: '14px',
@@ -164,6 +183,80 @@ function formatearFecha(fecha) {
   return `${dia}/${mes}/${anio}`;
 }
 
+function porcentaje(parte, total) {
+  if (!total) return 0;
+  return Math.round((parte / total) * 10000) / 100;
+}
+
+function resumenPorCampo(registros, campo) {
+  const grupos = new Map();
+
+  for (const registro of registros) {
+    const clave = String(campo(registro));
+    if (!grupos.has(clave)) {
+      grupos.set(clave, {
+        clave,
+        total: 0,
+        presentes: 0,
+        tardanzas: 0,
+        ausencias: 0,
+      });
+    }
+
+    const grupo = grupos.get(clave);
+    grupo.total += 1;
+
+    if (registro.condicion === 'PRESENTE') grupo.presentes += 1;
+    if (registro.condicion === 'TARDANZA') grupo.tardanzas += 1;
+    if (registro.condicion === 'AUSENTE') grupo.ausencias += 1;
+  }
+
+  return Array.from(grupos.values()).map((grupo) => ({
+    ...grupo,
+    asistencia: porcentaje(grupo.presentes + grupo.tardanzas, grupo.total),
+    porcentajeTardanzas: porcentaje(grupo.tardanzas, grupo.total),
+    porcentajeAusencias: porcentaje(grupo.ausencias, grupo.total),
+  }));
+}
+
+function estilizarEncabezadoExcel(fila) {
+  fila.height = 28;
+  fila.eachCell((celda) => {
+    celda.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    celda.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF551C9D' },
+    };
+    celda.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: true,
+    };
+  });
+}
+
+function configurarTablaExcel(hoja, encabezados, filas, anchos) {
+  hoja.columns = anchos.map((width) => ({ width }));
+  const encabezado = hoja.addRow(encabezados);
+  estilizarEncabezadoExcel(encabezado);
+
+  if (filas.length === 0) {
+    hoja.addRow(['Sin registros']);
+  } else {
+    filas.forEach((fila) => hoja.addRow(fila));
+  }
+
+  hoja.views = [{ state: 'frozen', ySplit: 1 }];
+  hoja.autoFilter = {
+    from: 'A1',
+    to: `${String.fromCharCode(64 + encabezados.length)}${Math.max(2, hoja.rowCount)}`,
+  };
+  hoja.pageSetup.orientation = 'landscape';
+  hoja.pageSetup.fitToPage = true;
+  hoja.pageSetup.fitToWidth = 1;
+}
+
 export default function TeacherAttendanceReport({ docentes }) {
   const [reporte, setReporte] = useState(null);
   const [docenteId, setDocenteId] = useState('');
@@ -176,6 +269,37 @@ export default function TeacherAttendanceReport({ docentes }) {
 
   const resumen = reporte?.resumen ?? {};
   const asistencias = reporte?.asistencias ?? [];
+  // Orden cronológico para que el detalle tenga la misma secuencia en pantalla y archivos.
+  const asistenciasPorFecha = [...asistencias].sort((a, b) => {
+    const fechaA = String(a.fecha ?? '').slice(0, 10);
+    const fechaB = String(b.fecha ?? '').slice(0, 10);
+    return fechaA.localeCompare(fechaB) ||
+      obtenerDocente(a.docenteId).localeCompare(obtenerDocente(b.docenteId), 'es');
+  });
+
+  const resumenDocentes = resumenPorCampo(
+    asistencias,
+    (asistencia) => asistencia.docenteId
+  ).sort((a, b) =>
+    obtenerDocente(a.clave).localeCompare(obtenerDocente(b.clave), 'es')
+  );
+
+  const totalRegistros = reporte?.total ?? 0;
+  const asistenciaGeneral = porcentaje(
+    (resumen.PRESENTE ?? 0) + (resumen.TARDANZA ?? 0),
+    totalRegistros
+  );
+
+  const filasDocentes = resumenDocentes.map((grupo) => [
+    obtenerDocente(grupo.clave),
+    grupo.total,
+    grupo.presentes,
+    grupo.tardanzas,
+    grupo.ausencias,
+    `${grupo.asistencia.toFixed(2)}%`,
+    `${grupo.porcentajeTardanzas.toFixed(2)}%`,
+    `${grupo.porcentajeAusencias.toFixed(2)}%`,
+  ]);
 
   function obtenerDocente(id) {
     const docente = docentes.find(
@@ -194,9 +318,9 @@ export default function TeacherAttendanceReport({ docentes }) {
   }
 
   function obtenerFilas() {
-    return asistencias.map((asistencia) => [
-      obtenerDocente(asistencia.docenteId),
+    return asistenciasPorFecha.map((asistencia) => [
       formatearFecha(asistencia.fecha),
+      obtenerDocente(asistencia.docenteId),
       nombresEstado[asistencia.condicion] ??
         asistencia.condicion,
       asistencia.observacion || '—',
@@ -250,146 +374,84 @@ export default function TeacherAttendanceReport({ docentes }) {
   }
 
   async function descargarExcel() {
-    if (!reporte || exportandoExcel) return;
+    if (!reporte || exportandoExcel || exportandoPDF || cargando) return;
 
     setError('');
     setExportandoExcel(true);
 
     try {
       const { default: ExcelJS } = await import('exceljs');
-
       const libro = new ExcelJS.Workbook();
-      const hoja = libro.addWorksheet('Asistencia docente');
-      const filtros = reporte.filtros;
+      libro.creator = 'SAGE';
+      libro.subject = 'Reporte de asistencia docente';
 
-      hoja.columns = [
-        { key: 'docente', width: 30 },
-        { key: 'fecha', width: 18 },
-        { key: 'estado', width: 18 },
-        { key: 'observacion', width: 45 },
-      ];
-
-      hoja.mergeCells('A1:D1');
-      hoja.getCell('A1').value =
-        'REPORTE DE ASISTENCIA DOCENTE';
-
-      hoja.mergeCells('A2:D2');
-      hoja.getCell('A2').value =
-        `Período: ${formatearFecha(filtros.fechaInicio)} - ${formatearFecha(filtros.fechaFin)}`;
-
-      hoja.mergeCells('A3:D3');
-      hoja.getCell('A3').value =
-        `Docente: ${obtenerFiltroDocente()}`;
-
-      hoja.getCell('A5').value = 'RESUMEN';
-
-      const totales = [
-        ['Total de registros', reporte.total ?? 0],
+      const hojaResumen = libro.addWorksheet('Resumen general');
+      hojaResumen.columns = [{ width: 34 }, { width: 22 }];
+      hojaResumen.mergeCells('A1:B2');
+      hojaResumen.getCell('A1').value = 'SAGE - REPORTE DE ASISTENCIA DOCENTE';
+      hojaResumen.getCell('A1').font = {
+        size: 16,
+        bold: true,
+        color: { argb: 'FF551C9D' },
+      };
+      hojaResumen.getCell('A4').value = 'Docente';
+      hojaResumen.getCell('B4').value = obtenerFiltroDocente();
+      hojaResumen.getCell('A5').value = 'Fecha inicial';
+      hojaResumen.getCell('B5').value = formatearFecha(reporte.filtros.fechaInicio);
+      hojaResumen.getCell('A6').value = 'Fecha final';
+      hojaResumen.getCell('B6').value = formatearFecha(reporte.filtros.fechaFin);
+      hojaResumen.addRow([]);
+      hojaResumen.addRow(['Indicador', 'Valor']);
+      estilizarEncabezadoExcel(hojaResumen.getRow(8));
+      [
+        ['Total de registros', totalRegistros],
         ['Presentes', resumen.PRESENTE ?? 0],
         ['Tardanzas', resumen.TARDANZA ?? 0],
         ['Ausencias', resumen.AUSENTE ?? 0],
-      ];
+        ['% Asistencia', `${asistenciaGeneral.toFixed(2)}%`],
+        ['% Tardanzas', `${porcentaje(resumen.TARDANZA ?? 0, totalRegistros).toFixed(2)}%`],
+        ['% Inasistencias', `${porcentaje(resumen.AUSENTE ?? 0, totalRegistros).toFixed(2)}%`],
+      ].forEach((fila) => hojaResumen.addRow(fila));
+      hojaResumen.pageSetup.fitToPage = true;
+      hojaResumen.pageSetup.fitToWidth = 1;
 
-      totales.forEach(([nombre, valor], index) => {
-        hoja.getCell(`A${index + 6}`).value = nombre;
-        hoja.getCell(`B${index + 6}`).value = valor;
-      });
+      const hojaDetalle = libro.addWorksheet('Detalle de asistencia por fecha');
+      configurarTablaExcel(
+        hojaDetalle,
+        ['Fecha', 'Docente', 'Estado', 'Observación'],
+        obtenerFilas(),
+        [19, 34, 18, 50]
+      );
 
-      hoja.getRow(11).values = [
-        'Docente',
-        'Fecha',
-        'Estado',
-        'Observación',
-      ];
-
-      for (const fila of obtenerFilas()) {
-        hoja.addRow(fila);
-      }
-
-      hoja.getRow(1).height = 32;
-      hoja.getCell('A1').font = {
-        bold: true,
-        size: 16,
-        color: { argb: 'FF551C9D' },
-      };
-
-      hoja.getCell('A5').font = {
-        bold: true,
-        size: 13,
-        color: { argb: 'FF551C9D' },
-      };
-
-      hoja.getRow(11).height = 26;
-
-      hoja.getRow(11).eachCell((celda) => {
-        celda.font = {
-          bold: true,
-          color: { argb: 'FFFFFFFF' },
-        };
-
-        celda.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF551C9D' },
-        };
-
-        celda.alignment = {
-          vertical: 'middle',
-        };
-      });
-
-      hoja.eachRow((fila, numero) => {
-        if (numero > 11) {
-          fila.alignment = {
-            vertical: 'middle',
-            wrapText: true,
-          };
-
-          fila.height = 30;
-
-          fila.eachCell((celda) => {
-            celda.border = {
-              bottom: {
-                style: 'thin',
-                color: { argb: 'FFE5E7EB' },
-              },
-            };
-          });
-        }
-      });
-
-      hoja.autoFilter = 'A11:D11';
-      hoja.views = [
-        { state: 'frozen', ySplit: 11 },
-      ];
+      const hojaDocentes = libro.addWorksheet('Resumen por docente');
+      configurarTablaExcel(
+        hojaDocentes,
+        ['Docente', 'Total', 'Presentes', 'Tardanzas', 'Ausencias', '% Asistencia', '% Tardanzas', '% Inasistencias'],
+        filasDocentes,
+        [34, 13, 15, 15, 15, 19, 19, 20]
+      );
 
       const buffer = await libro.xlsx.writeBuffer();
-
       const archivo = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
-
       const url = URL.createObjectURL(archivo);
       const enlace = document.createElement('a');
-
       enlace.href = url;
-      enlace.download =
-        `asistencia_docente_${filtros.fechaInicio}_${filtros.fechaFin}.xlsx`;
-
+      enlace.download = `asistencia_docente_${reporte.filtros.fechaInicio}_${reporte.filtros.fechaFin}.xlsx`;
       document.body.appendChild(enlace);
       enlace.click();
       enlace.remove();
-
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      setError('No se pudo descargar el archivo Excel.');
+      setError(err.message || 'No se pudo descargar el archivo Excel.');
     } finally {
       setExportandoExcel(false);
     }
   }
 
   async function descargarPDF() {
-    if (!reporte || exportandoPDF) return;
+    if (!reporte || exportandoPDF || exportandoExcel || cargando) return;
 
     setError('');
     setExportandoPDF(true);
@@ -399,148 +461,107 @@ export default function TeacherAttendanceReport({ docentes }) {
       const { default: autoTable } = await import('jspdf-autotable');
 
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: 'landscape',
         unit: 'mm',
         format: 'a4',
       });
-
-      const filtros = reporte.filtros;
       const ancho = pdf.internal.pageSize.getWidth();
+      const alto = pdf.internal.pageSize.getHeight();
 
       pdf.setFillColor(85, 28, 157);
-      pdf.rect(0, 0, ancho, 35, 'F');
-
+      pdf.rect(0, 0, ancho, 29, 'F');
       pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(17);
       pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(18);
-      pdf.text('SAGE', 14, 15);
+      pdf.text('SAGE - Reporte de asistencia docente', 14, 19);
 
-      pdf.setFontSize(12);
-      pdf.text('Reporte de asistencia docente', 14, 25);
-
-      pdf.setTextColor(55, 65, 81);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(10);
-
+      pdf.setTextColor(55, 65, 81);
       pdf.text(
-        `Período: ${formatearFecha(filtros.fechaInicio)} - ${formatearFecha(filtros.fechaFin)}`,
+        `Periodo: ${formatearFecha(reporte.filtros.fechaInicio)} al ${formatearFecha(reporte.filtros.fechaFin)}`,
         14,
-        46
+        39
       );
-
-      const nombreDocente = obtenerFiltroDocente();
-
       const textoDocente = pdf.splitTextToSize(
-        `Docente: ${nombreDocente}`,
+        `Docente: ${obtenerFiltroDocente()}`,
         ancho - 28
       );
+      pdf.text(textoDocente, 14, 46);
 
-      pdf.text(textoDocente, 14, 53);
+      function tituloSeccion(texto, y) {
+        let posicion = y;
+        if (posicion > alto - 35) {
+          pdf.addPage();
+          posicion = 20;
+        }
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(12);
+        pdf.setTextColor(85, 28, 157);
+        pdf.text(texto, 14, posicion);
+        return posicion + 5;
+      }
 
-      const yResumen = 53 + textoDocente.length * 5 + 9;
+      const estiloTabla = {
+        theme: 'grid',
+        headStyles: { fillColor: [85, 28, 157], textColor: [255, 255, 255] },
+        styles: { fontSize: 8, cellPadding: 2.5, overflow: 'linebreak', valign: 'middle' },
+        margin: { left: 14, right: 14, top: 16, bottom: 18 },
+      };
 
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(12);
-      pdf.setTextColor(85, 28, 157);
-      pdf.text('Resumen de asistencia', 14, yResumen);
-
+      const inicioResumen = tituloSeccion('Resumen general', 46 + textoDocente.length * 5 + 8);
       autoTable(pdf, {
-        startY: yResumen + 5,
-        margin: { left: 14, right: 14, bottom: 18 },
-        head: [[
-          'Total',
-          'Presentes',
-          'Tardanzas',
-          'Ausencias',
-        ]],
+        ...estiloTabla,
+        startY: inicioResumen,
+        head: [['Total', 'Presentes', 'Tardanzas', 'Ausencias', '% Asistencia', '% Tardanzas', '% Inasistencias']],
         body: [[
-          reporte.total ?? 0,
+          totalRegistros,
           resumen.PRESENTE ?? 0,
           resumen.TARDANZA ?? 0,
           resumen.AUSENTE ?? 0,
+          `${asistenciaGeneral.toFixed(2)}%`,
+          `${porcentaje(resumen.TARDANZA ?? 0, totalRegistros).toFixed(2)}%`,
+          `${porcentaje(resumen.AUSENTE ?? 0, totalRegistros).toFixed(2)}%`,
         ]],
-        theme: 'grid',
-        headStyles: {
-          fillColor: [85, 28, 157],
-          textColor: [255, 255, 255],
-        },
-        styles: {
-          halign: 'center',
-          fontSize: 10,
-          cellPadding: 4,
-        },
       });
 
-      let inicioDetalle = pdf.lastAutoTable.finalY + 14;
-
-      if (inicioDetalle > 260) {
-        pdf.addPage();
-        inicioDetalle = 20;
-      }
-
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(12);
-      pdf.setTextColor(85, 28, 157);
-      pdf.text('Detalle de registros', 14, inicioDetalle);
-
+      const inicioDetalle = tituloSeccion('Detalle de asistencia por fecha', (pdf.lastAutoTable?.finalY ?? 70) + 12);
       const registros = obtenerFilas();
-
       autoTable(pdf, {
-        startY: inicioDetalle + 5,
-        margin: {
-          left: 14,
-          right: 14,
-          top: 18,
-          bottom: 20,
-        },
-        head: [[
-          'Docente',
-          'Fecha',
-          'Estado',
-          'Observación',
-        ]],
+        ...estiloTabla,
+        startY: inicioDetalle,
+        head: [['Fecha', 'Docente', 'Estado', 'Observación']],
         body: registros.length
           ? registros
           : [['Sin registros', '—', '—', '—']],
-        theme: 'striped',
-        headStyles: {
-          fillColor: [85, 28, 157],
-          textColor: [255, 255, 255],
-        },
-        styles: {
-          fontSize: 9,
-          cellPadding: 3,
-          overflow: 'linebreak',
-          valign: 'middle',
-        },
-        columnStyles: {
-          0: { cellWidth: 48 },
-          1: { cellWidth: 27 },
-          2: { cellWidth: 30 },
-          3: { cellWidth: 'auto' },
-        },
+        columnStyles: { 0: { cellWidth: 32 }, 1: { cellWidth: 70 }, 2: { cellWidth: 40 } },
+      });
+
+      const inicioDocentes = tituloSeccion('Resumen por docente', (pdf.lastAutoTable?.finalY ?? 70) + 12);
+      autoTable(pdf, {
+        ...estiloTabla,
+        startY: inicioDocentes,
+        head: [['Docente', 'Total', 'Presentes', 'Tardanzas', 'Ausencias', '% Asistencia', '% Tardanzas', '% Inasistencias']],
+        body: filasDocentes.length
+          ? filasDocentes
+          : [['Sin registros', '—', '—', '—', '—', '—', '—', '—']],
+        columnStyles: { 0: { cellWidth: 65 } },
       });
 
       const paginas = pdf.getNumberOfPages();
-
-      for (let i = 1; i <= paginas; i++) {
-        pdf.setPage(i);
+      for (let numero = 1; numero <= paginas; numero++) {
+        pdf.setPage(numero);
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(9);
         pdf.setTextColor(120, 120, 120);
-
-        pdf.text(
-          `SAGE - Página ${i} de ${paginas}`,
-          14,
-          pdf.internal.pageSize.getHeight() - 10
-        );
+        pdf.text(`SAGE - Página ${numero} de ${paginas}`, 14, alto - 9);
       }
 
       pdf.save(
-        `asistencia_docente_${filtros.fechaInicio}_${filtros.fechaFin}.pdf`
+        `asistencia_docente_${reporte.filtros.fechaInicio}_${reporte.filtros.fechaFin}.pdf`
       );
     } catch (err) {
-      setError('No se pudo descargar el archivo PDF.');
+      setError(err.message || 'No se pudo descargar el archivo PDF.');
     } finally {
       setExportandoPDF(false);
     }
@@ -566,6 +587,21 @@ export default function TeacherAttendanceReport({ docentes }) {
       titulo: 'Ausencias',
       valor: resumen.AUSENTE ?? 0,
       color: '#991b1b',
+    },
+    {
+      titulo: '% Asistencia',
+      valor: `${asistenciaGeneral.toFixed(2)}%`,
+      color: '#2563eb',
+    },
+    {
+      titulo: '% Tardanzas',
+      valor: `${porcentaje(resumen.TARDANZA ?? 0, totalRegistros).toFixed(2)}%`,
+      color: '#b45309',
+    },
+    {
+      titulo: '% Inasistencias',
+      valor: `${porcentaje(resumen.AUSENTE ?? 0, totalRegistros).toFixed(2)}%`,
+      color: '#dc2626',
     },
   ];
 
@@ -662,6 +698,49 @@ export default function TeacherAttendanceReport({ docentes }) {
 
       {reporte && (
         <>
+          <h3 style={estilos.seccion}>
+            Resultados del reporte
+          </h3>
+
+          <div style={estilos.acciones}>
+            <button
+              type="button"
+              onClick={descargarExcel}
+              className="secondary"
+              disabled={exportandoExcel || exportandoPDF || cargando}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '11px 18px',
+                fontSize: '14px',
+                fontWeight: 600,
+                opacity: exportandoExcel ? 0.6 : 1,
+              }}
+            >
+              <IconoExportacion formato="excel" />
+              {exportandoExcel ? 'Exportando Excel...' : 'Exportar Excel'}
+            </button>
+            <button
+              type="button"
+              onClick={descargarPDF}
+              className="secondary"
+              disabled={exportandoPDF || exportandoExcel || cargando}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '11px 18px',
+                fontSize: '14px',
+                fontWeight: 600,
+                opacity: exportandoPDF ? 0.6 : 1,
+              }}
+            >
+              <IconoExportacion formato="pdf" />
+              {exportandoPDF ? 'Exportando PDF...' : 'Exportar PDF'}
+            </button>
+          </div>
+
           <hr style={estilos.separador} />
 
           <h3 style={estilos.seccion}>
@@ -692,63 +771,11 @@ export default function TeacherAttendanceReport({ docentes }) {
 
           <hr style={estilos.separador} />
 
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '12px',
-              flexWrap: 'wrap',
-              marginBottom: '16px',
-            }}
-          >
-            <h3
-              style={{
-                ...estilos.seccion,
-                marginBottom: 0,
-              }}
-            >
-              Detalle de registros
-            </h3>
+          <h3 style={estilos.seccion}>
+            Detalle de asistencia por fecha
+          </h3>
 
-            <div
-              style={{
-                display: 'flex',
-                gap: '10px',
-                flexWrap: 'wrap',
-              }}
-            >
-              <button
-                type="button"
-                onClick={descargarExcel}
-                disabled={exportandoExcel}
-                style={{
-                  ...estilos.botonSecundario,
-                  opacity: exportandoExcel ? 0.6 : 1,
-                }}
-              >
-                {exportandoExcel
-                  ? 'Descargando...'
-                  : 'Descargar Excel'}
-              </button>
-
-              <button
-                type="button"
-                onClick={descargarPDF}
-                disabled={exportandoPDF}
-                style={{
-                  ...estilos.boton,
-                  opacity: exportandoPDF ? 0.6 : 1,
-                }}
-              >
-                {exportandoPDF
-                  ? 'Descargando...'
-                  : 'Descargar PDF'}
-              </button>
-            </div>
-          </div>
-
-          {asistencias.length === 0 ? (
+          {asistenciasPorFecha.length === 0 ? (
             <p style={{ color: '#6b7280' }}>
               No hay registros de asistencia en este período.
             </p>
@@ -757,35 +784,23 @@ export default function TeacherAttendanceReport({ docentes }) {
               <table style={estilos.tabla}>
                 <thead>
                   <tr>
-                    <th style={estilos.encabezado}>
-                      Docente
-                    </th>
-                    <th style={estilos.encabezado}>
-                      Fecha
-                    </th>
-                    <th style={estilos.encabezado}>
-                      Estado
-                    </th>
-                    <th style={estilos.encabezado}>
-                      Observación
-                    </th>
+                    <th style={estilos.encabezado}>Fecha</th>
+                    <th style={estilos.encabezado}>Docente</th>
+                    <th style={estilos.encabezado}>Estado</th>
+                    <th style={estilos.encabezado}>Observación</th>
                   </tr>
                 </thead>
-
                 <tbody>
-                  {asistencias.map((asistencia) => {
+                  {asistenciasPorFecha.map((asistencia) => {
                     const estado = asistencia.condicion;
-
                     return (
                       <tr key={asistencia.id}>
                         <td style={estilos.celda}>
-                          {obtenerDocente(asistencia.docenteId)}
-                        </td>
-
-                        <td style={estilos.celda}>
                           {formatearFecha(asistencia.fecha)}
                         </td>
-
+                        <td style={estilos.celda}>
+                          {obtenerDocente(asistencia.docenteId)}
+                        </td>
                         <td style={estilos.celda}>
                           <span
                             style={{
@@ -794,24 +809,54 @@ export default function TeacherAttendanceReport({ docentes }) {
                               borderRadius: '20px',
                               fontSize: '12px',
                               fontWeight: 600,
-                              background:
-                                coloresEstado[estado]?.background ??
-                                '#f3f4f6',
-                              color:
-                                coloresEstado[estado]?.color ??
-                                '#374151',
+                              background: coloresEstado[estado]?.background ?? '#f3f4f6',
+                              color: coloresEstado[estado]?.color ?? '#374151',
                             }}
                           >
                             {nombresEstado[estado] ?? estado}
                           </span>
                         </td>
-
                         <td style={estilos.celda}>
                           {asistencia.observacion || '—'}
                         </td>
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <hr style={estilos.separador} />
+
+          <h3 style={estilos.seccion}>Resumen por docente</h3>
+          {resumenDocentes.length === 0 ? (
+            <p style={{ color: '#6b7280' }}>
+              No hay registros de docentes para los filtros seleccionados.
+            </p>
+          ) : (
+            <div style={estilos.tablaContenedor}>
+              <table style={estilos.tabla}>
+                <thead>
+                  <tr>
+                    {['Docente', 'Total', 'Presentes', 'Tardanzas', 'Ausencias', '% Asistencia', '% Tardanzas', '% Inasistencias'].map((titulo) => (
+                      <th key={titulo} style={estilos.encabezado}>{titulo}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {resumenDocentes.map((grupo) => (
+                    <tr key={grupo.clave}>
+                      <td style={estilos.celda}>{obtenerDocente(grupo.clave)}</td>
+                      <td style={estilos.celda}>{grupo.total}</td>
+                      <td style={estilos.celda}>{grupo.presentes}</td>
+                      <td style={estilos.celda}>{grupo.tardanzas}</td>
+                      <td style={estilos.celda}>{grupo.ausencias}</td>
+                      <td style={estilos.celda}>{grupo.asistencia.toFixed(2)}%</td>
+                      <td style={estilos.celda}>{grupo.porcentajeTardanzas.toFixed(2)}%</td>
+                      <td style={estilos.celda}>{grupo.porcentajeAusencias.toFixed(2)}%</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

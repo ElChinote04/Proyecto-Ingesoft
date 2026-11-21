@@ -32,27 +32,28 @@ export async function login(credentials, requestId, origen) {
       user?.hashContrasena ?? dummyHash,
     );
     const bloqueada = user?.bloqueadoHasta && user.bloqueadoHasta > new Date();
-    if (
-      !user ||
-      bloqueada ||
-      !validPassword ||
-      !user.activo ||
-      !user.persona.activo ||
-      !user.roles.length
-    ) {
+    // El motivo solo se guarda en auditoría; la respuesta al cliente sigue siendo genérica.
+    const motivo = !user
+      ? 'CREDENCIALES_INVALIDAS'
+      : bloqueada
+        ? 'CUENTA_BLOQUEADA'
+        : !validPassword
+          ? 'CREDENCIALES_INVALIDAS'
+          : !user.activo || !user.persona.activo
+            ? 'CUENTA_INACTIVA'
+            : !user.roles.length
+              ? 'SIN_ROLES'
+              : null;
+    if (motivo) {
+      let intentosFallidos = user?.intentosFallidos;
+      let bloqueadoHasta = null;
       if (user && !bloqueada && user.activo) {
-        const intentosFallidos = user.bloqueadoHasta ? 1 : user.intentosFallidos + 1;
-        await repository.updateUser(
-          user.id,
-          {
-            intentosFallidos,
-            bloqueadoHasta:
-              intentosFallidos >= env.LOGIN_MAX_ATTEMPTS
-                ? new Date(Date.now() + env.LOGIN_LOCK_SECONDS * 1000)
-                : null,
-          },
-          db,
-        );
+        intentosFallidos = user.bloqueadoHasta ? 1 : user.intentosFallidos + 1;
+        bloqueadoHasta =
+          intentosFallidos >= env.LOGIN_MAX_ATTEMPTS
+            ? new Date(Date.now() + env.LOGIN_LOCK_SECONDS * 1000)
+            : null;
+        await repository.updateUser(user.id, { intentosFallidos, bloqueadoHasta }, db);
       }
       await repository.audit(
         {
@@ -62,10 +63,34 @@ export async function login(credentials, requestId, origen) {
           entidadId: user?.id ?? 0,
           resultado: 'DENEGADO',
           requestId,
-          detalle: { identificador: credentials.identificador, origen },
+          detalle: {
+            identificador: credentials.identificador,
+            motivo,
+            ...(user && { intentosFallidos }),
+            origen,
+          },
         },
         db,
       );
+      if (bloqueadoHasta) {
+        await repository.audit(
+          {
+            usuarioId: user.id,
+            tipoEvento: 'CUENTA_BLOQUEADA',
+            entidad: 'Usuario',
+            entidadId: user.id,
+            resultado: 'DENEGADO',
+            requestId,
+            detalle: {
+              identificador: credentials.identificador,
+              intentosFallidos,
+              bloqueadoHasta,
+              origen,
+            },
+          },
+          db,
+        );
+      }
       return null;
     }
     await repository.updateUser(user.id, { intentosFallidos: 0, bloqueadoHasta: null }, db);
@@ -98,7 +123,8 @@ export async function login(credentials, requestId, origen) {
     return { token, expiresAt: exp * 1000, user: safeUser(user) };
   });
   if (!result) {
-    logger.warn('Login fallido', { module: 'auth', requestId });
+    // Nivel info: el errorHandler ya registra el 401 como advertencia, con su código.
+    logger.info('Login fallido', { module: 'auth', requestId });
     throw new AppError(
       401,
       'INVALID_CREDENTIALS',

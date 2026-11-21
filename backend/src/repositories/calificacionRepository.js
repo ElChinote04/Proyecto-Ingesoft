@@ -19,17 +19,6 @@ export const listCalificaciones = (where = {}, db = prisma) =>
 export const findCalificacion = (id, db = prisma) =>
   db.calificacion.findUnique({ where: { id }, include });
 
-export const findCalificacionByKey = ({ matriculaId, bimestreId, asignacionId }, db = prisma) =>
-  db.calificacion.findUnique({
-    where: { matriculaId_bimestreId_asignacionId: { matriculaId, bimestreId, asignacionId } },
-    include,
-  });
-
-export const createCalificacion = (data, db = prisma) => db.calificacion.create({ data, include });
-
-export const updateCalificacion = (id, data, db = prisma) =>
-  db.calificacion.update({ where: { id }, data, include });
-
 export const deleteCalificacion = (id, db = prisma) =>
   db.calificacion.update({ where: { id }, data: { activo: false }, include });
 

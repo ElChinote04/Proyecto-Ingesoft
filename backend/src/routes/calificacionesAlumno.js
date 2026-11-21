@@ -1,10 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validate, idSchema } from '../validators/schemas.js';
-import {
-  calificacionAlumnoQuerySchema,
-  calificacionAlumnoSchema,
-} from '../validators/calificacion.schemas.js';
+import { calificacionAlumnoQuerySchema } from '../validators/calificacion.schemas.js';
 import * as controller from '../controllers/calificacionesAlumno.controller.js';
 
 // Se declara ruta por ruta: /matriculas también lo usa el módulo de pagos, y un
@@ -25,11 +22,4 @@ calificacionesAlumnoRouter.get(
   validate(idSchema, 'params'),
   validate(calificacionAlumnoQuerySchema, 'query'),
   controller.consultar,
-);
-calificacionesAlumnoRouter.put(
-  '/matriculas/:id/calificaciones',
-  docente,
-  validate(idSchema, 'params'),
-  validate(calificacionAlumnoSchema),
-  controller.guardar,
 );

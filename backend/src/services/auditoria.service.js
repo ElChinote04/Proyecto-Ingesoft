@@ -1,21 +1,36 @@
 import * as repository from '../repositories/auditoria.repository.js';
+import { obtenerSolicitudesConError } from './errores.service.js';
 
 export const RESULTADOS_AUDITORIA = ['EXITO', 'DENEGADO', 'FALLO'];
 
-// Transacciones críticas de notas y pagos (US-003).
+// Transacciones críticas de notas y pagos (US-003), y del plan de trabajo del docente.
 export const EVENTOS_CRITICOS = [
   'NOTA_REGISTRADA',
   'NOTA_MODIFICADA',
   'NOTA_PUBLICADA',
-  'EVIDENCIA_CALIFICACION_REGISTRADA',
-  'EVIDENCIA_CALIFICACION_MODIFICADA',
-  'EVIDENCIA_CALIFICACION_DADA_DE_BAJA',
+  'ESCALA_CALIFICACION_MODIFICADA',
+  'EVALUACION_CREADA',
+  'EVALUACION_MODIFICADA',
+  'EVALUACION_DADA_DE_BAJA',
+  'RESULTADO_EVALUACION_REGISTRADO',
+  'RESULTADO_EVALUACION_MODIFICADO',
+  'RESULTADO_EVALUACION_DADO_DE_BAJA',
   'COMPROMISO_PAGO_EMITIDO',
   'COMPROMISO_PAGO_MODIFICADO',
   'PAGO_INICIADO',
   'PAGO_CONFIRMADO',
   'PAGO_NO_COMPLETADO',
   'PAGO_ANULADO',
+  'BIMESTRE_FECHAS_MODIFICADAS',
+  'PLAN_ACADEMICO_CREADO',
+  'PLAN_ACADEMICO_MODIFICADO',
+  'PLAN_ACADEMICO_DESACTIVADO',
+  'EVIDENCIA_PEDAGOGICA_REGISTRADA',
+  'EVIDENCIA_PEDAGOGICA_MODIFICADA',
+  'EVIDENCIA_PEDAGOGICA_PUBLICADA',
+  'EVIDENCIA_PEDAGOGICA_OCULTADA',
+  'EVIDENCIA_PEDAGOGICA_REVISADA',
+  'EVIDENCIA_PEDAGOGICA_DADA_DE_BAJA',
 ];
 
 // Cambian un valor que ya existía: deben guardar el valor anterior, el nuevo y el motivo.
@@ -111,6 +126,24 @@ async function obtenerNotasAnteriores(registros) {
   return anteriores;
 }
 
+// Lo que resume el tablero de Auditoría: seguridad del acceso (US-001) y cambios críticos (US-003).
+export const EVENTOS_RESUMEN = [
+  'LOGIN_FALLIDO',
+  'CUENTA_BLOQUEADA',
+  'ACCESO_DENEGADO',
+  'RESULTADO_EVALUACION_MODIFICADO',
+  'PAGO_ANULADO',
+];
+
+export async function obtenerResumen({ desde, hasta }) {
+  const conteos = await repository.contarPorTipo({
+    tipoEvento: { in: EVENTOS_RESUMEN },
+    fechaHora: { gte: desde && inicioDelDia(desde), lt: hasta && finDelDia(hasta) },
+  });
+  const porTipo = new Map(conteos.map((fila) => [fila.tipoEvento, fila._count._all]));
+  return EVENTOS_RESUMEN.map((tipoEvento) => ({ tipoEvento, total: porTipo.get(tipoEvento) ?? 0 }));
+}
+
 export async function obtenerEventos(consulta) {
   const { pagina, limite, desde, hasta, ...filtros } = consulta;
   const where = {
@@ -128,10 +161,11 @@ export async function obtenerEventos(consulta) {
     registros.map((evento) => evento.detalle),
     ids,
   );
-  const [nombres, datosDeNotas, notasAnteriores] = await Promise.all([
+  const [nombres, datosDeNotas, notasAnteriores, solicitudesConError] = await Promise.all([
     repository.obtenerNombres(ids),
     obtenerDatosDeNotas(registros),
     obtenerNotasAnteriores(registros),
+    obtenerSolicitudesConError(),
   ]);
   return {
     total,
@@ -145,12 +179,15 @@ export async function obtenerEventos(consulta) {
       return {
         id: evento.id,
         fechaHora: evento.fechaHora,
+        usuarioId: evento.usuarioId,
         usuario: evento.usuario?.identificador ?? null,
         tipoEvento: evento.tipoEvento,
         entidad: evento.entidad,
         entidadId: evento.entidadId,
         resultado: evento.resultado,
         requestId: evento.requestId,
+        // El enlace "Ver error" solo se ofrece si esa solicitud dejó un error en el log.
+        tieneError: solicitudesConError.has(evento.requestId),
         nota: datosDeNotas.get(claveEntidad(evento.entidad, evento.entidadId)) ?? null,
         detalle: notasAnteriores.has(evento.id)
           ? { ...detalle, valorAnterior: notasAnteriores.get(evento.id) }

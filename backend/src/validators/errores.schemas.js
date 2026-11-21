@@ -17,6 +17,7 @@ export const consultaErroresSchema = z
     severidad: z.enum(SEVERIDADES_ERROR).optional(),
     codigo: texto,
     usuario: texto,
+    requestId: texto,
     desde: fecha,
     hasta: fecha,
     pagina: z.coerce.number().int().positive().max(1000000).default(1),

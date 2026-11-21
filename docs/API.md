@@ -36,6 +36,8 @@ Identificador requerido, máximo 200 caracteres, normalizado a minúsculas y sin
 También se bloquea temporalmente por cuenta al alcanzar LOGIN_MAX_ATTEMPTS consecutivos
 (5 por defecto), durante LOGIN_LOCK_SECONDS (900). El mensaje 401 no revela si existe
 la cuenta. Éxitos/fallos dejan auditoría de seguridad con resultado, origen y requestId.
+LOGIN_FALLIDO guarda además el `motivo` y los `intentosFallidos`; al llegar al umbral se
+registra también CUENTA_BLOQUEADA. El motivo no se envía al cliente.
 No se devuelve bloqueo, hash ni token en el DTO.
 
 ### GET /auth/me
@@ -321,7 +323,7 @@ GET `/admin/estudiantes` devuelve estudiantes con identidad, código y sus matr�
 
 POST `/admin/estudiantes`: `{ numeroDocumento, nombres, apellidos }`. Devuelve perfil Estudiante con id/personaId/codigoEstudiante. No crea credenciales. Reutiliza una Persona coincidente; perfil repetido: 409 STUDENT_EXISTS; documento de otra identidad: 409 PERSON_MISMATCH.
 
-POST `/admin/matriculas`: `{ estudianteId, seccionId }`. Devuelve matrícula activa; el servidor deriva anioAcademicoId de Seccion. No acepta el año enviado por el cliente. Requiere estudiante/persona activos y sección existente. Una matrícula por estudiante/año, incluso si se elige otra sección: 409 DUPLICATE_ENROLLMENT. Una matrícula nueva incorpora al alumno al padrón de esa sección.
+POST `/admin/matriculas`: `{ estudianteId, seccionId }`. Devuelve matrícula activa; el servidor deriva anioAcademicoId de Seccion. No acepta el año enviado por el cliente. Requiere estudiante/persona activos y sección existente. Una matrícula por estudiante/año, incluso si se elige otra sección: 409 DUPLICATE_ENROLLMENT. Una matrícula nueva incorpora al alumno al padrón de esa sección. Acepta además `planPago` opcional para emitir el compromiso de pago en la misma transacción (ver `POST /matriculas/:id/plan-pago`).
 
 ### Horarios, asignaciones y sesiones
 
@@ -366,22 +368,28 @@ POST `/admin/sesiones`: `{ "bloqueId": 1, "fecha": "2027-10-01" }`. Devuelve la 
 
 ### Log de errores
 
-GET `/errores?severidad&codigo&usuario&desde&hasta&pagina&limite`: requiere el permiso
+GET `/errores?severidad&codigo&usuario&requestId&desde&hasta&pagina&limite`: requiere el permiso
 `errores.consultar`. Todos los filtros son opcionales; `severidad` ∈ ERROR|ADVERTENCIA;
 `desde`/`hasta` son fechas `YYYY-MM-DD` de Lima (ambas inclusive); `limite` ∈ 10|25|50 (10 por
 defecto). Responde `{ total, pagina, limite, codigos[], registros[{ fechaHora, severidad, modulo,
-codigo, descripcion, usuario, requestId }] }`, del más reciente al más antiguo. Se lee de los
-archivos de log del servidor y no hay rutas para alterarlos.
+codigo, descripcion, usuario, requestId, enAuditoria }] }`, del más reciente al más antiguo.
+`enAuditoria` indica si esa solicitud tiene eventos de auditoría. Se lee de los archivos de log
+del servidor y no hay rutas para alterarlos.
 
 ### Auditoría
 
-GET `/admin/auditoria?tipoEvento&entidad&entidadId&usuarioId&resultado&desde&hasta&pagina&limite`:
+GET `/admin/auditoria?tipoEvento&entidad&entidadId&usuarioId&requestId&resultado&desde&hasta&pagina&limite`:
 todos los filtros son opcionales; `resultado` ∈ EXITO|DENEGADO|FALLO; `desde`/`hasta` son
 fechas `YYYY-MM-DD` de Lima (ambas inclusive); `limite` ∈ 10|25|50 (10 por defecto). Responde
-`{ total, pagina, limite, tiposEvento[], registros[{ id, fechaHora, usuario, tipoEvento,
-entidad, entidadId, resultado, requestId, detalle }] }`, del más reciente al más antiguo.
-`usuario` es el identificador de la cuenta o null. Un filtro inválido o un campo extra devuelve
-400 VALIDATION_ERROR. No hay rutas para alterar eventos y SQL rechaza UPDATE/DELETE mediante trigger.
+`{ total, pagina, limite, tiposEvento[], registros[{ id, fechaHora, usuarioId, usuario, tipoEvento,
+entidad, entidadId, resultado, requestId, tieneError, detalle }] }`, del más reciente al más antiguo.
+`usuario` es el identificador de la cuenta o null. `tieneError` indica si esa solicitud dejó un
+error en el log. Un filtro inválido o un campo extra devuelve 400 VALIDATION_ERROR. No hay rutas
+para alterar eventos y SQL rechaza UPDATE/DELETE mediante trigger.
+
+GET `/admin/auditoria/resumen?desde&hasta`: cuenta en el periodo los eventos LOGIN_FALLIDO,
+CUENTA_BLOQUEADA, ACCESO_DENEGADO, RESULTADO_EVALUACION_MODIFICADO y PAGO_ANULADO. Responde
+`[{ tipoEvento, total }]`.
 
 Las transacciones críticas de notas y pagos (US-003) se registran con
 `registrarTransaccionCritica` dentro de la transacción de cada módulo; su `detalle` es
@@ -395,34 +403,89 @@ edición y retiro según las reglas siguientes, conservando registros con histor
 
 ## Calificaciones por alumno
 
-Rutas exclusivas del rol DOCENTE. Un docente solo accede a los salones donde tiene una asignación activa en el año académico activo; no hace falta que existan sesiones de clase.
+Rutas exclusivas del rol DOCENTE. Un docente solo accede a los salones donde tiene una asignación activa en el año académico activo; no hace falta que existan sesiones de clase. La letra de cada competencia **no se escribe**: la calcula el servidor desde las evaluaciones (sección siguiente).
 
-| Ruta                                            | Respuesta o cuerpo                                                                                                                                                                                                                                                                |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET /secciones                                  | `[{ id, nombre, anioAcademicoId, anioAcademico }]`                                                                                                                                                                                                                                |
-| GET /secciones/:id/alumnos                      | `[{ matriculaId, codigo, nombre }]`; 403 si el salón no es del docente                                                                                                                                                                                                            |
-| GET /matriculas/:id/calificaciones?bimestreId=1 | `{ bimestre: { id, nombre, publicado }, cursos: [{ id, nombre, regla, competencias: [{ id, codigo, nombre, nivelLogro, calificacionCompetenciaId, totalEvidencias }] }] }`; `regla` es null si el curso no tiene una vigente; `publicado` se refiere a la sección de la matrícula |
-| PUT /matriculas/:id/calificaciones              | `{ bimestreId, calificaciones: [{ competenciaId, nivelLogro }] }`, niveles AD, A, B o C; devuelve `{ total, resultados }`                                                                                                                                                         |
+| Ruta                                            | Respuesta                                                                                                                                                                                                                                                        |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /secciones                                  | `[{ id, nombre, anioAcademicoId, anioAcademico }]`                                                                                                                                                                                                               |
+| GET /secciones/:id/alumnos                      | `[{ matriculaId, codigo, nombre }]`; 403 si el salón no es del docente                                                                                                                                                                                           |
+| GET /matriculas/:id/calificaciones?bimestreId=1 | `{ bimestre: { id, nombre, publicado }, cursos: [{ id, nombre, competencias: [{ id, codigo, nombre, promedio, nivelLogro, pendientes, evaluaciones: [{ id, titulo, fecha, peso, resultado }] }] }] }`; `resultado` es null mientras la evaluación está pendiente |
 
-El PUT guarda solo las competencias enviadas, en una transacción: si una falla no se guarda ninguna. Responde 400 `INVALID_COMPETENCY_CONTEXT` si la competencia no pertenece a un curso del docente en ese salón, 404 `RULE_NOT_FOUND` si el curso no tiene regla vigente y 409 `TERM_PUBLISHED` si la libreta de la sección ya fue publicada.
+Se retiraron `PUT /matriculas/:id/calificaciones`, `POST` y `PUT` de `/calificaciones` y de `/calificaciones-competencias` (todas escribían la letra a mano) y toda la API de evidencia de calificación (`/calificaciones-competencias/:id/evidencias`, `/evidencias-calificaciones`): el examen corregido de cada alumno es ahora el sustento de su nota.
 
-## Evidencia pedagógica de la calificación (US-019)
+## Evaluaciones y escala de calificación
 
-Cada evidencia sustenta una nota por competencia y bimestre. El alumno, el curso y la competencia se derivan de esa nota. Consulta y modifica quien hoy dicta el curso en la sección; el administrador consulta y da de baja.
+Una evaluación (práctica, examen…) se define una vez para el salón: clase (curso + sección), bimestre, competencia, fecha dentro del bimestre y peso entero de 1 a 5. Cada alumno tiene a lo más un resultado activo por evaluación:
 
-| Ruta                                                      | Rol                    | Cuerpo o respuesta                                                                                            |
-| --------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
-| GET /calificaciones-competencias/:id/evidencias           | Docente, administrador | `{ contexto: { alumno, curso, competencia, bimestre, nivelActual }, publicado, evidencias }`, activas primero |
-| POST /calificaciones-competencias/:id/evidencias          | Docente                | multipart: `titulo`, `descripcion?`, `archivos` (0 a 3); 201 con la evidencia                                 |
-| PATCH /evidencias-calificaciones/:id                      | Docente                | `{ titulo?, descripcion? }`; `descripcion: null` la borra                                                     |
-| DELETE /evidencias-calificaciones/:id                     | Docente, administrador | Baja lógica. Cuerpo `{ motivo }` obligatorio para el administrador si la sección está publicada               |
-| POST /evidencias-calificaciones/:id/archivos              | Docente                | multipart: `archivos` (1 a 3); 201                                                                            |
-| DELETE /evidencias-calificaciones/:id/archivos/:archivoId | Docente                | Retira el archivo de la evidencia; sigue en disco                                                             |
-| GET /evidencias-calificaciones/:id/archivos/:archivoId    | Docente, administrador | Descarga con `Content-Disposition: attachment`. También funciona si la evidencia está inactiva                |
+| `condicion`   | Nota                | Archivos            | Motivo      | En el promedio |
+| ------------- | ------------------- | ------------------- | ----------- | -------------- |
+| `CALIFICADA`  | 0 a 20, 2 decimales | 1 a 3, obligatorios | —           | Cuenta         |
+| `NO_RINDIO`   | —                   | ninguno             | —           | Cuenta como 0  |
+| `JUSTIFICADA` | —                   | ninguno             | obligatorio | No cuenta      |
 
-Una evidencia lleva título y, además, descripción o al menos un archivo. Los archivos son PDF, JPG o PNG, verificados por sus primeros bytes, de hasta 5 MB y con un máximo de 3 activos por evidencia. El nivel registrado lo fija el servidor al crear y no cambia si después cambia la nota.
+Sin resultado la evaluación queda **pendiente** para ese alumno: el promedio la ignora y la libreta no se publica. La letra del bimestre es el promedio ponderado por peso, fijado a 2 decimales, redondeado al entero (medio hacia arriba: 17,50 → 18) y convertido con la escala única. Se guarda en `CalificacionCompetencia` (`nivelLogro`, `promedio`) dentro de la misma transacción que cambia una nota, un peso o la escala.
 
-Errores propios: 400 `EVIDENCE_EMPTY`, `FILE_TYPE_NOT_ALLOWED`, `FILE_TOO_LARGE`, `TOO_MANY_FILES` y `CORRECTION_REASON_REQUIRED`; 404 `GRADE_DETAIL_NOT_FOUND`, `EVIDENCE_NOT_FOUND` y `FILE_NOT_FOUND`; 409 `TERM_PUBLISHED` y `EVIDENCE_INACTIVE`.
+| Ruta                                                              | Rol                            | Cuerpo o respuesta                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /evaluaciones?seccionId&bimestreId&cursoId?                   | Docente                        | `{ bimestre: { id, nombre, fechaInicio, fechaFin, publicado }, totalAlumnos, cursos: [{ id, codigo, nombre, competencias: [{ id, codigo, nombre, evaluaciones: [{ id, titulo, descripcion, fecha, peso, avance: { registrados, total } }] }] }] }` |
+| POST /evaluaciones                                                | Docente vigente                | `{ cursoId, seccionId, bimestreId, competenciaId, titulo, descripcion?, fecha, peso? }`; 201. El servidor resuelve la asignación                                                                                                                   |
+| PATCH /evaluaciones/:id                                           | Docente vigente                | `{ titulo?, descripcion?, fecha?, peso?, competenciaId? }`; cambiar el peso recalcula las letras de la sección                                                                                                                                     |
+| DELETE /evaluaciones/:id                                          | Docente vigente                | 204. Da de baja la evaluación con sus resultados y recalcula                                                                                                                                                                                       |
+| GET /evaluaciones/:id/pendientes                                  | Docente vigente                | `[{ matriculaId, codigo, nombre }]` de los alumnos sin resultado                                                                                                                                                                                   |
+| PUT /evaluaciones/:id/resultados/:matriculaId                     | Docente vigente                | multipart: `condicion`, `nota?`, `motivo?`, `comentario?`, `archivosQuitados?` (JSON con ids), `archivos`. Crea o reemplaza el resultado; devuelve `{ resultado, logro: { promedio, nivelLogro } }`                                                |
+| DELETE /evaluaciones/:id/resultados/:matriculaId                  | Docente vigente                | 204. El alumno vuelve a quedar pendiente                                                                                                                                                                                                           |
+| GET /evaluaciones/:id/resultados/:matriculaId/archivos/:archivoId | Docente vigente, administrador | Descarga del examen corregido                                                                                                                                                                                                                      |
+| GET /escala-calificacion                                          | Docente, administrador         | `{ version, minimoAD, minimoA, minimoB, vigenteDesde }`                                                                                                                                                                                            |
+| PUT /escala-calificacion                                          | Administrador                  | `{ minimoAD, minimoA, minimoB }`, enteros con `20 ≥ AD > A > B > 0`. Devuelve la escala y `letrasRecalculadas`                                                                                                                                     |
+
+El dueño de una evaluación es el **docente vigente** de la clase, no quien la creó. La familia no accede a nada de esto: solo ve la libreta publicada. Cambiar la escala crea una versión nueva y recalcula las letras de los bimestres no publicados; lo publicado no cambia.
+
+Errores propios: 400 `INVALID_EVALUATION_DATE`, `INVALID_COMPETENCY_CONTEXT`, `INVALID_TERM_CONTEXT`, `INVALID_GRADE`, `FILE_REQUIRED`, `REASON_REQUIRED`, `INVALID_ENROLLMENT_CONTEXT`, `INVALID_SCALE` (con el detalle por campo), `FILE_TYPE_NOT_ALLOWED`, `FILE_TOO_LARGE`, `TOO_MANY_FILES`; 404 `EVALUATION_NOT_FOUND`, `RESULT_NOT_FOUND`, `FILE_NOT_FOUND`; 409 `TERM_WITHOUT_DATES`, `EVALUATION_HAS_RESULTS` (cambiar la competencia con resultados) y `TERM_PUBLISHED`.
+
+## Plan de trabajo semanal y evidencias pedagógicas
+
+La evidencia pedagógica es una actividad del plan de trabajo del docente en una semana del bimestre (exposición, ejercicios, video, avance). No es una nota ni la sustenta: nunca lee ni escribe calificaciones ni evaluaciones. Gestiona el plan el **docente vigente** de la clase (curso + sección), aunque lo haya creado otro; el administrador puede siempre.
+
+### Bimestres
+
+| Ruta                 | Rol           | Cuerpo o respuesta                                                                                                                          |
+| -------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /bimestres       | Cualquiera    | Bimestres del año activo: `[{ id, numero, nombre, fechaInicio, fechaFin, semanas, cerrado }]`; `semanas` es null sin fechas                 |
+| PATCH /bimestres/:id | Administrador | `{ fechaInicio, fechaFin }` en `YYYY-MM-DD`. 409 `TERM_OVERLAP`, `TERM_ORDER` o `TERM_HAS_LATER_WEEKS` (con el detalle de planes y semanas) |
+
+La semana 1 empieza el día de inicio y cada una dura 7 días; la última se recorta en la fecha de fin. Un bimestre está `cerrado` cuando hoy (Lima) ya pasó su fecha de fin.
+
+### Asignaciones
+
+`GET /asignaciones` devuelve las clases que puede ver la sesión: `[{ id, curso: { id, codigo, nombre }, seccion: { id, nombre, grado } }]`. El docente ve sus asignaciones vigentes; el administrador, todas (`?cursoId&seccionId`); el alumno o apoderado, los cursos de la sección de una matrícula suya (`?matriculaId`, obligatorio).
+
+### Planes
+
+| Ruta                                                | Rol                    | Cuerpo o respuesta                                                                                                                                        |
+| --------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /planes-academicos?bimestreId&cursoId&seccionId | Docente, administrador | Resumen de los planes activos; el docente solo ve los de sus clases                                                                                       |
+| GET /planes-academicos/:id                          | Docente, administrador | El plan con `bimestre { semanas, cerrado }`, `puedeEditar` y `semanas: [{ numero, desde, hasta, evidencias }]`, **todas** las semanas, también las vacías |
+| POST /planes-academicos                             | Docente, administrador | `{ asignacionId, bimestreId, titulo, objetivo, fechaInicio?, fechaFin?, competenciaIds? }`; 409 `PLAN_EXISTS`, `TERM_WITHOUT_DATES` o `TERM_CLOSED`       |
+| PATCH /planes-academicos/:id                        | Docente, administrador | `{ titulo?, objetivo?, fechaFin?, competenciaIds? }`                                                                                                      |
+| DELETE /planes-academicos/:id                       | Administrador          | Desactiva el plan y sus actividades en la misma transacción                                                                                               |
+
+Una clase tiene un solo plan activo por bimestre (índice único parcial). Se puede planificar antes del bimestre o durante él, nunca después.
+
+### Actividades (evidencias pedagógicas)
+
+| Ruta                                                       | Rol                            | Cuerpo o respuesta                                                                                                                                                             |
+| ---------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET /evidencias-pedagogicas?planId&numeroSemana&estado     | Docente, administrador         | Actividades del plan, ordenadas por semana                                                                                                                                     |
+| GET /evidencias-pedagogicas?matriculaId&cursoId&bimestreId | Alumno, apoderado              | `{ bimestre, curso, semanas }` solo con lo publicado hasta hoy y no observado, sin datos de la revisión ni del docente                                                         |
+| GET /evidencias-pedagogicas/:id                            | Según el alcance               | Detalle; la familia recibe la salida mínima                                                                                                                                    |
+| POST /evidencias-pedagogicas                               | Docente vigente, administrador | multipart: `planId`, `numeroSemana`, `tipo`, `titulo`, `descripcion?`, `enlaces?` (JSON, hasta 5 `https://`), `publicacion?`, `publicadaDesde?`, `archivos` (0 a 3), `motivo?` |
+| PATCH /evidencias-pedagogicas/:id                          | Docente vigente, administrador | multipart o JSON: los mismos campos, la publicación y archivos nuevos, **en una sola petición**                                                                                |
+| PUT /evidencias-pedagogicas/:id/revision                   | Administrador                  | `{ estadoRevision, observacionesRevision? }` con `VALIDADA` u `OBSERVADA`; solo sobre lo publicado                                                                             |
+| DELETE /evidencias-pedagogicas/:id                         | Docente vigente, administrador | Baja lógica; `{ motivo? }`                                                                                                                                                     |
+| GET /evidencias-pedagogicas/:id/archivos/:archivoId        | Según el alcance               | Descarga con el nombre original                                                                                                                                                |
+| DELETE /evidencias-pedagogicas/:id/archivos/:archivoId     | Docente vigente, administrador | Retira el archivo; `{ motivo? }`                                                                                                                                               |
+
+`tipo` es `EXPOSICION`, `EJERCICIO`, `VIDEO`, `AVANCE_PLAN` u `OTRO`. La visibilidad para los alumnos se deriva de `publicadaDesde` al consultar, sin ningún proceso programado: `null` es `SUBIDA` (solo la ve el docente), una fecha futura es `PROGRAMADA` y hoy o antes es `PUBLICADA`; la respuesta trae `estadoPublicacion`. `publicacion` vale `OCULTA` (por defecto al crear), `AHORA` o `PROGRAMADA` con `publicadaDesde` entre hoy y el fin del bimestre (400 `INVALID_PUBLICATION_DATE`). El docente puede ocultar lo publicado salvo que esté validado; ocultar conserva la revisión. Pasada la fecha de fin del bimestre, el docente recibe 409 `TERM_CLOSED` y el administrador debe enviar `motivo` (400 `REASON_REQUIRED`). Una actividad `VALIDADA` ya no la edita el docente (409 `EVIDENCE_VALIDATED`). Los archivos se escriben en disco antes de la transacción y se borran si esta falla. Otros errores: 400 `INVALID_WEEK`, `FILE_TYPE_NOT_ALLOWED`, `FILE_TOO_LARGE`, `TOO_MANY_FILES`; 409 `EVIDENCE_NOT_PUBLISHED`, `EVIDENCE_INACTIVE`.
 
 ## Publicación de libretas
 
@@ -434,9 +497,9 @@ Rutas exclusivas del rol ADMINISTRADOR. La publicación es por sección y bimest
 | POST /calificaciones/bimestres/:id/secciones/:seccionId/publicacion | Publica la sección: 201, o 200 con `yaPublicado: true`. 409 `PUBLICATION_INCOMPLETE`, 404 `GRADES_NOT_FOUND`, 400 `INVALID_TERM_CONTEXT`                                                                         |
 | POST /calificaciones/bimestres/:id/publicacion                      | Masiva: `{ seccionIds }` (1 a 200, sin repetir). Devuelve `{ publicadas, omitidas: [{ id, nombre, razon }] }`; `razon` es `CON_PENDIENTES`, `YA_PUBLICADA`, `SIN_DATOS`, `OTRO_ANIO_ACADEMICO` o `NO_ENCONTRADA` |
 
-`estado` es `PUBLICADA`, `LISTA`, `CON_PENDIENTES` o `SIN_DATOS`. Cada pendiente trae `{ curso, docente, sinNota, sinEvidencia, sinRegla }`, sin nombres de alumnos. Una sección está lista cuando cada matrícula activa tiene nota y al menos una evidencia activa en cada competencia activa de sus cursos.
+`estado` es `PUBLICADA`, `LISTA`, `CON_PENDIENTES` o `SIN_DATOS`. Cada pendiente trae `{ curso, docente, sinEvaluaciones, resultadosPendientes, sinLetra, bajoMinimo, minimoNotas, sinRegla }`, sin nombres de alumnos: competencias sin ninguna evaluación, resultados por registrar, alumnos con todo justificado (sin letra), alumnos con menos notas que el mínimo de la regla y si falta la regla de consolidación vigente. Una sección está lista cuando no queda nada de eso. Al publicar, la regla vigente de cada curso queda fija en sus calificaciones (`reglaId`): la libreta anual usa la del último bimestre publicado.
 
-Con la sección publicada, `POST /calificaciones`, `POST /calificaciones-competencias` y `PUT /matriculas/:id/calificaciones` responden 409 `TERM_PUBLISHED`. El administrador conserva `PUT` y `DELETE` de `/calificaciones/:id` y `/calificaciones-competencias/:id`, pero debe enviar `motivo` (5 a 500 caracteres); sin él responden 400 `CORRECTION_REASON_REQUIRED`.
+Con la sección publicada, crear, cambiar o eliminar evaluaciones y registrar o quitar resultados responde 409 `TERM_PUBLISHED`. El administrador conserva `DELETE` de `/calificaciones/:id` y `/calificaciones-competencias/:id`, pero debe enviar `motivo` (5 a 500 caracteres); sin él responden 400 `CORRECTION_REASON_REQUIRED`.
 
 ## Libreta de notas (US-020)
 
@@ -530,7 +593,96 @@ deja de aparecer en horarios personales. Es posible crear después el mismo inte
 en un bloque nuevo. No se borra físicamente. Un año inactivo responde 409 INACTIVE_YEAR
 al crear/editar/retirar bloques o crear sesiones. Un bloque retirado no permite nuevas sesiones.
 
-## Cobranza y anulación de pagos
+## Pagos
+
+Montos siempre como texto con dos decimales (`"350.00"`), en soles. Estados de una boleta:
+`PENDIENTE`, `MOROSA` (no se guarda: es una PENDIENTE vencida antes de hoy), `PARCIAL` (fraccionada
+en cuotas, US-010), `PAGADA` y `ANULADA`. Estados de un pago: `INICIADO`, `PROCESANDO`,
+`CONFIRMADO`, `RECHAZADO`, `CANCELADO` y `ANULADO`. La pasarela se elige con `PAGOS_PROVEEDOR`
+(`simulada` en desarrollo y pruebas, `stripe` en producción).
+
+### POST /matriculas/:id/plan-pago (US-006)
+
+Solo administrador. Emite el compromiso de pago de una matrícula ya registrada. Cuerpo
+`{ montoPension, numeroCuotas (1–12), diaVencimiento (1–28), mesInicio (1–12), concepto? }`
+(`concepto` por defecto `"Pensión"`). Responde 201 con `{ id, matriculaId, montoPension,
+numeroCuotas, diaVencimiento, boletas[] }`: una boleta por cuota, que vence el `diaVencimiento` de
+cada mes desde `mesInicio`. 404 si la matrícula no existe, 409 `MATRICULA_INACTIVA` y 409
+`PLAN_DUPLICADO` si ya tiene compromiso. También puede emitirse al matricular, enviando el mismo
+objeto en `planPago` dentro de `POST /admin/matriculas`; ahí se crea en la misma transacción y la
+respuesta trae `detail: { planPagoId, cuotasEmitidas }`.
+
+### GET /compromisos-pago (US-007A)
+
+Historial de boletas. Query opcional: `estudianteId`, `estado`, `pagina` (1), `limite` (20, máx.
+100). El apoderado solo ve las de sus estudiantes vinculados (403 si pide un `estudianteId` ajeno
+o si no es apoderado de nadie; lista vacía si aún no tiene boletas); el administrador ve todas.
+Responde `{ boletas[], total, pagina, limite }`, donde cada boleta trae `{ id, numeroCuota,
+concepto, periodo, monto, fechaVencimiento, estado, pagadaEn, comprobante, boletaOrigenId,
+numeroFraccion, totalFracciones, montoPagado, pagoEnCursoId, estudiante: { id, nombres, apellidos
+}, anioAcademico }`. `comprobante` es el número vigente (`B001-00000012`) o `null`.
+`pagoEnCursoId` solo aparece para quien puede abrir ese pago; el administrador recibe además
+`pagoConfirmadoId` (ver US-013).
+
+### POST /pagos (US-007B)
+
+Solo el apoderado a cargo del estudiante. Cuerpo `{ "compromisoPagoId": 15 }`: el monto y el
+estudiante los resuelve el servidor. Crea el pago y la sesión en la pasarela y responde 201 con
+`{ pagoId, estado: "PROCESANDO", monto, urlCheckout }`; el frontend redirige a `urlCheckout`
+(Stripe Checkout, que también resuelve la verificación 3-D Secure). Errores: 403 boleta ajena, 409
+`BOLETA_YA_PAGADA`, `BOLETA_ANULADA`, `BOLETA_FRACCIONADA` (hay que pagar sus cuotas) y
+`PAGO_EN_CURSO` (ya hay un intento abierto para esa boleta). La boleta **no** cambia aquí: solo
+pasa a PAGADA cuando la pasarela lo confirma.
+
+### POST /pagos/notificaciones (US-007B)
+
+Webhook de la pasarela. No usa sesión: se valida la firma (`stripe-signature`, o `x-sage-firma`
+con la pasarela simulada) y responde 401 `FIRMA_INVALIDA` si no coincide. No confía en el cuerpo:
+consulta el estado real al proveedor. Al confirmar, en una sola transacción, el pago pasa a
+CONFIRMADO, la boleta a PAGADA con `pagadaEn` y se emite su comprobante. Responde siempre 200
+`{ recibido: true, aplicado, ... }`, también ante un reenvío repetido, que no tiene efecto. En
+producción debe registrarse en el dashboard de Stripe apuntando a esta ruta.
+
+### GET /pagos/:id y DELETE /pagos/:id (US-007B)
+
+`GET` lo usa la pantalla de resultado mientras espera la confirmación: `{ id, estado, monto,
+referencia, confirmadoEn, motivoRechazo, boleta }`. `DELETE` cancela un intento abandonado en la
+pasarela para poder volver a pagar la boleta: responde `{ id, estado: "CANCELADO" }`, o
+`yaCerrado: true` si ya estaba cerrado, y 409 `PAGO_CONFIRMADO` si la pasarela alcanzó a
+cobrarlo. Ambos solo para quien inició el pago o el administrador (403 en otro caso). En
+desarrollo con la pasarela simulada existe además `POST /pagos/:id/simular` con `{ resultado:
+"PAGADO" | "RECHAZADO" | "EXPIRADO" | "PENDIENTE" }`; no se registra en producción.
+
+### GET /compromisos-pago/:id/comprobante (US-009)
+
+Descarga el comprobante vigente en PDF (`Content-Type: application/pdf`, `Content-Disposition:
+attachment; filename="comprobante-B001-00000012.pdf"`) con los datos del alumno, concepto, monto y
+fecha del pago. Solo el apoderado a cargo del estudiante o el administrador (403 en otro caso).
+409 `BOLETA_NO_PAGADA` si la boleta aún no está pagada y 409 `BOLETA_FRACCIONADA` si se pagó en
+cuotas (cada cuota tiene su propio comprobante).
+
+### POST /compromisos-pago/:id/comprobante/envio (US-009)
+
+Reenvía ese mismo PDF como adjunto a un correo. Cuerpo `{ "correo": "familia@correo.pe" }`; se
+guarda en minúsculas y sin espacios, y un correo inválido o un campo extra responde 400. Mismos
+permisos y errores que la descarga (403, 404, 409 `BOLETA_NO_PAGADA` / `BOLETA_FRACCIONADA`).
+Responde 200 con `{ comprobante, enviadoA, enviadoEn }`. Si el servidor de correo falla responde
+502 `CORREO_NO_ENVIADO` sin cambiar nada, y se puede reintentar. Límite de 10 envíos cada 15
+minutos por usuario (429 `DEMASIADOS_CORREOS`). El destino lo escribe quien lo pide porque SAGE no
+guarda correos de contacto. El envío se configura con `CORREO_PROVEEDOR`: `simulado` (por
+defecto; no sale a la red y solo deja `CORREO_SIMULADO` en el log) o `smtp` con `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_SECURE`, `SMTP_USUARIO`, `SMTP_CLAVE` y `CORREO_REMITENTE`.
+
+### POST /compromisos-pago/:id/fracciones (US-010)
+
+Solo administrador. Divide una boleta PENDIENTE en cuotas: cuerpo `{ numeroCuotas (2–6),
+montoCuota, fechaPrimerVencimiento: "YYYY-MM-DD" }`. Las cuotas vencen una por mes y la última se
+ajusta para que la suma sea exactamente el total; 400 `FRACCIONES_EXCEDEN_TOTAL` o
+`FRACCIONES_NO_CUBREN_TOTAL` si no cuadra. Responde 201 con `{ id, estado: "PARCIAL", montoTotal,
+fracciones[{ id, numeroFraccion, monto, fechaVencimiento }] }`. Cada cuota es una boleta hija que
+se paga por `POST /pagos` y tiene su propio comprobante; la original queda PARCIAL (no se puede
+pagar entera) y pasa a PAGADA cuando se paga la última cuota. 409 `BOLETA_NO_PENDIENTE`,
+`BOLETA_ES_FRACCION` (ya es una cuota) y `PAGO_EN_CURSO`. Se audita como `BOLETA_FRACCIONADA`.
 
 ### GET /reportes/pagos/morosidad (US-008)
 

@@ -19,37 +19,67 @@ function agruparPorCurso(asignaciones) {
   return [...cursos.values()];
 }
 
+const CUENTAN = ['CALIFICADA', 'NO_RINDIO'];
+
+/**
+ * Situación de un alumno en una competencia: completa si no le falta registrar ninguna
+ * evaluación, tiene letra y le cuentan al menos `minimo` notas.
+ */
+function situacionDelAlumno(matriculaId, evaluaciones, tieneLetra, minimo) {
+  const condiciones = evaluaciones.map(({ resultados }) => resultados.get(matriculaId));
+  const pendientes = condiciones.filter((condicion) => !condicion).length;
+  if (pendientes) return { pendientes };
+  if (!tieneLetra) return { sinLetra: true };
+  const contados = condiciones.filter((condicion) => CUENTAN.includes(condicion)).length;
+  return contados < minimo ? { bajoMinimo: true } : { completa: true };
+}
+
 /**
  * Calcula qué falta en una sección para poder publicar sus libretas.
  * @param {object} datos
  * @param {{ gradoId: number, matriculas: { id: number }[], asignaciones: object[] }} datos.seccion
- * @param {Map<string, number>} datos.evidenciasPorNota clave `matriculaId:competenciaId`, valor
- *   el mayor número de evidencias activas entre las notas de esa clave.
- * @param {Set<string>} datos.reglasVigentes claves `gradoId:cursoId`.
+ * @param {Map<number, { resultados: Map<number, string> }[]>} datos.evaluacionesPorCompetencia
+ *   evaluaciones activas de la sección en el bimestre, con la condición de cada alumno.
+ * @param {Set<string>} datos.letras claves `matriculaId:competenciaId` que ya tienen letra.
+ * @param {Map<string, { minimoNotas: number }>} datos.reglasVigentes clave `gradoId:cursoId`.
  */
-export function evaluarSeccion({ seccion, evidenciasPorNota, reglasVigentes }) {
+export function evaluarSeccion({ seccion, evaluacionesPorCompetencia, letras, reglasVigentes }) {
   let totalEsperado = 0;
   let totalCompleto = 0;
   const pendientes = [];
   for (const curso of agruparPorCurso(seccion.asignaciones)) {
-    let sinNota = 0;
-    let sinEvidencia = 0;
-    for (const { id: matriculaId } of seccion.matriculas) {
-      for (const { id: competenciaId } of curso.competencias) {
-        totalEsperado += 1;
-        const evidencias = evidenciasPorNota.get(`${matriculaId}:${competenciaId}`);
-        if (evidencias === undefined) sinNota += 1;
-        else if (evidencias === 0) sinEvidencia += 1;
-        else totalCompleto += 1;
+    const regla = reglasVigentes.get(`${seccion.gradoId}:${curso.id}`);
+    const minimo = regla?.minimoNotas || 1;
+    const faltas = { sinEvaluaciones: 0, resultadosPendientes: 0, sinLetra: 0, bajoMinimo: 0 };
+    for (const { id: competenciaId } of curso.competencias) {
+      const evaluaciones = evaluacionesPorCompetencia.get(competenciaId) ?? [];
+      totalEsperado += seccion.matriculas.length;
+      if (!evaluaciones.length) {
+        if (seccion.matriculas.length) faltas.sinEvaluaciones += 1;
+        continue;
+      }
+      for (const { id: matriculaId } of seccion.matriculas) {
+        const situacion = situacionDelAlumno(
+          matriculaId,
+          evaluaciones,
+          letras.has(`${matriculaId}:${competenciaId}`),
+          minimo,
+        );
+        if (situacion.completa) totalCompleto += 1;
+        faltas.resultadosPendientes += situacion.pendientes ?? 0;
+        if (situacion.sinLetra) faltas.sinLetra += 1;
+        if (situacion.bajoMinimo) faltas.bajoMinimo += 1;
       }
     }
-    if (sinNota || sinEvidencia)
+    // Sin regla no hay letra anual; un curso sin competencias no tiene nada que consolidar.
+    const sinRegla = !regla && curso.competencias.length > 0;
+    if (sinRegla || Object.values(faltas).some(Boolean))
       pendientes.push({
         curso: curso.nombre,
         docente: [...curso.docentes].join(', '),
-        sinNota,
-        sinEvidencia,
-        sinRegla: !reglasVigentes.has(`${seccion.gradoId}:${curso.id}`),
+        ...faltas,
+        minimoNotas: minimo,
+        sinRegla,
       });
   }
   return { totalEsperado, totalCompleto, pendientes };

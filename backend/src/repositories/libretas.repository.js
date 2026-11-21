@@ -74,6 +74,7 @@ export const listNotasPublicadas = ({ matriculaId, bimestreIds }, db = prisma) =
   db.calificacionCompetencia.findMany({
     where: {
       activo: true,
+      nivelLogro: { not: null },
       calificacion: { activo: true, matriculaId, bimestreId: { in: bimestreIds } },
     },
     select: {

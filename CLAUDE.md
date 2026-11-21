@@ -164,9 +164,39 @@ y fuera de producción.
 
 Implementado: acceso y roles, gestión de usuarios, catálogos, estudiantes,
 matrícula, horarios, sesiones, asistencia, auditoría, el módulo de pagos
-(comprobante en PDF, cuotas, cobranza y anulación), la evidencia pedagógica
-de las notas (US-019), la publicación de libretas por sección y la consulta
-de la libreta por competencias (US-020).
+(comprobante en PDF, cuotas, cobranza y anulación), las evaluaciones con nota
+0–20 y letra calculada, la publicación de libretas por sección, la consulta de
+la libreta por competencias (US-020) y el plan de trabajo semanal del docente.
+
+**Tres conceptos que no se mezclan.** La *evaluación* (`Evaluacion`) es una
+práctica o examen del salón; cada alumno tiene un `ResultadoEvaluacion` con su
+nota 0–20 y su examen corregido (que reemplazó a la evidencia de calificación
+de US-019), o «no rindió» (cuenta 0) o «justificada» (no cuenta). La *letra*
+del bimestre (`CalificacionCompetencia.nivelLogro`) nunca se escribe a mano: es
+el promedio ponderado convertido con la escala única (`EscalaCalificacion`). La
+*evidencia pedagógica* (`EvidenciaPedagogica`) es una actividad del plan de
+trabajo del docente en una semana del bimestre: no tiene alumno ni nota y el
+plan nunca toca las calificaciones.
+
+**Letra calculada.** Se guarda, no se deriva al consultar (al revés que
+MOROSA): la libreta publicada no debe cambiar si mañana cambia la escala. Por
+eso se recalcula dentro de la misma transacción que cambia una nota, un peso o
+la escala (`services/logros.service.js`, reglas puras en
+`domain/notaVigesimal.js`), con un candado compartido de la escala para que un
+cambio de escala simultáneo no deje letras con la escala vieja. Las reglas de
+consolidación ya solo calculan la letra anual y fijan el mínimo de notas para
+publicar; la regla vigente queda en `Calificacion.reglaId` al publicar.
+
+**Plan de trabajo.** Un plan activo por clase (curso + sección) y bimestre,
+garantizado por un índice único parcial en SQL. Lo gestiona el docente vigente
+de la clase, no el que lo creó, porque reasignar un curso crea otra asignación.
+Las semanas salen de las fechas del bimestre (`domain/semanasBimestre.js`); sin
+fechas no hay plan. Pasado el fin del bimestre el docente solo lee y el
+administrador corrige con motivo. **La visibilidad para los alumnos no se
+almacena como estado**: se deriva de `publicadaDesde` al consultar (null =
+subida, futura = programada, hoy o antes = publicada), por la misma razón que
+MOROSA; así una actividad programada se publica sola sin proceso programado. Datos, estado y archivos de una actividad van
+en una sola petición multipart.
 
 **Comprobante (US-009).** Se emite en la misma transacción que confirma el pago
 (tabla `Comprobante`, una fila por boleta pagada; el id es el correlativo y se

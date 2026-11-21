@@ -126,19 +126,30 @@ before(async () => {
   const bimestre = await prisma.bimestreAcademico.findFirst({
     where: { anioAcademicoId: anio.id, numero: 1 },
   });
-  const registrarNota = async (matriculaId, nivelLogro) =>
-    (
-      await docente
-        .post(`${base}/calificaciones`)
-        .send({
-          matriculaId,
-          bimestreId: bimestre.id,
-          asignacionId: asignacion.id,
-          reglaId: regla.id,
-          competencias: [{ competenciaId: competencia.id, nivelLogro }],
-        })
-        .expect(201)
-    ).body.data;
+  // La letra la calculan las evaluaciones (ver evaluaciones.test.js); aquí solo importa quién
+  // la consulta, así que se inserta ya publicada.
+  const registrarNota = (matriculaId, nivelLogro) =>
+    prisma.calificacion.create({
+      data: {
+        matriculaId,
+        bimestreId: bimestre.id,
+        asignacionId: asignacion.id,
+        reglaId: regla.id,
+        creadoPorId: cuentaDocente.id,
+        modificadoPorId: cuentaDocente.id,
+        competencias: {
+          create: [
+            {
+              competenciaId: competencia.id,
+              nivelLogro,
+              creadoPorId: cuentaDocente.id,
+              modificadoPorId: cuentaDocente.id,
+            },
+          ],
+        },
+      },
+      include: { competencias: true },
+    });
   notaHijo = await registrarNota(hijo.matricula.id, 'AD');
   notaOtroAlumno = await registrarNota(otroAlumno.matricula.id, 'B');
   await prisma.publicacionSeccion.create({

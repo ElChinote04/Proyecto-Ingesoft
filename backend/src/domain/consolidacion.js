@@ -1,10 +1,12 @@
 const NIVELES = ['C', 'B', 'A', 'AD'];
 
+// La regla solo consolida la letra anual; minimoNotas es cuántas notas deben contar por alumno y
+// competencia para publicar un bimestre.
 export function metodoRegla(metodo) {
   try {
     return JSON.parse(metodo);
   } catch {
-    return { estrategia: metodo, desempate: 'reciente', minimoEvidencias: 1 };
+    return { estrategia: metodo, desempate: 'reciente', minimoNotas: 1 };
   }
 }
 
@@ -32,6 +34,6 @@ export function aplicarRegla(items, regla) {
 export function consolidar(items, metodo) {
   if (!items.length) return null;
   const regla = metodoRegla(metodo);
-  if (items.length < (regla.minimoEvidencias || 1)) return null;
+  if (items.length < (regla.minimoNotas || 1)) return null;
   return aplicarRegla(items, regla);
 }

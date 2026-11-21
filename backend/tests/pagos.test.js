@@ -9,6 +9,7 @@ import { prisma } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
 import { logger } from '../src/logging/logger.js';
 import { simulada, RESULTADO } from '../src/integrations/pasarelaPagos.js';
+import { simulado as correoSimulado } from '../src/integrations/correo.js';
 import { AppError } from '../src/errors/AppError.js';
 
 const base = '/api/v1';
@@ -607,6 +608,85 @@ test('US-009: las notificaciones repetidas no emiten un segundo comprobante', as
   });
   const comprobantes = await prisma.comprobante.count();
   assert.equal(comprobantes, pagadas, 'exactamente un comprobante por boleta pagada');
+});
+
+// ------------------------------------------------------- US-009: reenvío por correo
+const enviarPorCorreo = (agente, boletaId, correo) =>
+  agente.post(`${base}/compromisos-pago/${boletaId}/comprobante/envio`).send({ correo });
+
+test('US-009: el apoderado reenvía el comprobante en PDF por correo', async () => {
+  correoSimulado.reiniciar();
+  const pagada = await prisma.compromisoPago.findFirst({
+    where: { estado: 'PAGADA', planPago: { matriculaId: matricula.id }, fracciones: { none: {} } },
+    include: { comprobantes: { where: { anuladoEn: null } } },
+  });
+  const numero = `B001-${String(pagada.comprobantes[0].id).padStart(8, '0')}`;
+  const respuesta = await enviarPorCorreo(apoderado, pagada.id, '  Familia@Correo.PE ').expect(200);
+  assert.equal(respuesta.body.data.comprobante, numero);
+  assert.equal(respuesta.body.data.enviadoA, 'familia@correo.pe');
+
+  assert.equal(correoSimulado.enviados.length, 1);
+  const [mensaje] = correoSimulado.enviados;
+  assert.equal(mensaje.to, 'familia@correo.pe');
+  assert.match(mensaje.subject, new RegExp(numero));
+  assert.equal(mensaje.attachments.length, 1);
+  assert.equal(mensaje.attachments[0].filename, `comprobante-${numero}.pdf`);
+  assert.equal(mensaje.attachments[0].contentType, 'application/pdf');
+  assert.equal(mensaje.attachments[0].content.subarray(0, 5).toString(), '%PDF-');
+});
+
+test('US-009: el administrador también puede reenviarlo', async () => {
+  correoSimulado.reiniciar();
+  const pagada = await prisma.compromisoPago.findFirst({
+    where: { estado: 'PAGADA', fracciones: { none: {} } },
+  });
+  await enviarPorCorreo(admin, pagada.id, 'tesoreria@colegio.edu.pe').expect(200);
+  assert.equal(correoSimulado.enviados.length, 1);
+});
+
+test('US-009: el reenvío respeta los mismos permisos y estados que la descarga', async () => {
+  correoSimulado.reiniciar();
+  const pagada = await prisma.compromisoPago.findFirst({
+    where: { estado: 'PAGADA', planPago: { matriculaId: matricula.id }, fracciones: { none: {} } },
+  });
+  const pendiente = await prisma.compromisoPago.findFirst({
+    where: { estado: 'PENDIENTE', planPago: { matriculaId: matricula.id } },
+  });
+  const ajeno = await enviarPorCorreo(otroApoderado, pagada.id, 'otro@correo.pe').expect(403);
+  assert.equal(ajeno.body.error.code, 'FORBIDDEN');
+  await request(app)
+    .post(`${base}/compromisos-pago/${pagada.id}/comprobante/envio`)
+    .send({ correo: 'x@correo.pe' })
+    .expect(401);
+  const sinPagar = await enviarPorCorreo(apoderado, pendiente.id, 'familia@correo.pe').expect(409);
+  assert.equal(sinPagar.body.error.code, 'BOLETA_NO_PAGADA');
+  await enviarPorCorreo(apoderado, 999999, 'familia@correo.pe').expect(404);
+  assert.equal(correoSimulado.enviados.length, 0, 'ninguno de esos intentos envía correo');
+});
+
+test('US-009: el reenvío valida el correo de destino', async () => {
+  const pagada = await prisma.compromisoPago.findFirst({
+    where: { estado: 'PAGADA', planPago: { matriculaId: matricula.id }, fracciones: { none: {} } },
+  });
+  await enviarPorCorreo(apoderado, pagada.id, 'no-es-un-correo').expect(400);
+  await enviarPorCorreo(apoderado, pagada.id, '').expect(400);
+  await apoderado
+    .post(`${base}/compromisos-pago/${pagada.id}/comprobante/envio`)
+    .send({ correo: 'familia@correo.pe', extra: true })
+    .expect(400);
+});
+
+test('US-009: si el servidor de correo falla responde 502 y se puede reintentar', async () => {
+  correoSimulado.reiniciar();
+  const pagada = await prisma.compromisoPago.findFirst({
+    where: { estado: 'PAGADA', planPago: { matriculaId: matricula.id }, fracciones: { none: {} } },
+  });
+  correoSimulado.fallarSiguiente = true;
+  const fallo = await enviarPorCorreo(apoderado, pagada.id, 'familia@correo.pe').expect(502);
+  assert.equal(fallo.body.error.code, 'CORREO_NO_ENVIADO');
+  assert.equal(correoSimulado.enviados.length, 0);
+  await enviarPorCorreo(apoderado, pagada.id, 'familia@correo.pe').expect(200);
+  assert.equal(correoSimulado.enviados.length, 1);
 });
 
 // ------------------------------------------------------------------- US-010
