@@ -34,6 +34,10 @@ services:
       PAGOS_PROVEEDOR: stripe
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?Falta STRIPE_SECRET_KEY en deploy/.env}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?Falta STRIPE_WEBHOOK_SECRET en deploy/.env}
+      # Correo del comprobante (US-009). Sin CORREO_PROVEEDOR sigue simulado.
+      CORREO_PROVEEDOR: ${CORREO_PROVEEDOR:-simulado}
+      CORREO_REMITENTE: ${CORREO_REMITENTE:-SAGE <no-responder@sage.local>}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
     volumes:
       # Archivos de evidencia pedagógica (US-019): sin volumen se perderían en
       # cada reconstrucción. No entran en el volcado de PostgreSQL.

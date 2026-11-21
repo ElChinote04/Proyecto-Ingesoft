@@ -131,6 +131,14 @@ Edita el archivo con `nano deploy/.env`:
 | `STRIPE_SECRET_KEY`     | `sk_test_...` del dashboard de Stripe                     |
 | `STRIPE_WEBHOOK_SECRET` | Provisional: otro secreto generado. El real, en el paso 8 |
 
+Opcional, para que el comprobante se envíe de verdad por correo (US-009):
+
+| Variable           | Valor                                                       |
+| ------------------ | ----------------------------------------------------------- |
+| `CORREO_PROVEEDOR` | `brevo`. Vacío deja el correo simulado: solo se registra    |
+| `CORREO_REMITENTE` | `"SAGE <correo@dominio>"`, validado en Brevo como remitente |
+| `BREVO_API_KEY`    | `xkeysib-...` de Brevo > SMTP y API > Claves API            |
+
 `deploy/.env` no se versiona. No lo subas al repositorio.
 
 ## 6. Levantar SAGE
