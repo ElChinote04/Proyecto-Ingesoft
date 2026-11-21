@@ -1,5 +1,15 @@
 # Registro de cambios
 
+## Envío del comprobante con Brevo (US-009) — 2026-11-20
+
+- Nuevo proveedor de correo `CORREO_PROVEEDOR=brevo`, que envía el comprobante con la API
+  transaccional de Brevo (`BREVO_API_KEY`). Usa HTTPS, así que no depende de que la red permita los
+  puertos SMTP. El remitente (`CORREO_REMITENTE`) debe estar validado en Brevo. Se mantienen
+  `simulado` y `smtp`.
+- La respuesta del reenvío incluye `simulado`. En modo simulado el diálogo ya no dice «Comprobante
+  enviado»: avisa que no salió ningún correo.
+- Nueva suite `tests/correo.test.js` (COR-01 a COR-03) con la API de Brevo simulada.
+
 ## Reenvío del comprobante por correo (US-009) — 2026-11-20
 
 - Completa el criterio «se puede descargar o reenviar por correo» de US-009.

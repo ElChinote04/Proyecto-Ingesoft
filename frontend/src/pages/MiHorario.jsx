@@ -4,20 +4,18 @@ import { Feedback, Loading, ResourceError } from '../components/Feedback';
 import { useAuth } from '../hooks/useAuth';
 import { useHorario } from '../hooks/useHorario';
 
-const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 export default function MiHorario() {
   const { user } = useAuth();
   const [perfil, setPerfil] = useState(user.roles.includes('DOCENTE') ? 'DOCENTE' : 'ALUMNO');
   const horario = useHorario(perfil);
   const data = horario.data?.perfil === perfil ? horario.data : null;
+  const bloquesVigentes =
+    data?.bloques.filter((bloque) => bloque.diaSemana >= 1 && bloque.diaSemana <= 5) ?? [];
   const intervalos = [
-    ...new Set(data?.bloques.map((bloque) => `${bloque.horaInicio}–${bloque.horaFin}`) ?? []),
+    ...new Set(bloquesVigentes.map((bloque) => `${bloque.horaInicio}–${bloque.horaFin}`)),
   ].sort();
-  const dias = DIAS.slice(
-    0,
-    Math.max(5, ...(data?.bloques.map((bloque) => bloque.diaSemana) ?? [])),
-  );
-  const cursos = [...new Set(data?.bloques.map((bloque) => bloque.curso) ?? [])];
+  const cursos = [...new Set(bloquesVigentes.map((bloque) => bloque.curso))];
   return (
     <AppLayout section="Mi horario" step="Mi horario" anioAcademico={data?.anioAcademico?.codigo}>
       <div className="page-heading">
@@ -63,7 +61,7 @@ export default function MiHorario() {
               />
             </label>
           </div>
-          {!data.bloques.length ? (
+          {!bloquesVigentes.length ? (
             <Feedback intent="info">
               {data.anioAcademico
                 ? 'No tienes clases asignadas en el año académico activo.'
@@ -78,7 +76,7 @@ export default function MiHorario() {
                 <thead>
                   <tr>
                     <th scope="col">Hora</th>
-                    {dias.map((dia) => (
+                    {DIAS.map((dia) => (
                       <th scope="col" key={dia}>
                         {dia}
                       </th>
@@ -89,8 +87,8 @@ export default function MiHorario() {
                   {intervalos.map((intervalo) => (
                     <tr key={intervalo}>
                       <th scope="row">{intervalo}</th>
-                      {dias.map((dia, indice) => {
-                        const bloques = data.bloques.filter(
+                      {DIAS.map((dia, indice) => {
+                        const bloques = bloquesVigentes.filter(
                           (bloque) =>
                             `${bloque.horaInicio}–${bloque.horaFin}` === intervalo &&
                             bloque.diaSemana === indice + 1,

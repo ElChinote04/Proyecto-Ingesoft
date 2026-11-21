@@ -119,7 +119,7 @@ export const blockSchema = z
     seccionId: id,
     docenteId: id,
     aulaId: id,
-    diaSemana: z.number().int().min(1).max(7),
+    diaSemana: z.number().int().min(1).max(5, 'Los horarios solo admiten lunes a viernes.'),
     horaInicio: time,
     horaFin: time,
   })
@@ -128,6 +128,7 @@ export const blockSchema = z
     message: 'La hora final debe ser posterior a la inicial.',
     path: ['horaFin'],
   });
+export const validarBloqueSchema = blockSchema.safeExtend({ bloqueId: id.optional() });
 export const classSchema = z
   .object({
     bloqueId: id,
@@ -137,6 +138,10 @@ export const classSchema = z
       .refine((v) => {
         const d = new Date(v + 'T00:00:00Z');
         return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
-      }, 'La fecha no es válida.'),
+      }, 'La fecha no es válida.')
+      .refine((v) => {
+        const dia = new Date(v + 'T00:00:00Z').getUTCDay();
+        return dia >= 1 && dia <= 5;
+      }, 'Las sesiones de clase solo se programan de lunes a viernes.'),
   })
   .strict();

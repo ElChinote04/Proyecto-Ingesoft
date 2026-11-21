@@ -33,6 +33,10 @@ export const enroll = async (req, res) =>
     data: await service.enroll(req.validated.body, req.user, req.requestId),
   });
 export const schedule = async (_req, res) => res.json({ data: await service.schedule() });
+export const validarBloque = async (req, res) => {
+  await service.validarBloque(req.validated.body);
+  res.status(204).end();
+};
 export const createBlock = async (req, res) =>
   res.status(201).json({
     data: await service.createBlock(req.validated.body, req.user, req.requestId),

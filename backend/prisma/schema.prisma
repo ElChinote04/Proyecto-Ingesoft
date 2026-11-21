@@ -362,7 +362,7 @@ model CursoSeccionDocenteAula {
   asignacion   CursoSeccionDocente @relation(fields: [asignacionId], references: [id])
   aulaId       Int
   aula         Aula                @relation(fields: [aulaId], references: [id])
-  diaSemana    Int
+  diaSemana    Int // 1=lunes a 5=viernes para bloques activos; restricción CHECK en SQL.
   horaInicio   String
   horaFin      String
   sesiones     SesionClase[]

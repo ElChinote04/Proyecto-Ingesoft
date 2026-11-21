@@ -84,6 +84,7 @@ export async function catalogs() {
       prisma.aula.findMany({ orderBy: { codigo: 'asc' } }),
       prisma.docente.findMany({
         where: {
+          activo: true,
           persona: {
             activo: true,
             usuario: { is: { activo: true, roles: { some: { rol: { nombre: 'DOCENTE' } } } } },
@@ -146,13 +147,13 @@ export async function createCatalog(type, data, db) {
   }
   return db[models[type]].create({ data });
 }
-export const findSection = (id, db) =>
+export const findSection = (id, db = prisma) =>
   db.seccion.findUnique({ where: { id }, include: sectionInclude });
 export const findGrade = (id, db) => db.grado.findUnique({ where: { id } });
 export const findYear = (id, db) => db.anioAcademico.findUnique({ where: { id } });
-export const findCourse = (id, db) => db.curso.findUnique({ where: { id } });
-export const findRoom = (id, db) => db.aula.findUnique({ where: { id } });
-export const findTeacher = (id, db) =>
+export const findCourse = (id, db = prisma) => db.curso.findUnique({ where: { id } });
+export const findRoom = (id, db = prisma) => db.aula.findUnique({ where: { id } });
+export const findTeacher = (id, db = prisma) =>
   db.docente.findUnique({
     where: { id },
     include: {
@@ -171,9 +172,9 @@ export const findEnrollment = (estudianteId, anioAcademicoId, db) =>
     where: { estudianteId_anioAcademicoId: { estudianteId, anioAcademicoId } },
   });
 export const createEnrollment = (data, db) => db.matricula.create({ data });
-export const findBlock = (id, db) =>
+export const findBlock = (id, db = prisma) =>
   db.cursoSeccionDocenteAula.findUnique({ where: { id }, include: blockInclude });
-export const conflictingBlock = (data, yearId, db, excluirId) =>
+export const conflictingBlock = (data, yearId, db = prisma, excluirId) =>
   db.cursoSeccionDocenteAula.findFirst({
     where: {
       activo: true,
@@ -208,6 +209,7 @@ export const createClass = (data, db) => db.sesionClase.create({ data });
 export async function schedule() {
   const [bloques, sesiones] = await Promise.all([
     prisma.cursoSeccionDocenteAula.findMany({
+      where: { diaSemana: { gte: 1, lte: 5 } },
       include: blockInclude,
       orderBy: [{ diaSemana: 'asc' }, { horaInicio: 'asc' }],
     }),
@@ -235,7 +237,8 @@ export const linkGuardian = (data, db) =>
     create: data,
     update: { parentesco: data.parentesco, activo: data.activo },
   });
-export const hasClassSessions = (bloqueId, db) => db.sesionClase.count({ where: { bloqueId } });
+export const hasClassSessions = (bloqueId, db = prisma) =>
+  db.sesionClase.count({ where: { bloqueId } });
 export async function updateBlock(id, data, db) {
   const { cursoId, seccionId, docenteId, ...bloque } = data;
   const asignacion = await db.cursoSeccionDocente.upsert({

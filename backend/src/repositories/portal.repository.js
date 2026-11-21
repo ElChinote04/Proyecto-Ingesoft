@@ -17,7 +17,7 @@ export const obtenerEstudiantes = (where) =>
   });
 export const obtenerBloques = (asignacion) =>
   prisma.cursoSeccionDocenteAula.findMany({
-    where: { activo: true, asignacion },
+    where: { activo: true, diaSemana: { gte: 1, lte: 5 }, asignacion },
     include: blockInclude,
     orderBy: [{ diaSemana: 'asc' }, { horaInicio: 'asc' }, { id: 'asc' }],
   });

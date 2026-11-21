@@ -37,6 +37,7 @@ export async function api(path, { body, headers, ...options } = {}) {
     headers: { ...(body && !esFormulario && { 'Content-Type': 'application/json' }), ...headers },
     ...(body && { body: esFormulario ? body : JSON.stringify(body) }),
   });
+  if (response.status === 204) return null;
   const payload = await leerJson(response);
   if (!response.ok) rechazar(response, path, payload);
   return payload.data ?? payload;

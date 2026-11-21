@@ -14,7 +14,7 @@ import { env } from '../config/env.js';
 import { registrarTransaccionCritica } from './auditoria.service.js';
 import { generarComprobantePdf, numeroComprobante } from '../domain/comprobante.js';
 import { construirFracciones } from '../domain/fraccionamiento.js';
-import { enviarCorreo } from '../integrations/correo.js';
+import { enviarCorreo, correoSimulado } from '../integrations/correo.js';
 
 const fail = (status, code, message) => {
   throw new AppError(status, code, message);
@@ -626,7 +626,13 @@ export async function enviarComprobantePorCorreo(compromisoPagoId, { correo }, a
     comprobante: numero,
     para: correo,
   });
-  return { comprobante: numero, enviadoA: correo, enviadoEn: new Date().toISOString() };
+  return {
+    comprobante: numero,
+    enviadoA: correo,
+    enviadoEn: new Date().toISOString(),
+    // Con el proveedor simulado no sale ningún correo: la pantalla lo advierte.
+    simulado: correoSimulado,
+  };
 }
 
 export { RESULTADO };

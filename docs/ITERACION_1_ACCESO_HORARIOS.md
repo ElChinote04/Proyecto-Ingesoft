@@ -77,7 +77,7 @@ eventos. El administrador consulta los últimos 100; no hay edición pública.
   usuario cambiando parámetros. Sin año, matrícula o asignaciones hay un estado vacío.
 - Consulta al abrir, recuperar foco y cada 10 segundos mientras la pestaña está
   visible. La siguiente consulta refleja altas, cambios y retiros. No utiliza WebSocket.
-- Por defecto muestra lunes a viernes; añade sábado/domingo si existen clases.
+- Muestra únicamente lunes a viernes. Se rechazan asignaciones y sesiones de fin de semana.
   Los intervalos provienen de los bloques reales, sin inventar horas de clase.
 - Administración activa un único año. La primera anualidad creada queda activa;
   las posteriores requieren activación explícita. Años anteriores quedan para consulta.

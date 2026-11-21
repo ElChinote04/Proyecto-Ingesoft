@@ -10,6 +10,7 @@
     "setup": "node scripts/setup.js",
     "dev": "node scripts/dev.js",
     "test": "npm --prefix backend test",
+    "test:matriz": "node --test scripts/tests/horarios-matriz.test.js",
     "build": "npm --prefix frontend run build",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose stop",

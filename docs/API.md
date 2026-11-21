@@ -327,6 +327,21 @@ POST `/admin/matriculas`: `{ estudianteId, seccionId }`. Devuelve matrícula act
 
 ### Horarios, asignaciones y sesiones
 
+POST `/admin/bloques/validar`: recibe los campos de una asignación y, al editar,
+`bloqueId` opcional. Solo administrador. Responde 204 sin cuerpo cuando los datos
+son válidos y no hay cruces; 409 SCHEDULE_CONFLICT cuando existe un solapamiento.
+No crea filas ni eventos de auditoría de cambios. Comprueba año activo, referencias,
+docente y restricciones de edición, excluyendo el propio bloque. El guardado repite
+la validación en su transacción; la consulta previa no reserva el intervalo.
+
+Alta, edición y validación previa comparten el mensaje de cruce, que identifica
+recurso, curso, bloque, sección, docente, aula, año, día e intervalo incompatibles.
+La interfaz consulta tras 300 ms sin cambios con todos los campos completos y
+horas válidas; bloquea Guardar mientras comprueba o encuentra un conflicto.
+En la matriz administrativa, los bloques abarcan todas las filas de su duración;
+al seleccionarlos se abre la edición y el retiro con confirmación. Los bloques
+históricos permanecen en modo de solo lectura.
+
 GET `/admin/horarios` devuelve `{ bloques, sesiones }`. Los bloques incluyen aula, asignacion.curso, asignacion.docente.persona y asignacion.seccion con grado/año. Las sesiones incluyen fecha ISO, horas, bloqueId y activo.
 
 POST `/admin/bloques`:
@@ -343,7 +358,9 @@ POST `/admin/bloques`:
 }
 ```
 
-El docente debe tener perfil, persona/cuenta activas y rol DOCENTE. Día 1=lunes … 7=domingo. Horas HH:mm de 24 horas, inicio anterior al fin. Crea/reutiliza CursoSeccionDocente y crea el bloque; devuelve bloque con relaciones. No genera sesiones automáticamente.
+El docente debe tener perfil, persona/cuenta activas y rol DOCENTE. Día 1=lunes … 5=viernes. Sábado y domingo se rechazan con 400, tanto en alta y edición como en la consulta previa. Las sesiones también requieren una fecha de lunes a viernes. Horas HH:mm de 24 horas, inicio anterior al fin. Crea/reutiliza CursoSeccionDocente y crea el bloque; devuelve bloque con relaciones. No genera sesiones automáticamente.
+
+La migración `20261120120000_horarios_lunes_viernes` retira los bloques de fin de semana existentes (`activo=false`) conservando sus sesiones y asistencias. Una restricción de PostgreSQL impide crear o reactivar bloques fuera de lunes a viernes. Las matrices administrativas y personales muestran únicamente esos cinco días.
 
 Un solapamiento de docente, aula o sección dentro del mismo año académico devuelve 409 SCHEDULE_CONFLICT con el recurso y horario incompatibles. El intervalo se considera [inicio, fin), por lo que dos bloques contiguos son válidos. La validación y la escritura se serializan con un advisory lock transaccional en PostgreSQL; un rechazo no deja asignaciones parciales.
 
@@ -649,12 +666,15 @@ cuotas (cada cuota tiene su propio comprobante).
 Reenvía ese mismo PDF como adjunto a un correo. Cuerpo `{ "correo": "familia@correo.pe" }`; se
 guarda en minúsculas y sin espacios, y un correo inválido o un campo extra responde 400. Mismos
 permisos y errores que la descarga (403, 404, 409 `BOLETA_NO_PAGADA` / `BOLETA_FRACCIONADA`).
-Responde 200 con `{ comprobante, enviadoA, enviadoEn }`. Si el servidor de correo falla responde
+Responde 200 con `{ comprobante, enviadoA, enviadoEn, simulado }`; `simulado: true` indica que el servidor está en modo de prueba y no salió ningún correo. Si el servidor de correo falla responde
 502 `CORREO_NO_ENVIADO` sin cambiar nada, y se puede reintentar. Límite de 10 envíos cada 15
 minutos por usuario (429 `DEMASIADOS_CORREOS`). El destino lo escribe quien lo pide porque SAGE no
 guarda correos de contacto. El envío se configura con `CORREO_PROVEEDOR`: `simulado` (por
-defecto; no sale a la red y solo deja `CORREO_SIMULADO` en el log) o `smtp` con `SMTP_HOST`,
-`SMTP_PORT`, `SMTP_SECURE`, `SMTP_USUARIO`, `SMTP_CLAVE` y `CORREO_REMITENTE`.
+defecto; no sale a la red y solo deja `CORREO_SIMULADO` en el log), `brevo` (API transaccional de
+Brevo, con `BREVO_API_KEY` y un `CORREO_REMITENTE` validado en Brevo) o `smtp` con `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_SECURE`, `SMTP_USUARIO`, `SMTP_CLAVE` y `CORREO_REMITENTE`. Si Brevo rechaza el
+envío, el motivo (por ejemplo, un remitente sin validar) queda en el log como
+`CORREO_COMPROBANTE_FALLIDO`.
 
 ### POST /compromisos-pago/:id/fracciones (US-010)
 

@@ -23,6 +23,7 @@ function DialogoEnvio({ boletaId, numero, onClose }) {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
   const [enviadoA, setEnviadoA] = useState('');
+  const [simulado, setSimulado] = useState(false);
   useEffect(() => {
     dialogo.current.showModal();
   }, []);
@@ -41,6 +42,7 @@ function DialogoEnvio({ boletaId, numero, onClose }) {
       } catch {
         // Sin almacenamiento disponible: solo no se recuerda el correo.
       }
+      setSimulado(Boolean(data.simulado));
       setEnviadoA(data.enviadoA);
     } catch (fallo) {
       setError(fallo.details?.[0]?.mensaje ?? fallo.message);
@@ -62,10 +64,18 @@ function DialogoEnvio({ boletaId, numero, onClose }) {
       <h2 id={`enviar-comprobante-${boletaId}`}>Enviar comprobante por correo</h2>
       {enviadoA ? (
         <>
-          <Feedback intent="success" title="Comprobante enviado">
-            Enviamos el comprobante {numero} en PDF a {enviadoA}. Si no aparece en unos minutos,
-            revisa la carpeta de correo no deseado.
-          </Feedback>
+          {simulado ? (
+            <Feedback intent="warning" title="Envío simulado: no salió ningún correo">
+              El servidor está en modo de prueba (CORREO_PROVEEDOR=simulado), así que el comprobante{' '}
+              {numero} no llegará a {enviadoA}. Para enviarlo de verdad, configura Brevo en
+              backend/.env.
+            </Feedback>
+          ) : (
+            <Feedback intent="success" title="Comprobante enviado">
+              Enviamos el comprobante {numero} en PDF a {enviadoA}. Si no aparece en unos minutos,
+              revisa la carpeta de correo no deseado.
+            </Feedback>
+          )}
           <div className="actions">
             <button type="button" onClick={onClose}>
               Listo
