@@ -1,9 +1,7 @@
-
 import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Feedback } from '../components/Feedback';
 import { rutaActual } from '../utils/format';
-
 export default function AppLayout({
   children,
   step = 'Seleccionar sesión',
@@ -12,17 +10,13 @@ export default function AppLayout({
   onLeave = (action) => action(),
 }) {
   const { user, logout } = useAuth();
-
   useEffect(() => {
     document.title = `SAGE | ${section} · ${step}`;
   }, [section, step]);
-
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-
   async function close() {
     setBusy(true);
-
     try {
       await logout();
     } catch (e) {
@@ -31,17 +25,14 @@ export default function AppLayout({
       setBusy(false);
     }
   }
-
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-top">
           <div className="brand">SAGE</div>
-
           <p className="caption">
             {user.roles.join(' · ')}
           </p>
-
           <nav aria-label="Menú principal">
             {!user.requiereCambioContrasena &&
               user.roles.includes('ADMINISTRADOR') &&
@@ -84,11 +75,9 @@ export default function AppLayout({
                     }
                     alt=""
                   />
-
                   {label}
                 </button>
               ))}
-
             {!user.requiereCambioContrasena &&
               user.roles.includes('DOCENTE') && (
                 <button
@@ -111,11 +100,9 @@ export default function AppLayout({
                     }
                     alt=""
                   />
-
                   Control de asistencia
                 </button>
               )}
-
             {!user.requiereCambioContrasena &&
               user.roles.includes('DOCENTE') && (
                 <button
@@ -138,11 +125,9 @@ export default function AppLayout({
                     }
                     alt=""
                   />
-
                   Reporte de asistencia estudiantil
                 </button>
               )}
-
             {!user.requiereCambioContrasena &&
               user.roles.includes('DOCENTE') && (
                 <button
@@ -165,11 +150,9 @@ export default function AppLayout({
                     }
                     alt=""
                   />
-
                   Gestión Académica
                 </button>
               )}
-
             {!user.requiereCambioContrasena &&
               user.roles.some((rol) => ['DOCENTE'].includes(rol)) && (
                 <button
@@ -187,7 +170,6 @@ export default function AppLayout({
                   Plan de trabajo
                 </button>
               )}
-
             {!user.requiereCambioContrasena &&
               user.roles.some((rol) =>
                 ['ALUMNO', 'APODERADO'].includes(rol)
@@ -212,11 +194,9 @@ export default function AppLayout({
                     }
                     alt=""
                   />
-
                   Mis evaluaciones
                 </button>
               )}
-
             {!user.requiereCambioContrasena &&
               user.roles.some((rol) => ['ALUMNO', 'APODERADO'].includes(rol)) && (
                 <button
@@ -234,7 +214,6 @@ export default function AppLayout({
                   Actividades de clase
                 </button>
               )}
-
             {!user.requiereCambioContrasena &&
               user.roles.some((rol) =>
                 ['DOCENTE', 'ALUMNO'].includes(rol)
@@ -259,11 +238,9 @@ export default function AppLayout({
                     }
                     alt=""
                   />
-
                   Mi horario
                 </button>
               )}
-
             {!user.requiereCambioContrasena &&
               user.roles.some((rol) =>
                 ['ALUMNO', 'APODERADO'].includes(rol)
@@ -288,11 +265,35 @@ export default function AppLayout({
                     }
                     alt=""
                   />
-
                   Inicio
                 </button>
               )}
-
+            {/* Acceso independiente a las asistencias para el apoderado. */}
+            {!user.requiereCambioContrasena &&
+              user.roles.includes('APODERADO') && (
+                <button
+                  className={
+                    section === 'Asistencias del apoderado'
+                      ? 'nav-active'
+                      : 'nav-item'
+                  }
+                  onClick={() =>
+                    onLeave(() => {
+                      window.location.hash = '/portal/asistencias';
+                    })
+                  }
+                >
+                  <img
+                    src={
+                      section === 'Asistencias del apoderado'
+                        ? '/figma/nav-active.svg'
+                        : '/figma/nav.svg'
+                    }
+                    alt=""
+                  />
+                  Asistencias
+                </button>
+              )}
             {!user.requiereCambioContrasena &&
               user.roles.some((rol) =>
                 ['APODERADO', 'ADMINISTRADOR'].includes(rol)
@@ -317,11 +318,9 @@ export default function AppLayout({
                     }
                     alt=""
                   />
-
                   Pagos y boletas
                 </button>
               )}
-
             {!user.requiereCambioContrasena &&
               user.permisos.includes('errores.consultar') && (
                 <button
@@ -344,11 +343,9 @@ export default function AppLayout({
                     }
                     alt=""
                   />
-
                   Log de errores
                 </button>
               )}
-
             <button
               className={
                 section === 'Seguridad'
@@ -369,38 +366,32 @@ export default function AppLayout({
                 }
                 alt=""
               />
-
               Cambiar contraseña
             </button>
           </nav>
         </div>
-
         <div className="sidebar-footer">
           {anioAcademico
             ? `Año académico ${anioAcademico}`
             : 'SAGE'}
-
           <span className="caption">
             {user.roles.join(' · ')}
           </span>
         </div>
       </aside>
-
       <div className="workspace">
         <header className="topbar">
           <strong>
             {section === 'Asistencia'
               ? 'Control de asistencia'
-              : section === 'Portal académico'
+              : section === 'Portal académico' || section === 'Asistencias del apoderado'
                 ? step
                 : section}
           </strong>
-
           <div>
             <span className="muted">
               {user.nombre}
             </span>
-
             <button
               className="text-button"
               disabled={busy}
@@ -410,16 +401,13 @@ export default function AppLayout({
             </button>
           </div>
         </header>
-
         <main>
           <div className="breadcrumb">
             Inicio
             <span aria-hidden="true">/</span>
             {step}
           </div>
-
           {error && <Feedback>{error}</Feedback>}
-
           {children}
         </main>
       </div>

@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './hooks/useAuth';
@@ -84,6 +83,14 @@ function Screens() {
     return <Portal key={perfiles} />;
   }
 
+  // Nueva pestaña de asistencias, exclusiva para apoderados.
+  if (
+    route.split('?')[0] === '/portal/asistencias' &&
+    user.roles.includes('APODERADO')
+  ) {
+    return <Portal key={`${perfiles}:asistencias`} vista="asistencias" />;
+  }
+
   const retorno = route.match(/^\/pagos\/(\d+)\/(resultado|cancelado)/);
 
   if (retorno) {
@@ -105,7 +112,7 @@ function Screens() {
   ) {
     return <Pagos key={`${perfiles}:${route}`} vista={vistaPagos[1] ?? 'boletas'} />;
   }
-  
+
   if (
     (
       route === '/gestion' ||
