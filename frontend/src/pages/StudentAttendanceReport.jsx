@@ -40,6 +40,455 @@ function IconoExportacion({ formato }) {
   );
 }
 
+
+// Gráficos de asistencias: utilidades locales para evitar crear archivos adicionales.
+const coloresGraficos = {
+  presentes: '#4ade80',
+  tardanzas: '#fde047',
+  ausencias: '#f87171',
+};
+
+const coloresTextoGraficos = {
+  presentes: '#14532d',
+  tardanzas: '#713f12',
+  ausencias: '#7f1d1d',
+};
+
+const seriesGraficos = [
+  { clave: 'presentes', nombre: 'Presentes' },
+  { clave: 'tardanzas', nombre: 'Tardanzas' },
+  { clave: 'ausencias', nombre: 'Ausencias' },
+];
+
+function agruparAsistenciasPorFecha(registros, campoEstado) {
+  const porFecha = new Map();
+
+  for (const registro of registros) {
+    const fecha = String(registro.fecha ?? '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) continue;
+
+    if (!porFecha.has(fecha)) {
+      porFecha.set(fecha, { fecha, presentes: 0, tardanzas: 0, ausencias: 0 });
+    }
+
+    const grupo = porFecha.get(fecha);
+    if (registro[campoEstado] === 'PRESENTE') grupo.presentes += 1;
+    if (registro[campoEstado] === 'TARDANZA') grupo.tardanzas += 1;
+    if (registro[campoEstado] === 'AUSENTE') grupo.ausencias += 1;
+  }
+
+  return [...porFecha.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
+function etiquetaGraficoFecha(fecha) {
+  const [, mes, dia] = String(fecha).split('-');
+  return mes && dia ? `${dia}/${mes}` : fecha;
+}
+
+function GraficosAsistencia({ totales, porFecha }) {
+  const maxBarras = Math.max(1, totales.presentes, totales.tardanzas, totales.ausencias);
+  const pasosBarras = Math.min(4, maxBarras);
+  // Gráfico de barras apiladas: útil incluso si el filtro devuelve un único día.
+  const totalDia = (dia) => seriesGraficos.reduce((total, serie) => total + dia[serie.clave], 0);
+  const maxTotalDia = Math.max(1, ...porFecha.map(totalDia));
+  const anchoBarraFecha = 520;
+  const altoBarraFecha = porFecha.length === 1 ? 34 : 20;
+  const altoFilaFecha = porFecha.length === 1 ? 52 : 32;
+  const inicioBarrasFecha = porFecha.length === 1 ? 78 : 48;
+  const altoGraficoFecha = Math.max(200, inicioBarrasFecha + porFecha.length * altoFilaFecha + 22);
+  const sinDatos = totales.presentes + totales.tardanzas + totales.ausencias === 0;
+
+  const tarjetaGrafico = {
+    border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px',
+    minWidth: 0, background: '#fff',
+  };
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))',
+      gap: '16px', marginTop: '16px',
+    }}>
+      <div style={tarjetaGrafico}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: '#111827' }}>
+          Distribución por estado
+        </h4>
+        {sinDatos ? (
+          <p style={{ color: '#6b7280' }}>No hay registros para graficar.</p>
+        ) : (
+          <svg role="img" aria-label="Gráfico de barras: presentes, tardanzas y ausencias"
+            viewBox="0 0 500 230" style={{ width: '100%', height: 'auto' }}>
+            {Array.from({ length: pasosBarras + 1 }, (_, paso) => (
+              <g key={paso}>
+                <line x1="34" y1={180 - paso * 140 / pasosBarras} x2="482" y2={180 - paso * 140 / pasosBarras}
+                  stroke="#e5e7eb" strokeDasharray="3 4" />
+                <text x="27" y={184 - paso * 140 / pasosBarras} textAnchor="end" fontSize="11" fill="#6b7280">
+                  {Math.round((maxBarras / pasosBarras) * paso)}
+                </text>
+              </g>
+            ))}
+            {seriesGraficos.map((serie, indice) => {
+              const valor = totales[serie.clave];
+              const alto = (valor / maxBarras) * 140;
+              const x = 88 + indice * 148;
+              return (
+                <g key={serie.clave}>
+                  <rect x={x} y={180 - alto} width="65" height={alto} rx="4"
+                    fill={coloresGraficos[serie.clave]} />
+                  <text x={x + 32.5} y={Math.max(20, 174 - alto)} textAnchor="middle"
+                    fill="#111827" fontWeight="600" fontSize="13">{valor}</text>
+                  <text x={x + 32.5} y="201" textAnchor="middle" fill="#374151"
+                    fontSize="12">{serie.nombre}</text>
+                </g>
+              );
+            })}
+          </svg>
+        )}
+      </div>
+      <div style={tarjetaGrafico}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: '#111827' }}>
+          Asistencias por fecha
+        </h4>
+        {porFecha.length === 0 ? (
+          <p style={{ color: '#6b7280' }}>No hay registros por fecha para graficar.</p>
+        ) : (
+          <>
+            <p style={{ color: '#6b7280', fontSize: '12px', margin: '0 0 8px' }}>
+              Una barra por día, dividida en presentes, tardanzas y ausencias.
+            </p>
+            <div style={{ overflow: 'auto', maxHeight: '345px' }}>
+              <svg role="img" aria-label="Barras apiladas de asistencia por fecha"
+                viewBox={`0 0 720 ${altoGraficoFecha}`}
+                style={{ display: 'block', width: '100%', minWidth: '560px', height: 'auto' }}>
+                <text x="104" y="24" fill="#6b7280" fontSize="11">0</text>
+                <text x="624" y="24" textAnchor="end" fill="#6b7280" fontSize="11">
+                  {maxTotalDia} registros
+                </text>
+                <line x1="104" x2="624" y1="31" y2="31" stroke="#e5e7eb" />
+                {porFecha.map((dia, indice) => {
+                  const y = inicioBarrasFecha + indice * altoFilaFecha;
+                  const total = totalDia(dia);
+                  return (
+                    <g key={dia.fecha}>
+                      <text x="91" y={y + altoBarraFecha / 2 + 4} textAnchor="end"
+                        fontSize="12" fill="#374151">{etiquetaGraficoFecha(dia.fecha)}</text>
+                      <rect x="104" y={y} width={anchoBarraFecha} height={altoBarraFecha}
+                        rx="4" fill="#f3f4f6" />
+                      {seriesGraficos.map((serie, posicion) => {
+                        const valor = dia[serie.clave];
+                        const previos = seriesGraficos.slice(0, posicion)
+                          .reduce((acumulado, anterior) => acumulado + dia[anterior.clave], 0);
+                        const x = 104 + previos / maxTotalDia * anchoBarraFecha;
+                        const ancho = valor / maxTotalDia * anchoBarraFecha;
+                        return valor > 0 ? (
+                          <g key={serie.clave}>
+                            <rect x={x} y={y} width={ancho} height={altoBarraFecha}
+                              fill={coloresGraficos[serie.clave]}>
+                              <title>{`${etiquetaGraficoFecha(dia.fecha)} — ${serie.nombre}: ${valor}`}</title>
+                            </rect>
+                            {ancho >= 24 && (
+                              <text x={x + ancho / 2} y={y + altoBarraFecha / 2 + 4}
+                                fill={coloresTextoGraficos[serie.clave]} textAnchor="middle" fontSize="12" fontWeight="700"
+                                pointerEvents="none">{valor}</text>
+                            )}
+                          </g>
+                        ) : null;
+                      })}
+                      <text x="643" y={y + altoBarraFecha / 2 + 4}
+                        fontSize="12" fontWeight="600" fill="#111827">{total}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '12px', marginTop: '8px' }}>
+              {seriesGraficos.map((serie) => (
+                <span key={serie.clave} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: coloresGraficos[serie.clave] }} />
+                  {serie.nombre}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// Gráficos PNG para Excel. Se generan en el navegador sin dependencias adicionales.
+// ExcelJS permite incrustar imágenes, pero no crear gráficos nativos editables.
+function crearImagenGraficoExcel(tipo, datos) {
+  const ancho = 920;
+  const esDistribucion = tipo === 'distribucion';
+  const alto = esDistribucion ? 345 : Math.max(195, 111 + datos.length * 38);
+  const escala = 2; // Exportación nítida en Excel y al imprimir.
+  const canvas = document.createElement('canvas');
+  canvas.width = ancho * escala;
+  canvas.height = alto * escala;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('El navegador no permite generar las imágenes de los gráficos.');
+  ctx.scale(escala, escala);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, ancho, alto);
+
+  const escribir = (valor, x, y, opciones = {}) => {
+    const { color = '#111827', tamano = 15, negrita = false, alineacion = 'left' } = opciones;
+    ctx.fillStyle = color;
+    ctx.font = `${negrita ? '600' : '400'} ${tamano}px Arial, sans-serif`;
+    ctx.textAlign = alineacion;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(String(valor), x, y);
+  };
+  const rectangulo = (x, y, w, h, color) => {
+    if (w <= 0 || h <= 0) return;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+  };
+
+  rectangulo(0, 0, ancho, 5, '#551c9d');
+  escribir(esDistribucion ? 'Distribución por estado' : 'Asistencias por fecha', 28, 42,
+    { tamano: 22, negrita: true });
+  escribir('SAGE | Módulo de asistencias', ancho - 28, 42,
+    { tamano: 12, color: '#64748b', alineacion: 'right' });
+
+  if (esDistribucion) {
+    const maximo = Math.max(1, ...seriesGraficos.map((serie) => Number(datos[serie.clave] || 0)));
+    const base = 265;
+    const alturaMaxima = 170;
+    for (let paso = 0; paso <= 4; paso += 1) {
+      const y = base - (paso / 4) * alturaMaxima;
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.moveTo(75, y);
+      ctx.lineTo(870, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      escribir(Math.round((maximo * paso) / 4), 58, y + 5,
+        { tamano: 12, color: '#64748b', alineacion: 'right' });
+    }
+    seriesGraficos.forEach((serie, indice) => {
+      const valor = Number(datos[serie.clave] || 0);
+      const altura = (valor / maximo) * alturaMaxima;
+      const x = 188 + indice * 258;
+      rectangulo(x, base - altura, 116, altura, coloresGraficos[serie.clave]);
+      escribir(valor, x + 58, Math.max(82, base - altura - 12),
+        { tamano: 18, negrita: true, alineacion: 'center' });
+      escribir(serie.nombre, x + 58, 298,
+        { tamano: 16, alineacion: 'center', color: '#334155' });
+    });
+  } else {
+    const maximo = Math.max(1, ...datos.map((dia) =>
+      seriesGraficos.reduce((suma, serie) => suma + Number(dia[serie.clave] || 0), 0)));
+    const xInicio = 130;
+    const anchoBarras = 640;
+    escribir('0', xInicio, 72, { tamano: 12, color: '#64748b' });
+    escribir(`${maximo} registros`, xInicio + anchoBarras, 72,
+      { tamano: 12, color: '#64748b', alineacion: 'right' });
+    datos.forEach((dia, indice) => {
+      const y = 88 + indice * 38;
+      const total = seriesGraficos.reduce((suma, serie) =>
+        suma + Number(dia[serie.clave] || 0), 0);
+      escribir(etiquetaGraficoFecha(dia.fecha), 108, y + 19,
+        { tamano: 14, color: '#334155', alineacion: 'right' });
+      rectangulo(xInicio, y, anchoBarras, 26, '#f1f5f9');
+      let acumulado = 0;
+      seriesGraficos.forEach((serie) => {
+        const valor = Number(dia[serie.clave] || 0);
+        const x = xInicio + (acumulado / maximo) * anchoBarras;
+        const w = (valor / maximo) * anchoBarras;
+        rectangulo(x, y, w, 26, coloresGraficos[serie.clave]);
+        if (valor > 0 && w >= 25) escribir(valor, x + w / 2, y + 19,
+          { tamano: 13, negrita: true, color: coloresTextoGraficos[serie.clave], alineacion: 'center' });
+        acumulado += valor;
+      });
+      escribir(total, xInicio + anchoBarras + 18, y + 19,
+        { tamano: 14, negrita: true, color: '#334155' });
+    });
+    const leyendaY = alto - 20;
+    seriesGraficos.forEach((serie, indice) => {
+      const x = 180 + indice * 205;
+      rectangulo(x, leyendaY - 12, 13, 13, coloresGraficos[serie.clave]);
+      escribir(serie.nombre, x + 20, leyendaY, { tamano: 13, color: '#334155' });
+    });
+    if (!datos.length) escribir('Sin asistencias por fecha', 28, 105,
+      { tamano: 15, color: '#64748b' });
+  }
+
+  return { base64: canvas.toDataURL('image/png'), ancho, alto };
+}
+
+function agregarGraficosExcel(libro, totales, porFecha) {
+  const hoja = libro.addWorksheet('Gráficos');
+  hoja.columns = Array.from({ length: 13 }, () => ({ width: 12 }));
+  hoja.mergeCells('A1:M2');
+  const titulo = hoja.getCell('A1');
+  titulo.value = 'SAGE - GRÁFICOS DE ASISTENCIA';
+  titulo.font = { size: 17, bold: true, color: { argb: 'FFFFFFFF' } };
+  titulo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF551C9D' } };
+  titulo.alignment = { vertical: 'middle', horizontal: 'center' };
+  hoja.getCell('A3').value = 'Distribución general y asistencias por fecha del periodo consultado';
+  hoja.getCell('A3').font = { italic: true, color: { argb: 'FF64748B' } };
+
+  let fila = 5;
+  const insertarImagen = (tipo, datos) => {
+    const imagen = crearImagenGraficoExcel(tipo, datos);
+    const id = libro.addImage({ base64: imagen.base64, extension: 'png' });
+    hoja.addImage(id, { tl: { col: 0, row: fila - 1 },
+      ext: { width: imagen.ancho, height: imagen.alto } });
+    fila += Math.ceil(imagen.alto / 20) + 3;
+  };
+  insertarImagen('distribucion', totales);
+  // Dividir periodos largos evita gráficos enormes y mantiene las fechas legibles.
+  if (!porFecha.length) {
+    insertarImagen('fechas', []);
+  } else {
+    for (let inicio = 0; inicio < porFecha.length; inicio += 12) {
+      insertarImagen('fechas', porFecha.slice(inicio, inicio + 12));
+    }
+  }
+
+  fila += 1;
+  hoja.getCell(`A${fila}`).value = 'DATOS DE LOS GRÁFICOS (consultables en Excel)';
+  hoja.getCell(`A${fila}`).font = { bold: true, color: { argb: 'FF551C9D' }, size: 12 };
+  fila += 2;
+  const encabezados = ['Fecha', 'Presentes', 'Tardanzas', 'Ausencias', 'Total'];
+  hoja.getRow(fila).values = encabezados;
+  hoja.getRow(fila).eachCell((celda) => {
+    celda.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF551C9D' } };
+    celda.alignment = { horizontal: 'center' };
+  });
+  porFecha.forEach((dia) => {
+    fila += 1;
+    hoja.getRow(fila).values = [
+      dia.fecha, dia.presentes, dia.tardanzas, dia.ausencias,
+      dia.presentes + dia.tardanzas + dia.ausencias,
+    ];
+  });
+  hoja.views = [{ state: 'frozen', ySplit: 3 }];
+  hoja.pageSetup.orientation = 'landscape';
+  hoja.pageSetup.fitToPage = true;
+  hoja.pageSetup.fitToWidth = 1;
+  return hoja;
+}
+
+// Dibujo vectorial en jsPDF; no requiere capturas del navegador ni dependencias nuevas.
+function agregarGraficosPDF(pdf, totales, porFecha) {
+  pdf.addPage();
+  const colores = {
+    presentes: [74, 222, 128],
+    tardanzas: [253, 224, 71],
+    ausencias: [248, 113, 113],
+  };
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(16);
+  pdf.setTextColor(85, 28, 157);
+  pdf.text('Graficos de asistencia', 14, 19);
+  pdf.setFontSize(11);
+  pdf.setTextColor(40, 40, 40);
+  pdf.text('Distribucion por estado', 14, 32);
+  const maxBarras = Math.max(1, ...seriesGraficos.map((s) => totales[s.clave]));
+  const base = 90;
+  const altoBarras = 46;
+  const pasosBarras = Math.min(4, maxBarras);
+  Array.from({ length: pasosBarras + 1 }, (_, paso) => paso).forEach((paso) => {
+    const y = base - (paso / pasosBarras) * altoBarras;
+    pdf.setDrawColor(226, 232, 240);
+    pdf.line(33, y, 277, y);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 116, 139);
+    pdf.text(String(Math.round(maxBarras * paso / pasosBarras)), 28, y + 1, { align: 'right' });
+  });
+  seriesGraficos.forEach((serie, indice) => {
+    const alto = totales[serie.clave] / maxBarras * altoBarras;
+    const x = 60 + indice * 78;
+    pdf.setFillColor(...colores[serie.clave]);
+    if (alto > 0) pdf.rect(x, base - alto, 28, alto, 'F');
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(40, 40, 40);
+    pdf.setFontSize(9);
+    pdf.text(String(totales[serie.clave]), x + 14, Math.max(42, base - alto - 2), { align: 'center' });
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.text(serie.nombre, x + 14, 97, { align: 'center' });
+  });
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(11);
+  pdf.setTextColor(40, 40, 40);
+  pdf.text('Asistencias por fecha', 14, 116);
+  if (porFecha.length === 0) {
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    pdf.text('Sin registros por fecha para graficar.', 14, 136);
+    return;
+  }
+  const sumaDia = (dia) => seriesGraficos.reduce((total, serie) => total + dia[serie.clave], 0);
+  const maxDia = Math.max(1, ...porFecha.map(sumaDia));
+  const inicioX = 45;
+  const anchoTotal = 218;
+  const filasPorPagina = 8;
+  for (let pagina = 0; pagina * filasPorPagina < porFecha.length; pagina += 1) {
+    if (pagina > 0) {
+      pdf.addPage();
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.setTextColor(85, 28, 157);
+      pdf.text('Graficos de asistencia (continuacion)', 14, 19);
+      pdf.setFontSize(11);
+      pdf.setTextColor(40, 40, 40);
+      pdf.text('Asistencias por fecha', 14, 32);
+    }
+    const primeraFilaY = pagina === 0 ? 126 : 43;
+    const dias = porFecha.slice(pagina * filasPorPagina, (pagina + 1) * filasPorPagina);
+    dias.forEach((dia, indice) => {
+      const y = primeraFilaY + indice * 8;
+      const total = sumaDia(dia);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(55, 65, 81);
+      pdf.text(etiquetaGraficoFecha(dia.fecha), 40, y + 4.2, { align: 'right' });
+      pdf.setFillColor(243, 244, 246);
+      pdf.rect(inicioX, y, anchoTotal, 5.7, 'F');
+      let acumulado = 0;
+      seriesGraficos.forEach((serie) => {
+        const valor = dia[serie.clave];
+        const ancho = valor / maxDia * anchoTotal;
+        if (ancho > 0) {
+          pdf.setFillColor(...colores[serie.clave]);
+          pdf.rect(inicioX + acumulado / maxDia * anchoTotal, y, ancho, 5.7, 'F');
+          if (ancho >= 9) {
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(7);
+            pdf.setTextColor(17, 24, 39);
+            pdf.text(String(valor), inicioX + (acumulado + valor / 2) / maxDia * anchoTotal,
+              y + 3.9, { align: 'center' });
+          }
+        }
+        acumulado += valor;
+      });
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setTextColor(40, 40, 40);
+      pdf.text(String(total), 270, y + 4.2);
+    });
+    const leyendaY = primeraFilaY + dias.length * 8 + 7;
+    seriesGraficos.forEach((serie, indice) => {
+      const x = 59 + indice * 73;
+      pdf.setFillColor(...colores[serie.clave]);
+      pdf.rect(x, leyendaY - 2.7, 3, 3, 'F');
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(40, 40, 40);
+      pdf.text(serie.nombre, x + 5, leyendaY);
+    });
+  }
+
+}
+
 const estilos = {
   contenedor: {
     background: '#ffffff',
@@ -193,8 +642,8 @@ function resumenAlumno(alumno) {
     tardanzas,
     ausencias,
     total,
-    asistencia: porcentaje(
-      presentes + tardanzas,
+    temprano: porcentaje(
+      presentes,
       total
     ),
     porcentajeTardanzas: porcentaje(
@@ -219,8 +668,8 @@ function resumenGeneral(reporte) {
     presentes,
     tardanzas,
     ausencias,
-    asistencia: porcentaje(
-      presentes + tardanzas,
+    temprano: porcentaje(
+      presentes,
       total
     ),
     porcentajeTardanzas: porcentaje(
@@ -314,7 +763,7 @@ const encabezadosResumen = [
   'Presente',
   'Tardanza',
   'Ausente',
-  '% Asistencia',
+  '% Presentes',
   '% Tardanzas',
   '% Inasistencias',
 ];
@@ -343,7 +792,7 @@ function filasResumen(reporte) {
         resumen.presentes,
         resumen.tardanzas,
         resumen.ausencias,
-        `${resumen.asistencia.toFixed(2)}%`,
+        `${resumen.temprano.toFixed(2)}%`,
         `${resumen.porcentajeTardanzas.toFixed(2)}%`,
         `${resumen.porcentajeAusencias.toFixed(2)}%`,
       ];
@@ -536,9 +985,9 @@ export default function StudentAttendanceReport() {
           color: '#991b1b',
         },
         {
-          titulo: '% Asistencia',
+          titulo: '% Presentes',
           valor:
-            `${general.asistencia.toFixed(2)}%`,
+            `${general.temprano.toFixed(2)}%`,
           color: '#2563eb',
         },
         {
@@ -557,6 +1006,13 @@ export default function StudentAttendanceReport() {
     : [];
 
   const detalle = reporte?.detalle ?? [];
+  const tieneRegistros = Number(reporte?.total ?? 0) > 0 || detalle.length > 0;
+  const fechasGrafico = agruparAsistenciasPorFecha(detalle, 'estado');
+  const totalesGrafico = {
+    presentes: reporte?.resumen?.PRESENTE ?? 0,
+    tardanzas: reporte?.resumen?.TARDANZA ?? 0,
+    ausencias: reporte?.resumen?.AUSENTE ?? 0,
+  };
   const filasPorFecha = filasDetalle(reporte);
   const filasPorAlumno = filasResumen(reporte);
 
@@ -762,6 +1218,8 @@ export default function StudentAttendanceReport() {
       hojaDetalle.pageSetup.fitToPage = true;
       hojaDetalle.pageSetup.fitToWidth = 1;
 
+      agregarGraficosExcel(workbook, totalesGrafico, fechasGrafico);
+
       const buffer =
         await workbook.xlsx.writeBuffer();
 
@@ -875,8 +1333,10 @@ export default function StudentAttendanceReport() {
         },
       });
 
-      const inicioDetalle =
-        (doc.lastAutoTable?.finalY ?? 95) + 12;
+      // Incluir gráficos vectoriales después del resumen general.
+      agregarGraficosPDF(doc, totalesGrafico, fechasGrafico);
+      doc.addPage();
+      const inicioDetalle = 20;
 
       if (inicioDetalle > 190) {
         doc.addPage();
@@ -1220,7 +1680,7 @@ export default function StudentAttendanceReport() {
         )}
       </section>
 
-      {reporte && general && (
+      {reporte && general && tieneRegistros && (
         <section style={estilos.contenedor}>
           <h2 style={estilos.titulo}>
             Resultados del reporte
@@ -1302,6 +1762,10 @@ export default function StudentAttendanceReport() {
             ))}
           </div>
 
+          <hr style={estilos.separador} />
+
+          <h3 style={estilos.seccion}>Gráficos de asistencia</h3>
+          <GraficosAsistencia totales={totalesGrafico} porFecha={fechasGrafico} />
           <hr style={estilos.separador} />
 
           <h3 style={estilos.seccion}>
@@ -1447,6 +1911,27 @@ export default function StudentAttendanceReport() {
               </table>
             </div>
           )}
+        </section>
+      )}
+
+      {reporte && general && !tieneRegistros && (
+        <section style={estilos.contenedor}>
+          <h2 style={estilos.titulo}>Resultados del reporte</h2>
+          <div role="status" style={{
+              marginTop: '20px',
+              padding: '24px',
+              border: '1px solid #ddd6fe',
+              borderRadius: '10px',
+              background: '#faf7ff',
+            }}>
+            <strong style={{ color: '#4c1d95', fontSize: '16px' }}>
+              Sin asistencias registradas
+            </strong>
+            <p style={{ color: '#6b7280', margin: '8px 0 0' }}>
+              No se encontraron registros para los filtros y fechas seleccionados.
+              Puedes cambiar el rango de fechas o los filtros y generar el reporte nuevamente.
+            </p>
+          </div>
         </section>
       )}
     </>
